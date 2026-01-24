@@ -25,11 +25,18 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { IconChevronDown } from '@tabler/icons-react';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { IconChevronDown, IconCalendar } from '@tabler/icons-react';
+import { format } from 'date-fns';
 
 const formSchema = z.object({
   amount: z.coerce.number().min(0.01, 'Amount must be greater than 0'),
-  date: z.string().min(1, 'Date is required'),
+  date: z.date({ message: 'Date is required' }),
   notes: z.string().max(500).optional(),
 });
 
@@ -56,7 +63,7 @@ export function BalanceEntryForm({ accountId, currency, onSuccess, onCancel }: B
     resolver: zodResolver(formSchema),
     defaultValues: {
       amount: 0,
-      date: new Date().toISOString().split('T')[0],
+      date: new Date(),
       notes: '',
     },
   });
@@ -66,7 +73,7 @@ export function BalanceEntryForm({ accountId, currency, onSuccess, onCancel }: B
       await createBalance.mutateAsync({
         account_id: accountId,
         amount: data.amount,
-        date: new Date(data.date).toISOString(),
+        date: data.date.toISOString(),
         notes: data.notes || '',
       });
       form.reset();
@@ -126,11 +133,36 @@ export function BalanceEntryForm({ accountId, currency, onSuccess, onCancel }: B
             control={form.control}
             name="date"
             render={({ field }) => (
-              <FormItem>
+              <FormItem className="flex flex-col">
                 <FormLabel>Date</FormLabel>
-                <FormControl>
-                  <Input type="date" {...field} />
-                </FormControl>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <FormControl>
+                      <Button
+                        variant="outline"
+                        className="w-full pl-3 text-left font-normal"
+                      >
+                        {field.value ? (
+                          format(field.value, 'PPP')
+                        ) : (
+                          <span>Pick a date</span>
+                        )}
+                        <IconCalendar className="ml-auto h-4 w-4 opacity-50" />
+                      </Button>
+                    </FormControl>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={field.value}
+                      onSelect={field.onChange}
+                      disabled={(date) =>
+                        date > new Date() || date < new Date('1900-01-01')
+                      }
+                      captionLayout="dropdown"
+                    />
+                  </PopoverContent>
+                </Popover>
                 <FormMessage />
               </FormItem>
             )}
