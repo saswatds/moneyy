@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "encore-mcp": {
+      "args": [
+        "mcp",
+        "run",
+        "--app=ctkd8"
+      ],
+      "command": "encore"
+    },
+    "shadcn": {
+      "command": "npx",
+      "args": [
+        "shadcn@latest",
+        "mcp"
+      ]
+    }
+  }
+}
