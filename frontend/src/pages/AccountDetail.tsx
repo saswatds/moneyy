@@ -11,12 +11,18 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/components/ui/tabs';
+import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts';
+import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
 } from '@/components/ui/chart';
 import type { ChartConfig } from '@/components/ui/chart';
-import { Line, LineChart, XAxis, YAxis } from 'recharts';
 import { Button } from '@/components/ui/button';
 import { IconArrowLeft, IconTrash, IconEdit } from '@tabler/icons-react';
 import { format } from 'date-fns';
@@ -26,7 +32,7 @@ import { HoldingEntryForm } from '@/components/HoldingEntryForm';
 const chartConfig = {
   amount: {
     label: 'Balance',
-    color: 'hsl(var(--chart-1))',
+    color: 'hsl(142 76% 36%)',
   },
 } satisfies ChartConfig;
 
@@ -66,6 +72,9 @@ export function AccountDetail() {
     }));
 
   const currentBalance = balances.length > 0 ? balances[0].amount : 0;
+  const startBalance = balances.length > 1 ? balances[balances.length - 1].amount : currentBalance;
+  const growth = currentBalance - startBalance;
+  const growthPercent = startBalance !== 0 ? (growth / startBalance) * 100 : 0;
 
   const handleDelete = async () => {
     if (window.confirm('Are you sure you want to delete this account?')) {
@@ -112,216 +121,217 @@ export function AccountDetail() {
         </div>
       </div>
 
-      {/* Account Info Cards */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Current Balance</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {account.currency} {currentBalance.toLocaleString('en-US', {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Category</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <span
-              className={`inline-flex px-2 py-1 text-sm font-medium rounded ${
-                account.is_asset
-                  ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
-                  : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
-              }`}
-            >
-              {account.is_asset ? 'Asset' : 'Liability'}
-            </span>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Status</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <span
-              className={`inline-flex px-2 py-1 text-sm font-medium rounded ${
-                account.is_active
-                  ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                  : 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400'
-              }`}
-            >
-              {account.is_active ? 'Active' : 'Inactive'}
-            </span>
-          </CardContent>
-        </Card>
-      </div>
-
       {/* Balance Chart */}
       {chartData.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Balance History</CardTitle>
-            <CardDescription>Track your account balance over time</CardDescription>
+            <CardTitle className="text-3xl font-bold">
+              {account.currency} {currentBalance.toLocaleString('en-US', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
+            </CardTitle>
+            <CardDescription>
+              {balances.length > 1 && (
+                <span className={growth >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
+                  {growth >= 0 ? '+' : ''}{account.currency} {growth.toLocaleString('en-US', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })} ({growth >= 0 ? '+' : ''}{growthPercent.toFixed(2)}%)
+                </span>
+              )}
+              {balances.length <= 1 && 'Balance history over time'}
+            </CardDescription>
           </CardHeader>
-          <CardContent>
-            <ChartContainer config={chartConfig} className="h-[300px]">
-              <LineChart data={chartData} accessibilityLayer>
-                <XAxis dataKey="date" />
-                <YAxis />
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <Line
-                  type="monotone"
+          <CardContent className="px-2 pt-4 sm:px-6 sm:pt-6">
+            <ChartContainer config={chartConfig} className="aspect-auto h-[300px] w-full">
+              <AreaChart data={chartData}>
+                <defs>
+                  <linearGradient id="fillAmount" x1="0" y1="0" x2="0" y2="1">
+                    <stop
+                      offset="5%"
+                      stopColor="var(--color-amount)"
+                      stopOpacity={0.8}
+                    />
+                    <stop
+                      offset="95%"
+                      stopColor="var(--color-amount)"
+                      stopOpacity={0.1}
+                    />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid vertical={false} />
+                <XAxis
+                  dataKey="date"
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                  minTickGap={32}
+                />
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                  tickFormatter={(value) => `${value.toLocaleString()}`}
+                />
+                <ChartTooltip
+                  cursor={false}
+                  content={
+                    <ChartTooltipContent
+                      labelFormatter={(value) => value}
+                      indicator="dot"
+                    />
+                  }
+                />
+                <Area
                   dataKey="amount"
+                  type="natural"
+                  fill="url(#fillAmount)"
                   stroke="var(--color-amount)"
                   strokeWidth={2}
-                  dot={{ r: 4 }}
                 />
-              </LineChart>
+              </AreaChart>
             </ChartContainer>
           </CardContent>
         </Card>
       )}
 
-      {/* Two-pane view: Balance Entry Form and History */}
+      {/* Tabbed view: Forms and History */}
       <div className="grid gap-6 md:grid-cols-5">
-        {/* Add Balance Form - Left side */}
+        {/* Forms - Left side */}
         <Card className="md:col-span-2">
-          <CardHeader>
-            <CardTitle>Add Balance Entry</CardTitle>
-            <CardDescription>Record a new balance for this account</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <BalanceEntryForm accountId={id!} currency={account.currency} />
-          </CardContent>
+          <Tabs defaultValue="balance" className="w-full">
+            <CardHeader>
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="balance">Balance</TabsTrigger>
+                <TabsTrigger value="holding">Holding</TabsTrigger>
+              </TabsList>
+            </CardHeader>
+            <CardContent>
+              <TabsContent value="balance" className="mt-0">
+                <div className="space-y-2 mb-4">
+                  <CardTitle>Add Balance Entry</CardTitle>
+                  <CardDescription>Record a new balance for this account</CardDescription>
+                </div>
+                <BalanceEntryForm accountId={id!} currency={account.currency} />
+              </TabsContent>
+              <TabsContent value="holding" className="mt-0">
+                <div className="space-y-2 mb-4">
+                  <CardTitle>Add Holding</CardTitle>
+                  <CardDescription>Add a security or cash holding to this account</CardDescription>
+                </div>
+                <HoldingEntryForm accountId={id!} />
+              </TabsContent>
+            </CardContent>
+          </Tabs>
         </Card>
 
-        {/* Balance History - Right side */}
+        {/* History - Right side */}
         <Card className="md:col-span-3">
-          <CardHeader>
-            <CardTitle>Balance History</CardTitle>
-            <CardDescription>All balance entries for this account</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {balances.length > 0 ? (
-              <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
-                {balances.map((balance) => (
-                  <div
-                    key={balance.id}
-                    className="flex items-center justify-between py-3 border-b border-border last:border-0"
-                  >
-                    <div className="space-y-1">
-                      <div className="font-medium">
-                        {account.currency} {balance.amount.toLocaleString('en-US', {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                      </div>
-                      <div className="text-sm text-muted-foreground">
-                        {format(new Date(balance.date), 'PPP')}
-                      </div>
-                      {balance.notes && (
-                        <div className="text-sm text-muted-foreground">
-                          {balance.notes}
+          <Tabs defaultValue="balances" className="w-full">
+            <CardHeader>
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="balances">Balance History</TabsTrigger>
+                <TabsTrigger value="holdings">Holdings</TabsTrigger>
+              </TabsList>
+            </CardHeader>
+            <CardContent>
+              <TabsContent value="balances" className="mt-0">
+                <CardDescription className="mb-3 text-xs">All balance entries for this account</CardDescription>
+                {balances.length > 0 ? (
+                  <div className="space-y-0 max-h-[600px] overflow-y-auto pr-2">
+                    {balances.map((balance) => (
+                      <div
+                        key={balance.id}
+                        className="flex items-center justify-between py-2 border-b border-border/50 last:border-0 hover:bg-muted/50 transition-colors"
+                      >
+                        <div className="space-y-0.5">
+                          <div className="text-sm font-medium">
+                            {account.currency} {balance.amount.toLocaleString('en-US', {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {format(new Date(balance.date), 'MMM dd, yyyy')}
+                          </div>
+                          {balance.notes && (
+                            <div className="text-xs text-muted-foreground/80 truncate max-w-[300px]">
+                              {balance.notes}
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-12 text-muted-foreground">
-                No balance entries yet. Add your first balance to start tracking!
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Holdings Section */}
-      <div className="grid gap-6 md:grid-cols-5">
-        {/* Add Holding Form - Left side */}
-        <Card className="md:col-span-2">
-          <CardHeader>
-            <CardTitle>Add Holding</CardTitle>
-            <CardDescription>Add a security or cash holding to this account</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <HoldingEntryForm accountId={id!} />
-          </CardContent>
-        </Card>
-
-        {/* Holdings List - Right side */}
-        <Card className="md:col-span-3">
-          <CardHeader>
-            <CardTitle>Holdings</CardTitle>
-            <CardDescription>Securities and cash positions in this account</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {holdings.length > 0 ? (
-              <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
-                {holdings.map((holding: Holding) => (
-                  <div
-                    key={holding.id}
-                    className="flex items-center justify-between py-3 border-b border-border last:border-0"
-                  >
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">
-                          {holding.type === 'cash' ? (
-                            <>
-                              {holding.currency} {holding.amount?.toLocaleString('en-US', {
+                ) : (
+                  <div className="text-center py-8 text-sm text-muted-foreground">
+                    No balance entries yet. Add your first balance to start tracking!
+                  </div>
+                )}
+              </TabsContent>
+              <TabsContent value="holdings" className="mt-0">
+                <CardDescription className="mb-3 text-xs">Securities and cash positions in this account</CardDescription>
+                {holdings.length > 0 ? (
+                  <div className="space-y-0 max-h-[600px] overflow-y-auto pr-2">
+                    {holdings.map((holding: Holding) => (
+                      <div
+                        key={holding.id}
+                        className="flex items-center justify-between py-2 border-b border-border/50 last:border-0 hover:bg-muted/50 transition-colors"
+                      >
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium">
+                              {holding.type === 'cash' ? (
+                                <>
+                                  {holding.currency} {holding.amount?.toLocaleString('en-US', {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  })}
+                                </>
+                              ) : (
+                                <>
+                                  {holding.symbol} - {holding.quantity?.toLocaleString('en-US', {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 8,
+                                  })} shares
+                                </>
+                              )}
+                            </span>
+                            <span className="inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
+                              {holding.type}
+                            </span>
+                          </div>
+                          {holding.type !== 'cash' && holding.cost_basis && (
+                            <div className="text-xs text-muted-foreground">
+                              Cost Basis: {account.currency} {holding.cost_basis.toLocaleString('en-US', {
                                 minimumFractionDigits: 2,
                                 maximumFractionDigits: 2,
                               })}
-                            </>
-                          ) : (
-                            <>
-                              {holding.symbol} - {holding.quantity?.toLocaleString('en-US', {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 8,
-                              })} shares
-                            </>
+                            </div>
                           )}
-                        </span>
-                        <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
-                          {holding.type}
-                        </span>
+                          {holding.purchase_date && (
+                            <div className="text-xs text-muted-foreground">
+                              Purchased: {format(new Date(holding.purchase_date), 'MMM dd, yyyy')}
+                            </div>
+                          )}
+                          {holding.notes && (
+                            <div className="text-xs text-muted-foreground/80 truncate max-w-[300px]">
+                              {holding.notes}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      {holding.type !== 'cash' && holding.cost_basis && (
-                        <div className="text-sm text-muted-foreground">
-                          Cost Basis: {account.currency} {holding.cost_basis.toLocaleString('en-US', {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}
-                        </div>
-                      )}
-                      {holding.purchase_date && (
-                        <div className="text-sm text-muted-foreground">
-                          Purchased: {format(new Date(holding.purchase_date), 'PPP')}
-                        </div>
-                      )}
-                      {holding.notes && (
-                        <div className="text-sm text-muted-foreground">
-                          {holding.notes}
-                        </div>
-                      )}
-                    </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-12 text-muted-foreground">
-                No holdings yet. Add your first holding to start tracking your portfolio!
-              </div>
-            )}
-          </CardContent>
+                ) : (
+                  <div className="text-center py-8 text-sm text-muted-foreground">
+                    No holdings yet. Add your first holding to start tracking your portfolio!
+                  </div>
+                )}
+              </TabsContent>
+            </CardContent>
+          </Tabs>
         </Card>
       </div>
     </div>
