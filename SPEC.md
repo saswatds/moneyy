@@ -25,12 +25,25 @@ A comprehensive personal finance dashboard for tracking financial accounts, asse
 ## 3. Core Features
 
 ### 3.1 Account Management
-- Add/edit/delete financial accounts
+
+#### Manual Accounts
+- Add/edit/delete financial accounts manually
 - Support account types:
   - **Cash & Banking**: Checking, Savings, Cash
   - **Investments**: Brokerage, TFSA, RRSP, Stocks, Crypto
   - **Assets**: Real Estate, Vehicles, Collectibles, Other
   - **Liabilities**: Credit Cards, Loans, Mortgage, Line of Credit
+
+#### Connections & Synced Accounts
+- **Connections**: Integrations with financial institutions (e.g., Wealthsimple)
+- **Synced Accounts**: Accounts automatically synced from connections
+- One connection can have multiple synced accounts
+- Synced accounts automatically update balances and holdings
+- Examples:
+  - Wealthsimple connection → Multiple accounts (TFSA, RRSP, Cash)
+  - Each Wealthsimple account becomes a synced account in the system
+- Synced accounts are read-only (managed by the connection)
+- See SPEC_WEALTHSIMPLE_SYNC.md for detailed implementation
 
 ### 3.2 Multi-Currency Support
 - Primary currencies: CAD, USD, INR
@@ -109,12 +122,66 @@ type Account struct {
     Institution  string      `json:"institution,omitempty"`
     IsAsset      bool        `json:"is_asset"`
     IsActive     bool        `json:"is_active"`
+    IsSynced     bool        `json:"is_synced"`         // true if managed by a connection
+    ConnectionID string      `json:"connection_id,omitempty"` // reference to Connection if synced
     CreatedAt    time.Time   `json:"created_at"`
     UpdatedAt    time.Time   `json:"updated_at"`
 }
 ```
 
-### 4.2 Balance
+### 4.2 Connection
+```go
+type ConnectionProvider string
+
+const (
+    ConnectionProviderWealthsimple ConnectionProvider = "wealthsimple"
+    // Future: ConnectionProviderQuestrade, etc.
+)
+
+type ConnectionStatus string
+
+const (
+    ConnectionStatusConnected    ConnectionStatus = "connected"
+    ConnectionStatusDisconnected ConnectionStatus = "disconnected"
+    ConnectionStatusError        ConnectionStatus = "error"
+    ConnectionStatusSyncing      ConnectionStatus = "syncing"
+)
+
+type Connection struct {
+    ID             string             `json:"id"`
+    UserID         string             `json:"user_id"`
+    Provider       ConnectionProvider `json:"provider"`
+    Name           string             `json:"name"`           // e.g., "Wealthsimple - user@example.com"
+    Status         ConnectionStatus   `json:"status"`
+    LastSyncAt     *time.Time         `json:"last_sync_at,omitempty"`
+    LastSyncError  string             `json:"last_sync_error,omitempty"`
+    SyncFrequency  string             `json:"sync_frequency"` // "daily", "hourly", "manual"
+    AccountCount   int                `json:"account_count"`  // number of synced accounts
+    CreatedAt      time.Time          `json:"created_at"`
+    UpdatedAt      time.Time          `json:"updated_at"`
+}
+```
+
+### 4.3 SyncedAccount
+```go
+type SyncedAccount struct {
+    ID                string    `json:"id"`
+    ConnectionID      string    `json:"connection_id"`      // references Connection
+    LocalAccountID    string    `json:"local_account_id"`   // references Account
+    ProviderAccountID string    `json:"provider_account_id"` // account ID from provider (e.g., Wealthsimple)
+    LastSyncAt        *time.Time `json:"last_sync_at,omitempty"`
+    CreatedAt         time.Time `json:"created_at"`
+    UpdatedAt         time.Time `json:"updated_at"`
+}
+```
+
+**Relationship**:
+- Connection (1) → SyncedAccount (many) → Account (1)
+- One Connection has multiple SyncedAccounts
+- Each SyncedAccount links to one local Account
+- Accounts with `is_synced=true` cannot be manually edited
+
+### 4.4 Balance
 ```go
 type Balance struct {
     ID        string    `json:"id"`

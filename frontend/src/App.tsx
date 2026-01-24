@@ -9,6 +9,7 @@ import { AccountDetail } from './pages/AccountDetail';
 import { Analytics } from './pages/Analytics';
 import { Projections } from './pages/Projections';
 import { Settings } from './pages/Settings';
+import Connections from './pages/Connections';
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
             <Route path="accounts" element={<Accounts />} />
             <Route path="accounts/new" element={<AccountNew />} />
             <Route path="accounts/:id" element={<AccountDetail />} />
+            <Route path="connections" element={<Connections />} />
             <Route path="analytics" element={<Analytics />} />
             <Route path="projections" element={<Projections />} />
             <Route path="settings" element={<Settings />} />

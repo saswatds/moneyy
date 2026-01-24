@@ -135,6 +135,11 @@ func Create(ctx context.Context, req *CreateHoldingRequest) (*Holding, error) {
 			currency, amount, purchase_date, notes, created_at, updated_at
 		)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		ON CONFLICT (account_id, symbol) DO UPDATE SET
+			quantity = EXCLUDED.quantity,
+			cost_basis = EXCLUDED.cost_basis,
+			notes = EXCLUDED.notes,
+			updated_at = EXCLUDED.updated_at
 		RETURNING id
 	`, req.AccountID, req.Type, req.Symbol, req.Quantity, req.CostBasis,
 		holding.Currency, req.Amount, purchaseDate, req.Notes,
