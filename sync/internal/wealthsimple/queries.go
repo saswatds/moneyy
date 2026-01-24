@@ -180,4 +180,20 @@ const (
 			}
 		}
 	`
+
+	// QueryFetchCreditCardAccount fetches credit card account details including balance
+	QueryFetchCreditCardAccount = `
+		query FetchCreditCardAccount($id: ID!) {
+			creditCardAccount(id: $id) {
+				id
+				creditLimit
+				balance {
+					current
+					outstanding
+					availableCreditLimit
+					pending
+				}
+			}
+		}
+	`
 )

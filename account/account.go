@@ -49,7 +49,7 @@ type Account struct {
 	Institution  string      `json:"institution,omitempty"`
 	IsAsset      bool        `json:"is_asset"`
 	IsActive     bool        `json:"is_active"`
-	IsSynced     bool        `json:"is_synced"`         // true if managed by a connection
+	IsSynced     bool        `json:"is_synced"`               // true if managed by a connection
 	ConnectionID string      `json:"connection_id,omitempty"` // reference to Connection if synced
 	CreatedAt    time.Time   `json:"created_at"`
 	UpdatedAt    time.Time   `json:"updated_at"`
@@ -76,9 +76,20 @@ type UpdateAccountRequest struct {
 	IsActive    *bool        `json:"is_active,omitempty"`
 }
 
+// AccountWithBalance represents an account with its current balance
+type AccountWithBalance struct {
+	Account
+	CurrentBalance *float64 `json:"current_balance,omitempty"`
+}
+
 // ListAccountsResponse represents the response for listing accounts
 type ListAccountsResponse struct {
 	Accounts []*Account `json:"accounts"`
+}
+
+// ListAccountsWithBalanceResponse represents the response for listing accounts with balances
+type ListAccountsWithBalanceResponse struct {
+	Accounts []*AccountWithBalance `json:"accounts"`
 }
 
 // DeleteAccountResponse represents the response for deleting an account
@@ -100,6 +111,9 @@ type AccountSummary struct {
 var db = sqldb.NewDatabase("account", sqldb.DatabaseConfig{
 	Migrations: "./migrations",
 })
+
+// Balance database instance (to query balances)
+var balanceDB = sqldb.Named("balance")
 
 // Create creates a new account
 //
@@ -253,6 +267,92 @@ func List(ctx context.Context) (*ListAccountsResponse, error) {
 	}
 
 	return &ListAccountsResponse{Accounts: accounts}, nil
+}
+
+// ListWithBalance retrieves all accounts with their current balance for the authenticated user
+//
+//encore:api public path=/accounts-with-balance method=GET
+func ListWithBalance(ctx context.Context) (*ListAccountsWithBalanceResponse, error) {
+	// TODO: Get user ID from auth context
+	userID := "temp-user-id" // Placeholder until auth is implemented
+
+	// First, get all accounts
+	rows, err := db.Query(ctx, `
+		SELECT id, user_id, name, type, currency, institution, is_asset, is_active, is_synced, connection_id, created_at, updated_at
+		FROM accounts
+		WHERE user_id = $1 AND is_active = true
+		ORDER BY created_at DESC
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var accounts []*AccountWithBalance
+	accountIDs := []string{}
+
+	for rows.Next() {
+		accountWithBalance := &AccountWithBalance{}
+		var connectionID *string
+		err := rows.Scan(
+			&accountWithBalance.ID,
+			&accountWithBalance.UserID,
+			&accountWithBalance.Name,
+			&accountWithBalance.Type,
+			&accountWithBalance.Currency,
+			&accountWithBalance.Institution,
+			&accountWithBalance.IsAsset,
+			&accountWithBalance.IsActive,
+			&accountWithBalance.IsSynced,
+			&connectionID,
+			&accountWithBalance.CreatedAt,
+			&accountWithBalance.UpdatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		if connectionID != nil {
+			accountWithBalance.ConnectionID = *connectionID
+		}
+		accounts = append(accounts, accountWithBalance)
+		accountIDs = append(accountIDs, accountWithBalance.ID)
+	}
+
+	// If there are accounts, fetch their latest balances
+	if len(accountIDs) > 0 {
+		// Query the balance database for the latest balance of each account
+		balanceRows, err := balanceDB.Query(ctx, `
+			SELECT DISTINCT ON (account_id) account_id, amount
+			FROM balances
+			WHERE account_id = ANY($1)
+			ORDER BY account_id, date DESC
+		`, accountIDs)
+		if err != nil {
+			// If there's an error fetching balances, just return accounts without balances
+			return &ListAccountsWithBalanceResponse{Accounts: accounts}, nil
+		}
+		defer balanceRows.Close()
+
+		// Create a map of account_id to balance
+		balanceMap := make(map[string]float64)
+		for balanceRows.Next() {
+			var accountID string
+			var amount float64
+			if err := balanceRows.Scan(&accountID, &amount); err != nil {
+				continue
+			}
+			balanceMap[accountID] = amount
+		}
+
+		// Attach balances to accounts
+		for _, account := range accounts {
+			if balance, ok := balanceMap[account.ID]; ok {
+				account.CurrentBalance = &balance
+			}
+		}
+	}
+
+	return &ListAccountsWithBalanceResponse{Accounts: accounts}, nil
 }
 
 // Get retrieves a single account by ID

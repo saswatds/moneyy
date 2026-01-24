@@ -4,7 +4,7 @@ import { apiClient, type CreateAccountRequest } from '@/lib/api-client';
 export function useAccounts() {
   return useQuery({
     queryKey: ['accounts'],
-    queryFn: () => apiClient.getAccounts(),
+    queryFn: () => apiClient.getAccountsWithBalance(),
   });
 }
 

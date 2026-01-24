@@ -123,12 +123,15 @@ func performInitialSync(ctx context.Context, userID, connectionID string) error 
 				"local_account_id", localAccountID)
 		} else {
 			// Account doesn't exist, create it
+			// Determine if this is an asset or liability account
+			isAsset := isAssetAccount(localAccountType)
+
 			createdAccount, err := accountsvc.Create(ctx, &accountsvc.CreateAccountRequest{
 				Name:         nickname,
 				Type:         accountsvc.AccountType(localAccountType),
 				Currency:     accountsvc.Currency(mapCurrency(currency)),
 				Institution:  "Wealthsimple",
-				IsAsset:      true,
+				IsAsset:      isAsset,
 				IsSynced:     true,
 				ConnectionID: connectionID,
 			})
@@ -163,7 +166,9 @@ func performInitialSync(ctx context.Context, userID, connectionID string) error 
 		}
 
 		// Fetch account details (balances, positions)
-		if err := syncAccountDetails(ctx, client, providerAccountID, localAccountID, identityID); err != nil {
+		isAssetAcc := isAssetAccount(localAccountType)
+		isCreditCard := localAccountType == "credit_card"
+		if err := syncAccountDetails(ctx, client, providerAccountID, localAccountID, identityID, isAssetAcc, isCreditCard); err != nil {
 			rlog.Error("failed to sync account details",
 				"provider_account_id", providerAccountID,
 				"error", err)
@@ -187,7 +192,12 @@ func performInitialSync(ctx context.Context, userID, connectionID string) error 
 }
 
 // syncAccountDetails fetches and stores account balances and positions
-func syncAccountDetails(ctx context.Context, client *wealthsimple.Client, providerAccountID, localAccountID, identityID string) error {
+func syncAccountDetails(ctx context.Context, client *wealthsimple.Client, providerAccountID, localAccountID, identityID string, isAsset, isCreditCard bool) error {
+	// Credit cards use a different GraphQL endpoint
+	if isCreditCard {
+		return syncCreditCardDetails(ctx, client, providerAccountID, localAccountID, isAsset)
+	}
+
 	variables := map[string]interface{}{
 		"ids": []string{providerAccountID},
 	}
@@ -228,74 +238,122 @@ func syncAccountDetails(ctx context.Context, client *wealthsimple.Client, provid
 		"account_keys", getMapKeys(account))
 
 	// Extract balance from financials
+	var amount float64
+	var foundBalance bool
+
 	if financials, ok := account["financials"].(map[string]interface{}); ok {
 		rlog.Debug("found financials field",
 			"provider_account_id", providerAccountID,
 			"financials_keys", getMapKeys(financials))
 
-		if currentCombined, ok := financials["currentCombined"].(map[string]interface{}); ok {
-			rlog.Debug("found currentCombined",
-				"provider_account_id", providerAccountID,
-				"currentCombined_keys", getMapKeys(currentCombined))
+		// For credit cards and other accounts, try currentBalance first
+		if !isAsset {
+			// Try currentBalance for liability accounts
+			if currentBalance, ok := financials["currentBalance"].(map[string]interface{}); ok {
+				rlog.Debug("found currentBalance for liability account",
+					"provider_account_id", providerAccountID,
+					"currentBalance_keys", getMapKeys(currentBalance))
 
-			if netLiquidationValue, ok := currentCombined["netLiquidationValueV2"].(map[string]interface{}); ok {
-				// Amount comes as a string, need to parse it
-				amountStr, ok := netLiquidationValue["amount"].(string)
-				if !ok {
-					rlog.Debug("amount is not a string, trying float64",
-						"provider_account_id", providerAccountID)
-					// Try as float64 in case API changes
-					if amountFloat, ok := netLiquidationValue["amount"].(float64); ok {
-						amountStr = fmt.Sprintf("%f", amountFloat)
-					}
-				}
-
-				amount, err := strconv.ParseFloat(amountStr, 64)
-				if err != nil {
-					rlog.Error("failed to parse amount",
-						"provider_account_id", providerAccountID,
-						"amount_str", amountStr,
-						"error", err)
-				} else {
-					// Truncate to just the date (no time component) for proper upsert
-					now := time.Now()
-					today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-
-					rlog.Info("creating balance entry",
-						"account_id", localAccountID,
-						"amount", amount,
-						"date", today)
-
-					// Create balance via balance service API
-					_, err = balancesvc.Create(ctx, &balancesvc.CreateBalanceRequest{
-						AccountID: localAccountID,
-						Amount:    amount,
-						Date:      today,
-						Notes:     "Synced from Wealthsimple",
-					})
-
-					if err != nil {
-						rlog.Error("failed to create balance",
-							"account_id", localAccountID,
-							"amount", amount,
-							"error", err)
-					} else {
-						rlog.Info("successfully created balance",
-							"account_id", localAccountID,
+				if amountObj, ok := currentBalance["amount"].(string); ok {
+					parsedAmount, err := strconv.ParseFloat(amountObj, 64)
+					if err == nil {
+						amount = parsedAmount
+						foundBalance = true
+						rlog.Info("found balance from currentBalance",
+							"provider_account_id", providerAccountID,
 							"amount", amount)
 					}
 				}
+			}
+		}
+
+		// If not found yet, try netLiquidationValue (for investment accounts)
+		if !foundBalance {
+			if currentCombined, ok := financials["currentCombined"].(map[string]interface{}); ok {
+				rlog.Debug("found currentCombined",
+					"provider_account_id", providerAccountID,
+					"currentCombined_keys", getMapKeys(currentCombined))
+
+				if netLiquidationValue, ok := currentCombined["netLiquidationValueV2"].(map[string]interface{}); ok {
+					// Amount comes as a string, need to parse it
+					amountStr, ok := netLiquidationValue["amount"].(string)
+					if !ok {
+						rlog.Debug("amount is not a string, trying float64",
+							"provider_account_id", providerAccountID)
+						// Try as float64 in case API changes
+						if amountFloat, ok := netLiquidationValue["amount"].(float64); ok {
+							amountStr = fmt.Sprintf("%f", amountFloat)
+						}
+					}
+
+					if amountStr != "" {
+						parsedAmount, err := strconv.ParseFloat(amountStr, 64)
+						if err == nil {
+							amount = parsedAmount
+							foundBalance = true
+							rlog.Info("found balance from netLiquidationValue",
+								"provider_account_id", providerAccountID,
+								"amount", amount)
+						}
+					}
+				} else {
+					rlog.Debug("no netLiquidationValueV2 found",
+						"provider_account_id", providerAccountID)
+				}
 			} else {
-				rlog.Debug("no netLiquidationValueV2 found",
+				rlog.Debug("no currentCombined found",
 					"provider_account_id", providerAccountID)
 			}
-		} else {
-			rlog.Debug("no currentCombined found",
-				"provider_account_id", providerAccountID)
+		}
+
+		// If still not found, log all available keys for debugging
+		if !foundBalance {
+			rlog.Warn("could not find balance in any known location",
+				"provider_account_id", providerAccountID,
+				"financials_keys", getMapKeys(financials),
+				"is_asset", isAsset)
 		}
 	} else {
 		rlog.Debug("no financials field found",
 			"provider_account_id", providerAccountID)
+	}
+
+	// Create balance entry if we found one
+	if foundBalance {
+		// For liability accounts (credit cards, loans), negate the balance
+		// because they represent debt
+		if !isAsset {
+			amount = -amount
+		}
+
+		// Truncate to just the date (no time component) for proper upsert
+		now := time.Now()
+		today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+
+		rlog.Info("creating balance entry",
+			"account_id", localAccountID,
+			"amount", amount,
+			"date", today,
+			"is_asset", isAsset)
+
+		// Create balance via balance service API
+		_, err = balancesvc.Create(ctx, &balancesvc.CreateBalanceRequest{
+			AccountID: localAccountID,
+			Amount:    amount,
+			Date:      today,
+			Notes:     "Synced from Wealthsimple",
+		})
+
+		if err != nil {
+			rlog.Error("failed to create balance",
+				"account_id", localAccountID,
+				"amount", amount,
+				"error", err)
+		} else {
+			rlog.Info("successfully created balance",
+				"account_id", localAccountID,
+				"amount", amount)
+		}
 	}
 
 	// Fetch positions using identity-based query
@@ -469,6 +527,114 @@ func syncAccountDetails(ctx context.Context, client *wealthsimple.Client, provid
 	return nil
 }
 
+// syncCreditCardDetails fetches and stores credit card balance
+func syncCreditCardDetails(ctx context.Context, client *wealthsimple.Client, providerAccountID, localAccountID string, isAsset bool) error {
+	variables := map[string]interface{}{
+		"id": providerAccountID,
+	}
+
+	rlog.Info("fetching credit card details",
+		"provider_account_id", providerAccountID,
+		"local_account_id", localAccountID)
+
+	data, err := client.QueryGraphQL(ctx, wealthsimple.QueryFetchCreditCardAccount, variables, "invest")
+	if err != nil {
+		rlog.Error("failed to fetch credit card details",
+			"provider_account_id", providerAccountID,
+			"error", err)
+		return fmt.Errorf("failed to fetch credit card details: %w", err)
+	}
+
+	rlog.Debug("received credit card details",
+		"provider_account_id", providerAccountID,
+		"data_keys", getMapKeys(data))
+
+	// Parse credit card account response
+	creditCardAccount, ok := data["creditCardAccount"].(map[string]interface{})
+	if !ok {
+		rlog.Error("invalid credit card response format",
+			"provider_account_id", providerAccountID,
+			"data", data)
+		return fmt.Errorf("invalid credit card response format")
+	}
+
+	// Extract balance
+	balance, ok := creditCardAccount["balance"].(map[string]interface{})
+	if !ok {
+		rlog.Warn("no balance found for credit card",
+			"provider_account_id", providerAccountID)
+		return nil
+	}
+
+	// Get outstanding balance (what is owed on the card)
+	outstandingStr, ok := balance["outstanding"].(string)
+	if !ok {
+		rlog.Warn("outstanding balance not a string",
+			"provider_account_id", providerAccountID,
+			"balance", balance)
+		return nil
+	}
+
+	amount, err := strconv.ParseFloat(outstandingStr, 64)
+	if err != nil {
+		rlog.Error("failed to parse outstanding balance",
+			"provider_account_id", providerAccountID,
+			"outstanding_str", outstandingStr,
+			"error", err)
+		return fmt.Errorf("failed to parse outstanding balance: %w", err)
+	}
+
+	// For credit cards, the outstanding balance is debt, so store as negative
+	if !isAsset {
+		amount = -amount
+	}
+
+	// Truncate to just the date (no time component) for proper upsert
+	now := time.Now()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+
+	rlog.Info("creating credit card balance entry",
+		"account_id", localAccountID,
+		"amount", amount,
+		"outstanding", outstandingStr,
+		"date", today,
+		"is_asset", isAsset)
+
+	// Create balance via balance service API
+	_, err = balancesvc.Create(ctx, &balancesvc.CreateBalanceRequest{
+		AccountID: localAccountID,
+		Amount:    amount,
+		Date:      today,
+		Notes:     "Synced from Wealthsimple Credit Card",
+	})
+
+	if err != nil {
+		rlog.Error("failed to create credit card balance",
+			"account_id", localAccountID,
+			"amount", amount,
+			"error", err)
+		return fmt.Errorf("failed to create credit card balance: %w", err)
+	}
+
+	rlog.Info("successfully created credit card balance",
+		"account_id", localAccountID,
+		"amount", amount,
+		"outstanding", outstandingStr)
+
+	return nil
+}
+
+// isAssetAccount determines if an account type is an asset or liability
+func isAssetAccount(accountType string) bool {
+	// Liability accounts
+	switch accountType {
+	case "credit_card", "loan", "mortgage", "line_of_credit":
+		return false
+	}
+	// All other accounts are assets
+	return true
+}
+
 // mapWealthsimpleAccountType maps Wealthsimple account types to local types
 func mapWealthsimpleAccountType(wsType string) string {
 	switch wsType {
@@ -516,8 +682,10 @@ func formatAccountTypeName(accountType string) string {
 		return "RRSP"
 	case "checking":
 		return "Checking Account"
+	case "investment":
+		return "Personal Investment"
 	case "brokerage":
-		return "Investment Account"
+		return "Brokerage Account"
 	case "credit_card":
 		return "Credit Card"
 	case "crypto":

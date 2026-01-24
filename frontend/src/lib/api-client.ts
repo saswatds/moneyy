@@ -12,6 +12,7 @@ export interface Account {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  current_balance?: number;
 }
 
 export interface Balance {
@@ -72,6 +73,11 @@ export interface UpdateHoldingRequest {
   notes?: string;
 }
 
+export interface ExchangeRates {
+  rates: Record<string, Record<string, number>>;
+  date: string;
+}
+
 class ApiClient {
   private baseUrl: string;
 
@@ -98,6 +104,10 @@ class ApiClient {
   // Account endpoints
   async getAccounts(): Promise<{ accounts: Account[] }> {
     return this.request('/accounts');
+  }
+
+  async getAccountsWithBalance(): Promise<{ accounts: Account[] }> {
+    return this.request('/accounts-with-balance');
   }
 
   async getAccount(id: string): Promise<Account> {
@@ -180,6 +190,11 @@ class ApiClient {
     return this.request(`/holdings/${id}`, {
       method: 'DELETE',
     });
+  }
+
+  // Currency endpoints
+  async getExchangeRates(): Promise<ExchangeRates> {
+    return this.request('/currency/rates');
   }
 }
 
