@@ -220,30 +220,28 @@ export default function Connections() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {connections.map((connection) => (
             <Card key={connection.id}>
               <CardHeader>
-                <div className="flex items-start justify-between">
-                  <div className="flex items-start space-x-4">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
                     <div className="p-2 bg-muted rounded-lg">
                       {getProviderIcon(connection.provider)}
                     </div>
-                    <div className="space-y-1">
-                      <CardTitle className="text-xl">{connection.name}</CardTitle>
-                      <CardDescription>
-                        {connection.account_count} account{connection.account_count !== 1 ? 's' : ''} synced
-                      </CardDescription>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-2">
                     {getStatusBadge(connection.status)}
+                  </div>
+                  <div className="space-y-1">
+                    <CardTitle className="text-xl">{connection.name}</CardTitle>
+                    <CardDescription>
+                      {connection.account_count} account{connection.account_count !== 1 ? 's' : ''} synced
+                    </CardDescription>
                   </div>
                 </div>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="space-y-3 text-sm">
                     <div>
                       <p className="text-muted-foreground">Last Sync</p>
                       <p className="font-medium">{formatDate(connection.last_sync_at)}</p>
@@ -261,17 +259,18 @@ export default function Connections() {
                     </div>
                   )}
 
-                  <div className="flex space-x-2 pt-2">
+                  <div className="flex flex-col space-y-2 pt-2">
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => handleSync(connection.id)}
                       disabled={connection.status === 'syncing'}
+                      className="w-full"
                     >
                       <IconRefresh className="mr-2 h-4 w-4" />
                       Sync Now
                     </Button>
-                    <Button variant="outline" size="sm">
+                    <Button variant="outline" size="sm" className="w-full">
                       <IconSettings className="mr-2 h-4 w-4" />
                       Settings
                     </Button>
@@ -282,6 +281,7 @@ export default function Connections() {
                         setSelectedConnection(connection);
                         setDeleteDialogOpen(true);
                       }}
+                      className="w-full"
                     >
                       <IconTrash className="mr-2 h-4 w-4" />
                       Disconnect
