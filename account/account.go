@@ -41,25 +41,29 @@ const (
 
 // Account represents a financial account
 type Account struct {
-	ID          string      `json:"id"`
-	UserID      string      `json:"user_id"`
-	Name        string      `json:"name"`
-	Type        AccountType `json:"type"`
-	Currency    Currency    `json:"currency"`
-	Institution string      `json:"institution,omitempty"`
-	IsAsset     bool        `json:"is_asset"`
-	IsActive    bool        `json:"is_active"`
-	CreatedAt   time.Time   `json:"created_at"`
-	UpdatedAt   time.Time   `json:"updated_at"`
+	ID           string      `json:"id"`
+	UserID       string      `json:"user_id"`
+	Name         string      `json:"name"`
+	Type         AccountType `json:"type"`
+	Currency     Currency    `json:"currency"`
+	Institution  string      `json:"institution,omitempty"`
+	IsAsset      bool        `json:"is_asset"`
+	IsActive     bool        `json:"is_active"`
+	IsSynced     bool        `json:"is_synced"`         // true if managed by a connection
+	ConnectionID string      `json:"connection_id,omitempty"` // reference to Connection if synced
+	CreatedAt    time.Time   `json:"created_at"`
+	UpdatedAt    time.Time   `json:"updated_at"`
 }
 
 // CreateAccountRequest represents the request to create a new account
 type CreateAccountRequest struct {
-	Name        string      `json:"name"`
-	Type        AccountType `json:"type"`
-	Currency    Currency    `json:"currency"`
-	Institution string      `json:"institution,omitempty"`
-	IsAsset     bool        `json:"is_asset"`
+	Name         string      `json:"name"`
+	Type         AccountType `json:"type"`
+	Currency     Currency    `json:"currency"`
+	Institution  string      `json:"institution,omitempty"`
+	IsAsset      bool        `json:"is_asset"`
+	IsSynced     bool        `json:"is_synced,omitempty"`     // Optional: mark as synced account
+	ConnectionID string      `json:"connection_id,omitempty"` // Optional: connection reference
 }
 
 // UpdateAccountRequest represents the request to update an account
@@ -105,22 +109,24 @@ func Create(ctx context.Context, req *CreateAccountRequest) (*Account, error) {
 	userID := "temp-user-id" // Placeholder until auth is implemented
 
 	account := &Account{
-		UserID:      userID,
-		Name:        req.Name,
-		Type:        req.Type,
-		Currency:    req.Currency,
-		Institution: req.Institution,
-		IsAsset:     req.IsAsset,
-		IsActive:    true,
-		CreatedAt:   time.Now(),
-		UpdatedAt:   time.Now(),
+		UserID:       userID,
+		Name:         req.Name,
+		Type:         req.Type,
+		Currency:     req.Currency,
+		Institution:  req.Institution,
+		IsAsset:      req.IsAsset,
+		IsActive:     true,
+		IsSynced:     req.IsSynced,
+		ConnectionID: req.ConnectionID,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
 	}
 
 	err := db.QueryRow(ctx, `
-		INSERT INTO accounts (user_id, name, type, currency, institution, is_asset, is_active, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		INSERT INTO accounts (user_id, name, type, currency, institution, is_asset, is_active, is_synced, connection_id, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		RETURNING id
-	`, userID, req.Name, req.Type, req.Currency, req.Institution, req.IsAsset, true, account.CreatedAt, account.UpdatedAt).Scan(&account.ID)
+	`, userID, req.Name, req.Type, req.Currency, req.Institution, req.IsAsset, true, req.IsSynced, req.ConnectionID, account.CreatedAt, account.UpdatedAt).Scan(&account.ID)
 
 	if err != nil {
 		return nil, err
@@ -209,9 +215,9 @@ func List(ctx context.Context) (*ListAccountsResponse, error) {
 	userID := "temp-user-id" // Placeholder until auth is implemented
 
 	rows, err := db.Query(ctx, `
-		SELECT id, user_id, name, type, currency, institution, is_asset, is_active, created_at, updated_at
+		SELECT id, user_id, name, type, currency, institution, is_asset, is_active, is_synced, connection_id, created_at, updated_at
 		FROM accounts
-		WHERE user_id = $1
+		WHERE user_id = $1 AND is_active = true
 		ORDER BY created_at DESC
 	`, userID)
 	if err != nil {
@@ -222,6 +228,7 @@ func List(ctx context.Context) (*ListAccountsResponse, error) {
 	var accounts []*Account
 	for rows.Next() {
 		account := &Account{}
+		var connectionID *string
 		err := rows.Scan(
 			&account.ID,
 			&account.UserID,
@@ -231,11 +238,16 @@ func List(ctx context.Context) (*ListAccountsResponse, error) {
 			&account.Institution,
 			&account.IsAsset,
 			&account.IsActive,
+			&account.IsSynced,
+			&connectionID,
 			&account.CreatedAt,
 			&account.UpdatedAt,
 		)
 		if err != nil {
 			return nil, err
+		}
+		if connectionID != nil {
+			account.ConnectionID = *connectionID
 		}
 		accounts = append(accounts, account)
 	}
@@ -251,8 +263,9 @@ func Get(ctx context.Context, id string) (*Account, error) {
 	userID := "temp-user-id" // Placeholder until auth is implemented
 
 	account := &Account{}
+	var connectionID *string
 	err := db.QueryRow(ctx, `
-		SELECT id, user_id, name, type, currency, institution, is_asset, is_active, created_at, updated_at
+		SELECT id, user_id, name, type, currency, institution, is_asset, is_active, is_synced, connection_id, created_at, updated_at
 		FROM accounts
 		WHERE id = $1 AND user_id = $2
 	`, id, userID).Scan(
@@ -264,9 +277,15 @@ func Get(ctx context.Context, id string) (*Account, error) {
 		&account.Institution,
 		&account.IsAsset,
 		&account.IsActive,
+		&account.IsSynced,
+		&connectionID,
 		&account.CreatedAt,
 		&account.UpdatedAt,
 	)
+
+	if connectionID != nil {
+		account.ConnectionID = *connectionID
+	}
 
 	if err != nil {
 		return nil, err
@@ -312,7 +331,7 @@ func Update(ctx context.Context, id string, req *UpdateAccountRequest) (*Account
 	_, err = db.Exec(ctx, `
 		UPDATE accounts
 		SET name = $1, type = $2, currency = $3, institution = $4, is_asset = $5, is_active = $6, updated_at = $7
-		WHERE id = $8 AND user_id = $9
+		WHERE id = $8 AND user_id = $9 AND is_synced = false
 	`, account.Name, account.Type, account.Currency, account.Institution, account.IsAsset, account.IsActive, account.UpdatedAt, id, userID)
 
 	if err != nil {
@@ -330,10 +349,9 @@ func Delete(ctx context.Context, id string) (*DeleteAccountResponse, error) {
 	userID := "temp-user-id" // Placeholder until auth is implemented
 
 	_, err := db.Exec(ctx, `
-		UPDATE accounts
-		SET is_active = false, updated_at = $1
-		WHERE id = $2 AND user_id = $3
-	`, time.Now(), id, userID)
+		DELETE FROM accounts
+		WHERE id = $1 AND user_id = $2
+	`, id, userID)
 
 	if err != nil {
 		return nil, err

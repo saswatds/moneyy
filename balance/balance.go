@@ -151,6 +151,9 @@ func Create(ctx context.Context, req *CreateBalanceRequest) (*Balance, error) {
 	err := db.QueryRow(ctx, `
 		INSERT INTO balances (account_id, amount, date, notes, created_at)
 		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (account_id, date) DO UPDATE SET
+			amount = EXCLUDED.amount,
+			notes = EXCLUDED.notes
 		RETURNING id
 	`, req.AccountID, req.Amount, req.Date, req.Notes, balance.CreatedAt).Scan(&balance.ID)
 

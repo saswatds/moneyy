@@ -5,6 +5,7 @@ import {
   IconChartLine,
   IconTrendingUp,
   IconSettings,
+  IconPlugConnected,
 } from '@tabler/icons-react';
 import {
   Sidebar,
@@ -29,6 +30,11 @@ const items = [
     title: 'Accounts',
     url: '/accounts',
     icon: IconWallet,
+  },
+  {
+    title: 'Connections',
+    url: '/connections',
+    icon: IconPlugConnected,
   },
   {
     title: 'Analytics',
