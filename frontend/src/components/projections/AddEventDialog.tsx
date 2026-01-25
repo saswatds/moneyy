@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -33,6 +34,9 @@ export function AddEventDialog({ open, onOpenChange, onSave, editingEvent }: Add
   const [date, setDate] = useState('');
   const [description, setDescription] = useState('');
   const [parameters, setParameters] = useState<EventParameters>({});
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [recurrenceFrequency, setRecurrenceFrequency] = useState<'monthly' | 'quarterly' | 'annually'>('monthly');
+  const [recurrenceEndDate, setRecurrenceEndDate] = useState('');
 
   // Initialize form when editing
   useEffect(() => {
@@ -41,12 +45,18 @@ export function AddEventDialog({ open, onOpenChange, onSave, editingEvent }: Add
       setDate(editingEvent.date.split('T')[0]);
       setDescription(editingEvent.description);
       setParameters(editingEvent.parameters);
+      setIsRecurring(editingEvent.is_recurring || false);
+      setRecurrenceFrequency(editingEvent.recurrence_frequency || 'monthly');
+      setRecurrenceEndDate(editingEvent.recurrence_end_date ? editingEvent.recurrence_end_date.split('T')[0] : '');
     } else {
       // Reset for new event
       setEventType('one_time_expense');
       setDate(new Date().toISOString().split('T')[0]);
       setDescription('');
       setParameters({});
+      setIsRecurring(false);
+      setRecurrenceFrequency('monthly');
+      setRecurrenceEndDate('');
     }
   }, [editingEvent, open]);
 
@@ -57,6 +67,11 @@ export function AddEventDialog({ open, onOpenChange, onSave, editingEvent }: Add
       date: date + 'T00:00:00Z',
       description,
       parameters,
+      is_recurring: isRecurring,
+      ...(isRecurring && {
+        recurrence_frequency: recurrenceFrequency,
+        recurrence_end_date: recurrenceEndDate ? recurrenceEndDate + 'T00:00:00Z' : undefined,
+      }),
     };
 
     onSave(event);
@@ -357,6 +372,56 @@ export function AddEventDialog({ open, onOpenChange, onSave, editingEvent }: Add
               required
             />
           </div>
+
+          {/* Recurrence Options */}
+          {(eventType === 'one_time_income' || eventType === 'one_time_expense' || eventType === 'extra_debt_payment') && (
+            <div className="space-y-4 p-3 border rounded-lg bg-muted/30">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="isRecurring"
+                  checked={isRecurring}
+                  onCheckedChange={(checked) => setIsRecurring(checked === true)}
+                />
+                <Label htmlFor="isRecurring" className="font-medium cursor-pointer">
+                  Recurring Event
+                </Label>
+              </div>
+
+              {isRecurring && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="recurrenceFrequency">Frequency</Label>
+                    <Select
+                      value={recurrenceFrequency}
+                      onValueChange={(value: 'monthly' | 'quarterly' | 'annually') => setRecurrenceFrequency(value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="monthly">Monthly</SelectItem>
+                        <SelectItem value="quarterly">Quarterly (Every 3 months)</SelectItem>
+                        <SelectItem value="annually">Annually (Once per year)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="recurrenceEndDate">End Date (Optional)</Label>
+                    <Input
+                      id="recurrenceEndDate"
+                      type="date"
+                      value={recurrenceEndDate}
+                      onChange={(e) => setRecurrenceEndDate(e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Leave empty to recur until end of projection period
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
 
           {renderEventForm()}
         </div>

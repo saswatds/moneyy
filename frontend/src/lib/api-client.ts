@@ -329,6 +329,9 @@ export type Event = {
   date: string;
   description: string;
   parameters: EventParameters;
+  is_recurring?: boolean;
+  recurrence_frequency?: 'monthly' | 'quarterly' | 'annually';
+  recurrence_end_date?: string;
 };
 
 export interface ProjectionConfig {

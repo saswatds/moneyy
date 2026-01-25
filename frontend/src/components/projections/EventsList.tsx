@@ -64,34 +64,53 @@ const formatCurrency = (amount: number) => {
 
 const getEventSummary = (event: Event) => {
   const params = event.parameters;
+  let summary = '';
 
   switch (event.type) {
     case 'one_time_income':
     case 'one_time_expense':
-      return formatCurrency(params.amount || 0);
+      summary = formatCurrency(params.amount || 0);
+      break;
 
     case 'extra_debt_payment':
-      return `${formatCurrency(params.amount || 0)} towards debt`;
+      summary = `${formatCurrency(params.amount || 0)} towards debt`;
+      break;
 
     case 'salary_change':
-      return `New salary: ${formatCurrency(params.new_salary || 0)}`;
+      summary = `New salary: ${formatCurrency(params.new_salary || 0)}`;
+      break;
 
     case 'expense_level_change':
       if (params.expense_change_type === 'absolute') {
-        return `New expenses: ${formatCurrency(params.new_expenses || 0)}/mo`;
+        summary = `New expenses: ${formatCurrency(params.new_expenses || 0)}/mo`;
       } else if (params.expense_change_type === 'relative_percent') {
         const change = (params.expense_change || 0) * 100;
-        return `${change > 0 ? '+' : ''}${change.toFixed(1)}% change`;
+        summary = `${change > 0 ? '+' : ''}${change.toFixed(1)}% change`;
       } else {
-        return `${formatCurrency(params.expense_change || 0)} change`;
+        summary = `${formatCurrency(params.expense_change || 0)} change`;
       }
+      break;
 
     case 'savings_rate_change':
-      return `New rate: ${((params.new_savings_rate || 0) * 100).toFixed(0)}%`;
+      summary = `New rate: ${((params.new_savings_rate || 0) * 100).toFixed(0)}%`;
+      break;
 
     default:
-      return '';
+      summary = '';
   }
+
+  // Add recurring indicator
+  if (event.is_recurring) {
+    const freq = event.recurrence_frequency === 'monthly' ? 'Monthly' :
+                 event.recurrence_frequency === 'quarterly' ? 'Quarterly' :
+                 event.recurrence_frequency === 'annually' ? 'Annually' : '';
+    const endInfo = event.recurrence_end_date
+      ? ` until ${formatDate(event.recurrence_end_date)}`
+      : '';
+    summary += ` • ${freq}${endInfo}`;
+  }
+
+  return summary;
 };
 
 export function EventsList({ events, onEventsChange }: EventsListProps) {
@@ -170,6 +189,11 @@ export function EventsList({ events, onEventsChange }: EventsListProps) {
                       <span className="text-xs px-1.5 py-0.5 rounded bg-muted font-medium">
                         {getEventTypeName(event.type)}
                       </span>
+                      {event.is_recurring && (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-medium">
+                          Recurring
+                        </span>
+                      )}
                     </div>
                     <p className="text-sm font-medium mt-1">{event.description}</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
