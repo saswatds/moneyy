@@ -160,6 +160,139 @@ export interface CreateMortgagePaymentRequest {
   notes?: string;
 }
 
+export interface LoanDetails {
+  id: string;
+  account_id: string;
+  original_amount: number;
+  interest_rate: number;
+  rate_type: 'fixed' | 'variable';
+  start_date: string;
+  term_months: number;
+  payment_amount: number;
+  payment_frequency: 'weekly' | 'bi-weekly' | 'semi-monthly' | 'monthly';
+  payment_day?: number;
+  loan_type?: string;
+  lender?: string;
+  loan_number?: string;
+  purpose?: string;
+  maturity_date: string;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LoanPayment {
+  id: string;
+  account_id: string;
+  payment_date: string;
+  payment_amount: number;
+  principal_amount: number;
+  interest_amount: number;
+  extra_payment: number;
+  balance_after: number;
+  notes?: string;
+  created_at: string;
+}
+
+export interface CreateLoanDetailsRequest {
+  account_id: string;
+  original_amount: number;
+  interest_rate: number;
+  rate_type: 'fixed' | 'variable';
+  start_date: string;
+  term_months: number;
+  payment_amount: number;
+  payment_frequency: 'weekly' | 'bi-weekly' | 'semi-monthly' | 'monthly';
+  payment_day?: number;
+  loan_type?: string;
+  lender?: string;
+  loan_number?: string;
+  purpose?: string;
+  notes?: string;
+}
+
+export interface CreateLoanPaymentRequest {
+  account_id: string;
+  payment_date: string;
+  payment_amount: number;
+  principal_amount: number;
+  interest_amount: number;
+  extra_payment: number;
+  notes?: string;
+}
+
+export interface AssetDetails {
+  id: string;
+  account_id: string;
+  asset_type: 'real_estate' | 'vehicle' | 'collectible' | 'equipment';
+  purchase_price: number;
+  purchase_date: string;
+  depreciation_method: 'straight_line' | 'declining_balance' | 'manual';
+  useful_life_years?: number;
+  salvage_value: number;
+  depreciation_rate?: number;
+  type_specific_data?: Record<string, any>;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AssetWithCurrentValue extends AssetDetails {
+  current_value: number;
+  accumulated_depreciation: number;
+  as_of_date: string;
+}
+
+export interface DepreciationEntry {
+  id: string;
+  account_id: string;
+  entry_date: string;
+  current_value: number;
+  accumulated_depreciation: number;
+  notes?: string;
+  created_at: string;
+}
+
+export interface DepreciationScheduleEntry {
+  year: number;
+  date: string;
+  depreciation_amount: number;
+  accumulated_depreciation: number;
+  book_value: number;
+}
+
+export interface CreateAssetDetailsRequest {
+  account_id: string;
+  asset_type: 'real_estate' | 'vehicle' | 'collectible' | 'equipment';
+  purchase_price: number;
+  purchase_date: string;
+  depreciation_method: 'straight_line' | 'declining_balance' | 'manual';
+  useful_life_years?: number;
+  salvage_value: number;
+  depreciation_rate?: number;
+  type_specific_data?: Record<string, any>;
+  notes?: string;
+}
+
+export interface UpdateAssetDetailsRequest {
+  asset_type: 'real_estate' | 'vehicle' | 'collectible' | 'equipment';
+  purchase_price: number;
+  purchase_date: string;
+  depreciation_method: 'straight_line' | 'declining_balance' | 'manual';
+  useful_life_years?: number;
+  salvage_value: number;
+  depreciation_rate?: number;
+  type_specific_data?: Record<string, any>;
+  notes?: string;
+}
+
+export interface CreateDepreciationEntryRequest {
+  account_id: string;
+  entry_date: string;
+  current_value: number;
+  notes?: string;
+}
+
 class ApiClient {
   private baseUrl: string;
 
@@ -308,6 +441,87 @@ class ApiClient {
 
   async syncMortgageBalance(accountId: string): Promise<void> {
     return this.request(`/accounts/${accountId}/mortgage/sync-balance`, {
+      method: 'POST',
+    });
+  }
+
+  // Loan endpoints
+  async createLoanDetails(accountId: string, data: CreateLoanDetailsRequest): Promise<LoanDetails> {
+    return this.request(`/accounts/${accountId}/loan`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getLoanDetails(accountId: string): Promise<LoanDetails> {
+    return this.request(`/accounts/${accountId}/loan`);
+  }
+
+  async getLoanAmortizationSchedule(accountId: string): Promise<{ schedule: AmortizationEntry[] }> {
+    return this.request(`/accounts/${accountId}/loan/amortization`);
+  }
+
+  async recordLoanPayment(accountId: string, data: CreateLoanPaymentRequest): Promise<LoanPayment> {
+    return this.request(`/accounts/${accountId}/loan/payments`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getLoanPayments(accountId: string): Promise<{ payments: LoanPayment[] }> {
+    return this.request(`/accounts/${accountId}/loan/payments`);
+  }
+
+  async syncLoanBalance(accountId: string): Promise<void> {
+    return this.request(`/accounts/${accountId}/loan/sync-balance`, {
+      method: 'POST',
+    });
+  }
+
+  // Asset endpoints
+  async createAssetDetails(accountId: string, data: CreateAssetDetailsRequest): Promise<AssetDetails> {
+    return this.request(`/accounts/${accountId}/asset`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getAssetDetails(accountId: string): Promise<AssetDetails> {
+    return this.request(`/accounts/${accountId}/asset`);
+  }
+
+  async updateAssetDetails(accountId: string, data: UpdateAssetDetailsRequest): Promise<AssetDetails> {
+    return this.request(`/accounts/${accountId}/asset`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getAssetValuation(accountId: string): Promise<AssetWithCurrentValue> {
+    return this.request(`/accounts/${accountId}/asset/valuation`);
+  }
+
+  async getAssetsSummary(): Promise<{ assets: AssetWithCurrentValue[] }> {
+    return this.request('/assets/summary');
+  }
+
+  async recordDepreciation(accountId: string, data: CreateDepreciationEntryRequest): Promise<DepreciationEntry> {
+    return this.request(`/accounts/${accountId}/asset/depreciation`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getDepreciationHistory(accountId: string): Promise<{ entries: DepreciationEntry[] }> {
+    return this.request(`/accounts/${accountId}/asset/depreciation`);
+  }
+
+  async getDepreciationSchedule(accountId: string): Promise<{ schedule: DepreciationScheduleEntry[] }> {
+    return this.request(`/accounts/${accountId}/asset/depreciation-schedule`);
+  }
+
+  async syncAssetBalance(accountId: string): Promise<void> {
+    return this.request(`/accounts/${accountId}/asset/sync-balance`, {
       method: 'POST',
     });
   }

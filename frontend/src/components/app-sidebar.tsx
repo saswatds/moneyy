@@ -6,6 +6,7 @@ import {
   IconTrendingUp,
   IconSettings,
   IconPlugConnected,
+  IconHome,
 } from '@tabler/icons-react';
 import {
   Sidebar,
@@ -30,6 +31,11 @@ const items = [
     title: 'Accounts',
     url: '/accounts',
     icon: IconWallet,
+  },
+  {
+    title: 'Assets',
+    url: '/assets',
+    icon: IconHome,
   },
   {
     title: 'Connections',
