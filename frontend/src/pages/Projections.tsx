@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 import type { ProjectionConfig, ProjectionResponse } from '@/lib/api-client';
@@ -11,7 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { Line, LineChart, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
+import { Line, LineChart, Area, AreaChart, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -118,7 +118,7 @@ export function Projections() {
     queryFn: () => apiClient.getRecurringExpenses(),
   });
 
-  // Load accounts to get mortgages and loans
+  // Load accounts to get account names for debts
   const { data: accountsData } = useQuery({
     queryKey: ['accounts'],
     queryFn: () => apiClient.getAccounts(),
@@ -148,8 +148,6 @@ export function Projections() {
       }
       return total + monthlyAmount;
     }, 0) || 0;
-
-  const computedMonthlyExpenses = computedRecurringExpenses;
 
   // Calculate projection
   const calculateMutation = useMutation({
@@ -327,11 +325,48 @@ export function Projections() {
     net: point.net,
   })) || [];
 
-  // Prepare debt payoff data
+  // Prepare debt payoff data with individual debts
   const debtData = projectionData?.debt_payoff.map((point) => ({
     date: formatDate(point.date),
     totalDebt: point.total_debt,
+    ...point.debts, // Spread individual debt balances
   })) || [];
+
+  // Get unique debt account IDs from the data
+  const uniqueDebtAccounts = projectionData?.debt_payoff.reduce((accounts, point) => {
+    Object.keys(point.debts).forEach(accountId => {
+      if (!accounts.includes(accountId)) {
+        accounts.push(accountId);
+      }
+    });
+    return accounts;
+  }, [] as string[]) || [];
+
+  // Color palette for different debts
+  const debtColors = [
+    '#ef4444', // red
+    '#f97316', // orange
+    '#f59e0b', // amber
+    '#eab308', // yellow
+    '#84cc16', // lime
+    '#22c55e', // green
+    '#10b981', // emerald
+    '#14b8a6', // teal
+    '#06b6d4', // cyan
+    '#0ea5e9', // sky
+    '#3b82f6', // blue
+    '#6366f1', // indigo
+    '#8b5cf6', // violet
+    '#a855f7', // purple
+    '#d946ef', // fuchsia
+    '#ec4899', // pink
+  ];
+
+  // Helper to get account name by ID
+  const getAccountName = (accountId: string): string => {
+    const account = accountsData?.accounts.find(acc => acc.id === accountId);
+    return account?.name || accountId;
+  };
 
   // Get final values
   const finalNetWorth = netWorthData[netWorthData.length - 1]?.netWorth || 0;
@@ -824,13 +859,13 @@ export function Projections() {
               <CardHeader>
                 <CardTitle>Debt Payoff Timeline</CardTitle>
                 <CardDescription>
-                  Total debt balance over time
+                  Individual debt balances over time
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="h-[300px]">
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={debtData}>
+                    <AreaChart data={debtData}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="date" />
                       <YAxis tickFormatter={(value) => formatCurrency(value)} />
@@ -854,15 +889,19 @@ export function Projections() {
                           }}
                         />
                       ))}
-                      <Line
-                        type="monotone"
-                        dataKey="totalDebt"
-                        stroke="#ef4444"
-                        name="Total Debt"
-                        strokeWidth={3}
-                        dot={false}
-                      />
-                    </LineChart>
+                      {uniqueDebtAccounts.map((accountId, idx) => (
+                        <Area
+                          key={accountId}
+                          type="monotone"
+                          dataKey={accountId}
+                          stackId="1"
+                          stroke={debtColors[idx % debtColors.length]}
+                          fill={debtColors[idx % debtColors.length]}
+                          fillOpacity={0.6}
+                          name={getAccountName(accountId)}
+                        />
+                      ))}
+                    </AreaChart>
                   </ResponsiveContainer>
                 </div>
               </CardContent>
@@ -1373,7 +1412,7 @@ export function Projections() {
                           `investment_returns.${accountType}`,
                           `${accountType.replace('_', ' ')} Returns`,
                           rate,
-                          (path, value) => ({
+                          (_path, value) => ({
                             ...config,
                             investment_returns: {
                               ...config.investment_returns,
