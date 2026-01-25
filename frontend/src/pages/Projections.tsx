@@ -268,22 +268,6 @@ export function Projections() {
     setSensitivityDialogOpen(true);
   };
 
-  // Load default scenario on mount
-  useEffect(() => {
-    if (scenariosData?.scenarios && scenariosData.scenarios.length > 0) {
-      const defaultScenario = scenariosData.scenarios.find(s => s.is_default) || scenariosData.scenarios[0];
-      if (defaultScenario && !currentScenarioId) {
-        setConfig(defaultScenario.config);
-        setCurrentScenarioId(defaultScenario.id);
-      }
-    }
-  }, [scenariosData, currentScenarioId]);
-
-  // Auto-calculate on mount
-  useEffect(() => {
-    handleCalculate();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Format currency
   const formatCurrency = (value: number) => {
