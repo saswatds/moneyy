@@ -391,13 +391,12 @@ func getNextPaymentDate(currentDate time.Time, frequency string) time.Time {
 //
 //encore:api public method=POST path=/accounts/:accountID/mortgage/payments
 func RecordMortgagePayment(ctx context.Context, accountID string, req *CreateMortgagePaymentRequest) (*MortgagePayment, error) {
-	// Calculate balance after payment
-	// Get current balance from the account
+	// Get current balance from either the last payment or the original mortgage amount
 	var currentBalance float64
 	err := db.QueryRow(ctx, `
 		SELECT COALESCE(
-			(SELECT amount FROM balances WHERE account_id = $1 ORDER BY date DESC LIMIT 1),
-			(SELECT original_amount FROM mortgage_details WHERE account_id = $1)
+			(SELECT balance_after FROM mortgage_payments WHERE account_id = $1 ORDER BY payment_date DESC, created_at DESC LIMIT 1),
+			-(SELECT original_amount FROM mortgage_details WHERE account_id = $1)
 		)
 	`, accountID).Scan(&currentBalance)
 
@@ -406,7 +405,7 @@ func RecordMortgagePayment(ctx context.Context, accountID string, req *CreateMor
 	}
 
 	// Balance after = current balance + (principal + extra payment)
-	// Note: mortgage balance is stored as negative, so we add the payment
+	// Note: mortgage balance is stored as negative, so we add the payment to reduce the debt
 	balanceAfter := currentBalance + req.PrincipalAmount + req.ExtraPayment
 
 	id := uuid.New().String()
