@@ -20,11 +20,14 @@ const (
 
 // Event represents a financial event that occurs during the projection
 type Event struct {
-	ID          string          `json:"id"`
-	Type        EventType       `json:"type"`
-	Date        time.Time       `json:"date"`
-	Description string          `json:"description"`
-	Parameters  EventParameters `json:"parameters"`
+	ID                  string          `json:"id"`
+	Type                EventType       `json:"type"`
+	Date                time.Time       `json:"date"`
+	Description         string          `json:"description"`
+	Parameters          EventParameters `json:"parameters"`
+	IsRecurring         bool            `json:"is_recurring"`
+	RecurrenceFrequency string          `json:"recurrence_frequency,omitempty"` // "monthly", "quarterly", "annually"
+	RecurrenceEndDate   *time.Time      `json:"recurrence_end_date,omitempty"`  // nil = recur until end of projection
 }
 
 // EventParameters contains type-specific parameters for events
@@ -63,6 +66,59 @@ func NewProjectionState(config *Config) *ProjectionState {
 		AnnualExpenseGrowth: config.AnnualExpenseGrowth,
 		MonthlySavingsRate:  config.MonthlySavingsRate,
 	}
+}
+
+// expandRecurringEvents expands recurring events into individual occurrences
+func expandRecurringEvents(events []Event, projectionEndDate time.Time) []Event {
+	var expandedEvents []Event
+
+	for _, event := range events {
+		if !event.IsRecurring {
+			// Non-recurring event, add as-is
+			expandedEvents = append(expandedEvents, event)
+			continue
+		}
+
+		// Determine end date for recurrence
+		endDate := projectionEndDate
+		if event.RecurrenceEndDate != nil && event.RecurrenceEndDate.Before(projectionEndDate) {
+			endDate = *event.RecurrenceEndDate
+		}
+
+		// Generate occurrences based on frequency
+		currentDate := event.Date
+		occurrenceNum := 0
+
+		for !currentDate.After(endDate) {
+			// Create a copy of the event for this occurrence
+			occurrence := Event{
+				ID:          fmt.Sprintf("%s_occurrence_%d", event.ID, occurrenceNum),
+				Type:        event.Type,
+				Date:        currentDate,
+				Description: event.Description,
+				Parameters:  event.Parameters,
+				IsRecurring: false, // Mark as non-recurring to prevent re-expansion
+			}
+			expandedEvents = append(expandedEvents, occurrence)
+
+			// Calculate next occurrence date
+			switch event.RecurrenceFrequency {
+			case "monthly":
+				currentDate = currentDate.AddDate(0, 1, 0)
+			case "quarterly":
+				currentDate = currentDate.AddDate(0, 3, 0)
+			case "annually":
+				currentDate = currentDate.AddDate(1, 0, 0)
+			default:
+				// Unknown frequency, treat as one-time - exit the loop
+				currentDate = endDate.AddDate(0, 0, 1)
+			}
+
+			occurrenceNum++
+		}
+	}
+
+	return expandedEvents
 }
 
 // sortEvents sorts events by date (earliest first)

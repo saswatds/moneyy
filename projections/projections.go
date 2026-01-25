@@ -131,8 +131,15 @@ func CalculateProjection(ctx context.Context, req *ProjectionRequest) (*Projecti
 	// Debug: Log events
 	fmt.Printf("DEBUG: Received %d events\n", len(config.Events))
 	for i, event := range config.Events {
-		fmt.Printf("DEBUG: Event %d: Type=%s, Date=%s, Description=%s\n", i, event.Type, event.Date, event.Description)
+		fmt.Printf("DEBUG: Event %d: Type=%s, Date=%s, Description=%s, IsRecurring=%v\n", i, event.Type, event.Date, event.Description, event.IsRecurring)
 	}
+
+	// Calculate projection end date
+	endDate := time.Now().AddDate(config.TimeHorizonYears, 0, 0)
+
+	// Expand recurring events into individual occurrences
+	config.Events = expandRecurringEvents(config.Events, endDate)
+	fmt.Printf("DEBUG: After expansion: %d events\n", len(config.Events))
 
 	// Sort events by date
 	sortEvents(config.Events)
@@ -226,11 +233,38 @@ func CalculateProjection(ctx context.Context, req *ProjectionRequest) (*Projecti
 		// Calculate expenses for this month (using state which may have been updated by events)
 		expenses := state.MonthlyExpenses * math.Pow(1+state.AnnualExpenseGrowth, yearsElapsed)
 
+		// Calculate total monthly debt payments (mortgages + loans)
+		totalDebtPayments := 0.0
+		for _, m := range mortgages {
+			if balance, exists := debtBalances[m.AccountID]; exists && balance > 0 {
+				monthlyPayment := convertToMonthlyPayment(m.PaymentAmount, m.PaymentFrequency)
+				payment := monthlyPayment
+				// Add extra payment if configured
+				if extra, ok := config.ExtraDebtPayments[m.AccountID]; ok {
+					payment += extra
+				}
+				totalDebtPayments += payment
+			}
+		}
+		for _, l := range loans {
+			if balance, exists := debtBalances[l.AccountID]; exists && balance > 0 {
+				monthlyPayment := convertToMonthlyPayment(l.PaymentAmount, l.PaymentFrequency)
+				payment := monthlyPayment
+				if extra, ok := config.ExtraDebtPayments[l.AccountID]; ok {
+					payment += extra
+				}
+				totalDebtPayments += payment
+			}
+		}
+
+		// Add debt payments to expenses
+		expenses += totalDebtPayments
+
 		// Add event-based income and expenses
 		expenses += eventExpense
 		totalMonthlyIncome := monthlyNetIncome + eventIncome
 
-		// Calculate net cash flow
+		// Calculate net cash flow (income - expenses - debt payments)
 		netCashFlow := totalMonthlyIncome - expenses
 
 		// Handle negative cash flow (expenses exceed income)
@@ -273,6 +307,12 @@ func CalculateProjection(ctx context.Context, req *ProjectionRequest) (*Projecti
 			savings = netCashFlow
 		}
 
+		// Calculate non-invested cash (money not invested)
+		nonInvestedCash := netCashFlow - savings
+		if nonInvestedCash < 0 {
+			nonInvestedCash = 0
+		}
+
 		// Record cash flow
 		response.CashFlow = append(response.CashFlow, CashFlowPoint{
 			Date:     currentDate,
@@ -306,6 +346,12 @@ func CalculateProjection(ctx context.Context, req *ProjectionRequest) (*Projecti
 				// Add savings allocation
 				if alloc, ok := config.SavingsAllocation[string(account.Type)]; ok && savings > 0 {
 					accountBalances[accountID] += savings * alloc
+				}
+
+				// Add non-invested cash to checking/cash accounts
+				if (account.Type == "checking" || account.Type == "cash" || account.Type == "savings") && nonInvestedCash > 0 {
+					accountBalances[accountID] += nonInvestedCash
+					nonInvestedCash = 0 // Only add to first checking/cash account found
 				}
 
 				assetTotal += accountBalances[accountID]

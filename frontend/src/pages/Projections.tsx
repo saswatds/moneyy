@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
-import type { ProjectionConfig, ProjectionResponse, ProjectionScenario, Event } from '@/lib/api-client';
+import type { ProjectionConfig, ProjectionResponse } from '@/lib/api-client';
 import { EventsList } from '@/components/projections/EventsList';
 import {
   Card,
@@ -17,7 +17,6 @@ import { Label } from '@/components/ui/label';
 import {
   IconTrendingUp,
   IconChartLine,
-  IconCash,
   IconCreditCard,
   IconSettings,
   IconCalculator,
@@ -25,7 +24,6 @@ import {
   IconPlus,
   IconTrash,
   IconDeviceFloppy,
-  IconFolder,
   IconBulb,
   IconCopy
 } from '@tabler/icons-react';
@@ -867,7 +865,7 @@ export function Projections() {
             <h3 className="text-lg font-semibold">Base Configuration</h3>
             <p className="text-sm text-muted-foreground">
               Set your starting financial situation. The projection engine will apply automatic growth (salary increases, expense inflation)
-              each year based on these rates. Use Events below to add one-time changes or overrides.
+              each year based on these rates. Loan and mortgage payments are calculated automatically from your accounts. Use Events below to add one-time changes or overrides.
             </p>
           </div>
 
@@ -1160,7 +1158,7 @@ export function Projections() {
                     onChange={(e) => setConfig({ ...config, monthly_expenses: Math.round(parseFloat(e.target.value) || 0) })}
                   />
                   <p className="text-sm text-muted-foreground">
-                    Your current monthly expenses (rent, food, utilities, etc.)
+                    Living expenses (rent, food, utilities, etc.). Excludes loan/mortgage payments - those are calculated automatically.
                   </p>
                 </div>
 
@@ -1202,14 +1200,14 @@ export function Projections() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Savings & Investments</CardTitle>
+              <CardTitle>Investment Returns</CardTitle>
               <CardDescription>
-                How much you save and expected investment returns
+                Investment allocation and expected returns by account type
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-2">
-                <Label htmlFor="savingsRate">Monthly Savings Rate (%)</Label>
+                <Label htmlFor="savingsRate">Savings Invested (%)</Label>
                 <Input
                   id="savingsRate"
                   type="number"
@@ -1221,14 +1219,14 @@ export function Projections() {
                   className="w-32"
                 />
                 <p className="text-sm text-muted-foreground">
-                  Percentage of after-tax income that you save/invest each month
+                  % of leftover money (after expenses) that gets invested. Remainder goes to cash/checking.
                 </p>
               </div>
 
               <div className="space-y-4">
-                <Label>Investment Returns (Annual %)</Label>
+                <Label>Expected Annual Returns (%)</Label>
                 <p className="text-xs text-muted-foreground">
-                  Expected annual returns by account type (compounded monthly)
+                  Expected returns by investment account type (compounded monthly)
                 </p>
                 <div className="grid gap-3">
                   {Object.entries(config.investment_returns).map(([accountType, rate]) => (
