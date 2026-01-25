@@ -5,7 +5,7 @@ import { useExchangeRates } from '@/hooks/use-exchange-rates';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 import type { Account } from '@/lib/api-client';
-import { IconPlus, IconLink, IconEdit, IconTrash, IconAlertTriangle } from '@tabler/icons-react';
+import { IconPlus, IconLink, IconEdit, IconTrash, IconAlertTriangle, IconInfoCircle } from '@tabler/icons-react';
 import { getAccountTypeBadgeColor, getAccountTypeLabel } from '@/lib/account-types';
 import {
   Card,
@@ -22,6 +22,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import {
   Dialog,
   DialogContent,
@@ -160,6 +165,25 @@ export function Accounts() {
     }
   };
 
+  const getDebtToAssetMessage = (ratio: number): { text: string; color: string } => {
+    if (totalAssets === 0) {
+      return { text: 'No assets tracked yet', color: 'text-muted-foreground' };
+    }
+    if (ratio === 0) {
+      return { text: 'Debt-free! Excellent financial position', color: 'text-green-600 dark:text-green-400' };
+    }
+    if (ratio < 0.3) {
+      return { text: 'Excellent! Low debt relative to assets', color: 'text-green-600 dark:text-green-400' };
+    }
+    if (ratio < 0.5) {
+      return { text: 'Good debt level, well managed', color: 'text-blue-600 dark:text-blue-400' };
+    }
+    if (ratio < 0.7) {
+      return { text: 'Moderate debt level, consider paying down', color: 'text-yellow-600 dark:text-yellow-400' };
+    }
+    return { text: 'High debt level, focus on debt reduction', color: 'text-red-600 dark:text-red-400' };
+  };
+
   const calculateTotals = () => {
     if (!data?.accounts || !exchangeRates?.rates) {
       return { totalAssets: 0, totalLiabilities: 0, netWorth: 0 };
@@ -255,6 +279,8 @@ export function Accounts() {
   }
 
   const { totalAssets, totalLiabilities, netWorth } = calculateTotals();
+  const debtToAssetRatio = totalAssets > 0 ? Math.abs(totalLiabilities) / totalAssets : 0;
+  const debtMessage = getDebtToAssetMessage(debtToAssetRatio);
 
   return (
     <div className="space-y-8">
@@ -287,7 +313,7 @@ export function Accounts() {
       </div>
 
       {/* Financial Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="pb-3">
             <CardDescription>Net Worth</CardDescription>
@@ -296,6 +322,18 @@ export function Accounts() {
                 {netWorth < 0 && '('}
                 {formatNumberWithSmallCents(netWorth)}
                 {netWorth < 0 && ')'}
+              </div>
+              <div className="text-sm text-muted-foreground mt-1">{selectedCurrency}</div>
+            </div>
+          </CardHeader>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardDescription>Total Assets</CardDescription>
+            <div className="mt-2">
+              <div className="text-3xl font-bold tabular-nums">
+                {formatNumberWithSmallCents(totalAssets)}
               </div>
               <div className="text-sm text-muted-foreground mt-1">{selectedCurrency}</div>
             </div>
@@ -316,12 +354,56 @@ export function Accounts() {
 
         <Card>
           <CardHeader className="pb-3">
-            <CardDescription>Total Assets</CardDescription>
+            <div className="flex items-center gap-1.5">
+              <CardDescription>Debt-to-Asset Ratio</CardDescription>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button className="text-muted-foreground hover:text-foreground transition-colors">
+                    <IconInfoCircle className="h-4 w-4" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80">
+                  <div className="space-y-3">
+                    <div>
+                      <h4 className="font-medium text-sm mb-2">Understanding Your Ratio</h4>
+                      <p className="text-xs text-muted-foreground">
+                        This ratio shows how much debt you have relative to your assets. Lower is better.
+                      </p>
+                    </div>
+                    <div className="space-y-2 text-xs">
+                      <div className="flex items-start gap-3">
+                        <div className="font-medium text-green-600 dark:text-green-400 min-w-[3rem]">0%</div>
+                        <div className="flex-1">Debt-free! Excellent financial position with no liabilities.</div>
+                      </div>
+                      <div className="flex items-start gap-3">
+                        <div className="font-medium text-green-600 dark:text-green-400 min-w-[3rem]">&lt;30%</div>
+                        <div className="flex-1">Excellent! Low debt relative to assets. Very healthy financial position.</div>
+                      </div>
+                      <div className="flex items-start gap-3">
+                        <div className="font-medium text-blue-600 dark:text-blue-400 min-w-[3rem]">30-50%</div>
+                        <div className="flex-1">Good debt level, well managed. Keep monitoring your debt levels.</div>
+                      </div>
+                      <div className="flex items-start gap-3">
+                        <div className="font-medium text-yellow-600 dark:text-yellow-400 min-w-[3rem]">50-70%</div>
+                        <div className="flex-1">Moderate debt level. Consider strategies to pay down debt.</div>
+                      </div>
+                      <div className="flex items-start gap-3">
+                        <div className="font-medium text-red-600 dark:text-red-400 min-w-[3rem]">&gt;70%</div>
+                        <div className="flex-1">High debt level. Focus on debt reduction to improve financial health.</div>
+                      </div>
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
             <div className="mt-2">
-              <div className="text-3xl font-bold tabular-nums">
-                {formatNumberWithSmallCents(totalAssets)}
+              <div className={`text-3xl font-bold tabular-nums ${debtMessage.color}`}>
+                {(debtToAssetRatio * 100).toFixed(1)}
+                <span className="text-xl">%</span>
               </div>
-              <div className="text-sm text-muted-foreground mt-1">{selectedCurrency}</div>
+              <div className={`text-xs mt-1 ${debtMessage.color}`}>
+                {debtMessage.text}
+              </div>
             </div>
           </CardHeader>
         </Card>
