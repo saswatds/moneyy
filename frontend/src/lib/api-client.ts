@@ -416,6 +416,7 @@ export interface RecurringExpense {
   name: string;
   description?: string;
   amount: number;
+  currency: 'CAD' | 'USD' | 'INR';
   category: string;
   account_id?: string;
   frequency: 'weekly' | 'bi-weekly' | 'monthly' | 'quarterly' | 'annually';
@@ -430,6 +431,7 @@ export interface CreateRecurringExpenseRequest {
   name: string;
   description?: string;
   amount: number;
+  currency: 'CAD' | 'USD' | 'INR';
   category: string;
   account_id?: string;
   frequency: 'weekly' | 'bi-weekly' | 'monthly' | 'quarterly' | 'annually';
@@ -441,6 +443,7 @@ export interface UpdateRecurringExpenseRequest {
   name?: string;
   description?: string;
   amount?: number;
+  currency?: 'CAD' | 'USD' | 'INR';
   category?: string;
   account_id?: string;
   frequency?: 'weekly' | 'bi-weekly' | 'monthly' | 'quarterly' | 'annually';

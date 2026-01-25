@@ -26,6 +26,7 @@ type RecurringExpense struct {
 	Name        string  `json:"name"`
 	Description string  `json:"description,omitempty"`
 	Amount      float64 `json:"amount"`
+	Currency    string  `json:"currency"` // CAD, USD, INR
 	Category    string  `json:"category"`
 	AccountID   *string `json:"account_id,omitempty"`
 	Frequency   string  `json:"frequency"` // weekly, bi-weekly, monthly, quarterly, annually
@@ -41,6 +42,7 @@ type CreateRecurringExpenseRequest struct {
 	Name        string  `json:"name"`
 	Description string  `json:"description,omitempty"`
 	Amount      float64 `json:"amount"`
+	Currency    string  `json:"currency"` // CAD, USD, INR
 	Category    string  `json:"category"`
 	AccountID   *string `json:"account_id,omitempty"`
 	Frequency   string  `json:"frequency"`
@@ -53,6 +55,7 @@ type UpdateRecurringExpenseRequest struct {
 	Name        *string  `json:"name,omitempty"`
 	Description *string  `json:"description,omitempty"`
 	Amount      *float64 `json:"amount,omitempty"`
+	Currency    *string  `json:"currency,omitempty"` // CAD, USD, INR
 	Category    *string  `json:"category,omitempty"`
 	AccountID   *string  `json:"account_id,omitempty"`
 	Frequency   *string  `json:"frequency,omitempty"`
@@ -77,17 +80,17 @@ func CreateRecurringExpense(ctx context.Context, req *CreateRecurringExpenseRequ
 	var expense RecurringExpense
 	err := db.QueryRow(ctx, `
 		INSERT INTO recurring_expenses (
-			id, user_id, name, description, amount, category, account_id,
+			id, user_id, name, description, amount, currency, category, account_id,
 			frequency, day_of_month, day_of_week, is_active
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true)
-		RETURNING id, user_id, name, description, amount, category, account_id,
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true)
+		RETURNING id, user_id, name, description, amount, currency, category, account_id,
 		          frequency, day_of_month, day_of_week,
 		          is_active, created_at, updated_at
-	`, id, uid, req.Name, req.Description, req.Amount, req.Category, req.AccountID,
+	`, id, uid, req.Name, req.Description, req.Amount, req.Currency, req.Category, req.AccountID,
 		req.Frequency, req.DayOfMonth, req.DayOfWeek,
 	).Scan(
 		&expense.ID, &expense.UserID, &expense.Name, &expense.Description,
-		&expense.Amount, &expense.Category, &expense.AccountID, &expense.Frequency,
+		&expense.Amount, &expense.Currency, &expense.Category, &expense.AccountID, &expense.Frequency,
 		&expense.DayOfMonth, &expense.DayOfWeek,
 		&expense.IsActive, &expense.CreatedAt, &expense.UpdatedAt,
 	)
@@ -106,7 +109,7 @@ func ListRecurringExpenses(ctx context.Context) (*ListRecurringExpensesResponse,
 	uid := defaultUserID
 
 	rows, err := db.Query(ctx, `
-		SELECT id, user_id, name, description, amount, category, account_id,
+		SELECT id, user_id, name, description, amount, currency, category, account_id,
 		       frequency, day_of_month, day_of_week,
 		       is_active, created_at, updated_at
 		FROM recurring_expenses
@@ -123,7 +126,7 @@ func ListRecurringExpenses(ctx context.Context) (*ListRecurringExpensesResponse,
 		var expense RecurringExpense
 		err := rows.Scan(
 			&expense.ID, &expense.UserID, &expense.Name, &expense.Description,
-			&expense.Amount, &expense.Category, &expense.AccountID, &expense.Frequency,
+			&expense.Amount, &expense.Currency, &expense.Category, &expense.AccountID, &expense.Frequency,
 			&expense.DayOfMonth, &expense.DayOfWeek,
 			&expense.IsActive, &expense.CreatedAt, &expense.UpdatedAt,
 		)
@@ -148,14 +151,14 @@ func GetRecurringExpense(ctx context.Context, id string) (*RecurringExpense, err
 
 	var expense RecurringExpense
 	err := db.QueryRow(ctx, `
-		SELECT id, user_id, name, description, amount, category, account_id,
+		SELECT id, user_id, name, description, amount, currency, category, account_id,
 		       frequency, day_of_month, day_of_week,
 		       is_active, created_at, updated_at
 		FROM recurring_expenses
 		WHERE id = $1 AND user_id = $2
 	`, id, uid).Scan(
 		&expense.ID, &expense.UserID, &expense.Name, &expense.Description,
-		&expense.Amount, &expense.Category, &expense.AccountID, &expense.Frequency,
+		&expense.Amount, &expense.Currency, &expense.Category, &expense.AccountID, &expense.Frequency,
 		&expense.DayOfMonth, &expense.DayOfWeek,
 		&expense.IsActive, &expense.CreatedAt, &expense.UpdatedAt,
 	)
@@ -193,6 +196,11 @@ func UpdateRecurringExpense(ctx context.Context, id string, req *UpdateRecurring
 		args = append(args, *req.Amount)
 		argIdx++
 	}
+	if req.Currency != nil {
+		query += fmt.Sprintf(`, currency = $%d`, argIdx)
+		args = append(args, *req.Currency)
+		argIdx++
+	}
 	if req.Category != nil {
 		query += fmt.Sprintf(`, category = $%d`, argIdx)
 		args = append(args, *req.Category)
@@ -225,14 +233,14 @@ func UpdateRecurringExpense(ctx context.Context, id string, req *UpdateRecurring
 	}
 
 	query += ` WHERE id = $1 AND user_id = $2
-		RETURNING id, user_id, name, description, amount, category, account_id,
+		RETURNING id, user_id, name, description, amount, currency, category, account_id,
 		          frequency, day_of_month, day_of_week,
 		          is_active, created_at, updated_at`
 
 	var expense RecurringExpense
 	err := db.QueryRow(ctx, query, args...).Scan(
 		&expense.ID, &expense.UserID, &expense.Name, &expense.Description,
-		&expense.Amount, &expense.Category, &expense.AccountID, &expense.Frequency,
+		&expense.Amount, &expense.Currency, &expense.Category, &expense.AccountID, &expense.Frequency,
 		&expense.DayOfMonth, &expense.DayOfWeek,
 		&expense.IsActive, &expense.CreatedAt, &expense.UpdatedAt,
 	)
