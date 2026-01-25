@@ -3,6 +3,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 import type { ProjectionConfig, ProjectionResponse } from '@/lib/api-client';
 import { EventsList } from '@/components/projections/EventsList';
+import { SensitivityAnalysisDialog } from '@/components/projections/SensitivityAnalysisDialog';
 import {
   Card,
   CardContent,
@@ -25,7 +26,8 @@ import {
   IconTrash,
   IconDeviceFloppy,
   IconBulb,
-  IconCopy
+  IconCopy,
+  IconChartBar
 } from '@tabler/icons-react';
 import {
   Select,
@@ -96,6 +98,13 @@ export function Projections() {
   const [scenarioName, setScenarioName] = useState('');
   const [cloneDialogOpen, setCloneDialogOpen] = useState(false);
   const [cloneName, setCloneName] = useState('');
+  const [sensitivityDialogOpen, setSensitivityDialogOpen] = useState(false);
+  const [sensitivityParameter, setSensitivityParameter] = useState<{
+    name: string;
+    label: string;
+    value: number;
+    updateFn?: (path: string, value: number) => ProjectionConfig;
+  } | null>(null);
 
   // Load scenarios
   const { data: scenariosData, refetch: refetchScenarios } = useQuery({
@@ -207,6 +216,16 @@ export function Projections() {
       setCloneName(`${currentScenario.name} (Copy)`);
       setCloneDialogOpen(true);
     }
+  };
+
+  const openSensitivityAnalysis = (
+    name: string,
+    label: string,
+    value: number,
+    updateFn?: (path: string, value: number) => ProjectionConfig
+  ) => {
+    setSensitivityParameter({ name, label, value, updateFn });
+    setSensitivityDialogOpen(true);
   };
 
   // Load default scenario on mount
@@ -881,14 +900,27 @@ export function Projections() {
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="annualSalary">Starting Annual Salary ($)</Label>
-                  <Input
-                    id="annualSalary"
-                    type="number"
-                    min={0}
-                    step={1000}
-                    value={config.annual_salary}
-                    onChange={(e) => setConfig({ ...config, annual_salary: Math.round(parseFloat(e.target.value) || 0) })}
-                  />
+                  <div className="flex gap-2">
+                    <Input
+                      id="annualSalary"
+                      type="number"
+                      min={0}
+                      step={1000}
+                      value={config.annual_salary}
+                      onChange={(e) => setConfig({ ...config, annual_salary: Math.round(parseFloat(e.target.value) || 0) })}
+                      className="flex-1"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="px-2"
+                      onClick={() => openSensitivityAnalysis('annual_salary', 'Annual Salary', config.annual_salary)}
+                      title="Analyze sensitivity"
+                    >
+                      <IconChartBar className="h-4 w-4" />
+                    </Button>
+                  </div>
                   <p className="text-sm text-muted-foreground">
                     Your current gross annual salary
                   </p>
@@ -896,15 +928,28 @@ export function Projections() {
 
                 <div className="space-y-2">
                   <Label htmlFor="salaryGrowth">Automatic Annual Growth (%)</Label>
-                  <Input
-                    id="salaryGrowth"
-                    type="number"
-                    min={0}
-                    max={20}
-                    step={0.1}
-                    value={Math.round(config.annual_salary_growth * 10000) / 100}
-                    onChange={(e) => setConfig({ ...config, annual_salary_growth: Math.round(parseFloat(e.target.value) * 100) / 10000 })}
-                  />
+                  <div className="flex gap-2">
+                    <Input
+                      id="salaryGrowth"
+                      type="number"
+                      min={0}
+                      max={20}
+                      step={0.1}
+                      value={Math.round(config.annual_salary_growth * 10000) / 100}
+                      onChange={(e) => setConfig({ ...config, annual_salary_growth: Math.round(parseFloat(e.target.value) * 100) / 10000 })}
+                      className="flex-1"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="px-2"
+                      onClick={() => openSensitivityAnalysis('annual_salary_growth', 'Annual Salary Growth', config.annual_salary_growth)}
+                      title="Analyze sensitivity"
+                    >
+                      <IconChartBar className="h-4 w-4" />
+                    </Button>
+                  </div>
                   <p className="text-sm text-muted-foreground">
                     Typical annual raise (e.g., 3% = inflation + merit)
                   </p>
@@ -1149,14 +1194,27 @@ export function Projections() {
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="monthlyExpenses">Starting Monthly Expenses ($)</Label>
-                  <Input
-                    id="monthlyExpenses"
-                    type="number"
-                    min={0}
-                    step={100}
-                    value={config.monthly_expenses}
-                    onChange={(e) => setConfig({ ...config, monthly_expenses: Math.round(parseFloat(e.target.value) || 0) })}
-                  />
+                  <div className="flex gap-2">
+                    <Input
+                      id="monthlyExpenses"
+                      type="number"
+                      min={0}
+                      step={100}
+                      value={config.monthly_expenses}
+                      onChange={(e) => setConfig({ ...config, monthly_expenses: Math.round(parseFloat(e.target.value) || 0) })}
+                      className="flex-1"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="px-2"
+                      onClick={() => openSensitivityAnalysis('monthly_expenses', 'Monthly Expenses', config.monthly_expenses)}
+                      title="Analyze sensitivity"
+                    >
+                      <IconChartBar className="h-4 w-4" />
+                    </Button>
+                  </div>
                   <p className="text-sm text-muted-foreground">
                     Living expenses (rent, food, utilities, etc.). Excludes loan/mortgage payments - those are calculated automatically.
                   </p>
@@ -1181,16 +1239,28 @@ export function Projections() {
 
               <div className="space-y-2">
                 <Label htmlFor="inflationRate">General Inflation Rate (%)</Label>
-                <Input
-                  id="inflationRate"
-                  type="number"
-                  min={0}
-                  max={10}
-                  step={0.1}
-                  value={Math.round(config.inflation_rate * 10000) / 100}
-                  onChange={(e) => setConfig({ ...config, inflation_rate: Math.round(parseFloat(e.target.value) * 100) / 10000 })}
-                  className="w-32"
-                />
+                <div className="flex gap-2">
+                  <Input
+                    id="inflationRate"
+                    type="number"
+                    min={0}
+                    max={10}
+                    step={0.1}
+                    value={Math.round(config.inflation_rate * 10000) / 100}
+                    onChange={(e) => setConfig({ ...config, inflation_rate: Math.round(parseFloat(e.target.value) * 100) / 10000 })}
+                    className="w-32"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="px-2"
+                    onClick={() => openSensitivityAnalysis('inflation_rate', 'Inflation Rate', config.inflation_rate)}
+                    title="Analyze sensitivity"
+                  >
+                    <IconChartBar className="h-4 w-4" />
+                  </Button>
+                </div>
                 <p className="text-sm text-muted-foreground">
                   Used for future value calculations
                 </p>
@@ -1208,16 +1278,28 @@ export function Projections() {
             <CardContent className="space-y-6">
               <div className="space-y-2">
                 <Label htmlFor="savingsRate">Savings Invested (%)</Label>
-                <Input
-                  id="savingsRate"
-                  type="number"
-                  min={0}
-                  max={100}
-                  step={1}
-                  value={Math.round(config.monthly_savings_rate * 10000) / 100}
-                  onChange={(e) => setConfig({ ...config, monthly_savings_rate: Math.round(parseFloat(e.target.value) * 100) / 10000 })}
-                  className="w-32"
-                />
+                <div className="flex gap-2">
+                  <Input
+                    id="savingsRate"
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={Math.round(config.monthly_savings_rate * 10000) / 100}
+                    onChange={(e) => setConfig({ ...config, monthly_savings_rate: Math.round(parseFloat(e.target.value) * 100) / 10000 })}
+                    className="w-32"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="px-2"
+                    onClick={() => openSensitivityAnalysis('monthly_savings_rate', 'Savings Invested Rate', config.monthly_savings_rate)}
+                    title="Analyze sensitivity"
+                  >
+                    <IconChartBar className="h-4 w-4" />
+                  </Button>
+                </div>
                 <p className="text-sm text-muted-foreground">
                   % of leftover money (after expenses) that gets invested. Remainder goes to cash/checking.
                 </p>
@@ -1248,6 +1330,27 @@ export function Projections() {
                         className="w-32"
                       />
                       <span className="text-sm text-muted-foreground">%</span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="px-2"
+                        onClick={() => openSensitivityAnalysis(
+                          `investment_returns.${accountType}`,
+                          `${accountType.replace('_', ' ')} Returns`,
+                          rate,
+                          (path, value) => ({
+                            ...config,
+                            investment_returns: {
+                              ...config.investment_returns,
+                              [accountType]: value,
+                            },
+                          })
+                        )}
+                        title="Analyze sensitivity"
+                      >
+                        <IconChartBar className="h-4 w-4" />
+                      </Button>
                     </div>
                   ))}
                 </div>
@@ -1269,6 +1372,7 @@ export function Projections() {
           <EventsList
             events={config.events}
             onEventsChange={(events) => setConfig({ ...config, events })}
+            baseConfig={config}
           />
 
           <Card>
@@ -1288,6 +1392,19 @@ export function Projections() {
           </Card>
         </div>
       </div>
+
+      {/* Sensitivity Analysis Dialog */}
+      {sensitivityParameter && (
+        <SensitivityAnalysisDialog
+          open={sensitivityDialogOpen}
+          onOpenChange={setSensitivityDialogOpen}
+          parameterName={sensitivityParameter.name}
+          parameterLabel={sensitivityParameter.label}
+          currentValue={sensitivityParameter.value}
+          baseConfig={config}
+          onUpdateValue={sensitivityParameter.updateFn}
+        />
+      )}
     </div>
   );
 }

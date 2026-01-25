@@ -1,13 +1,15 @@
 import { useState } from 'react';
-import type { Event, EventType } from '@/lib/api-client';
+import type { Event, EventType, ProjectionConfig } from '@/lib/api-client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { IconPlus, IconEdit, IconTrash, IconCalendar, IconCash, IconCreditCard, IconTrendingUp, IconHome } from '@tabler/icons-react';
+import { IconPlus, IconEdit, IconTrash, IconCalendar, IconCash, IconCreditCard, IconTrendingUp, IconHome, IconChartBar } from '@tabler/icons-react';
 import { AddEventDialog } from './AddEventDialog';
+import { SensitivityAnalysisDialog } from './SensitivityAnalysisDialog';
 
 interface EventsListProps {
   events: Event[];
   onEventsChange: (events: Event[]) => void;
+  baseConfig: ProjectionConfig;
 }
 
 const getEventIcon = (type: EventType) => {
@@ -113,9 +115,16 @@ const getEventSummary = (event: Event) => {
   return summary;
 };
 
-export function EventsList({ events, onEventsChange }: EventsListProps) {
+export function EventsList({ events, onEventsChange, baseConfig }: EventsListProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
+  const [sensitivityDialogOpen, setSensitivityDialogOpen] = useState(false);
+  const [sensitivityParameter, setSensitivityParameter] = useState<{
+    name: string;
+    label: string;
+    value: number;
+    updateFn: (path: string, value: number) => ProjectionConfig;
+  } | null>(null);
 
   const sortedEvents = [...events].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
@@ -143,6 +152,85 @@ export function EventsList({ events, onEventsChange }: EventsListProps) {
   const openEditDialog = (event: Event) => {
     setEditingEvent(event);
     setDialogOpen(true);
+  };
+
+  const openSensitivityAnalysis = (event: Event) => {
+    // Determine which parameter to analyze based on event type
+    let paramName = '';
+    let paramLabel = '';
+    let paramValue = 0;
+
+    switch (event.type) {
+      case 'one_time_income':
+        paramName = 'amount';
+        paramLabel = 'Income Amount';
+        paramValue = event.parameters.amount || 0;
+        break;
+      case 'one_time_expense':
+        paramName = 'amount';
+        paramLabel = 'Expense Amount';
+        paramValue = event.parameters.amount || 0;
+        break;
+      case 'extra_debt_payment':
+        paramName = 'amount';
+        paramLabel = 'Debt Payment Amount';
+        paramValue = event.parameters.amount || 0;
+        break;
+      case 'salary_change':
+        paramName = 'new_salary';
+        paramLabel = 'New Salary';
+        paramValue = event.parameters.new_salary || 0;
+        break;
+      case 'expense_level_change':
+        if (event.parameters.expense_change_type === 'absolute') {
+          paramName = 'new_expenses';
+          paramLabel = 'New Monthly Expenses';
+          paramValue = event.parameters.new_expenses || 0;
+        } else {
+          paramName = 'expense_change';
+          paramLabel = 'Expense Change';
+          paramValue = event.parameters.expense_change || 0;
+        }
+        break;
+      case 'savings_rate_change':
+        paramName = 'new_savings_rate';
+        paramLabel = 'New Savings Rate';
+        paramValue = event.parameters.new_savings_rate || 0;
+        break;
+      default:
+        return; // No parameter to analyze
+    }
+
+    if (paramValue === 0) {
+      return; // No value to analyze
+    }
+
+    // Create update function that modifies this event parameter in the config
+    const updateFn = (path: string, value: number): ProjectionConfig => {
+      const modifiedEvent: Event = {
+        ...event,
+        parameters: {
+          ...event.parameters,
+          [paramName]: value,
+        },
+      };
+
+      // Replace the event in the config
+      const newEvents = events.map(e => e.id === event.id ? modifiedEvent : e);
+
+      return {
+        ...baseConfig,
+        events: newEvents,
+      };
+    };
+
+    setSensitivityParameter({
+      name: paramName,
+      label: paramLabel,
+      value: paramValue,
+      updateFn,
+    });
+    setSensitivityDialogOpen(true);
   };
 
   return (
@@ -204,6 +292,15 @@ export function EventsList({ events, onEventsChange }: EventsListProps) {
                     <Button
                       variant="ghost"
                       size="sm"
+                      onClick={() => openSensitivityAnalysis(event)}
+                      className="h-8 w-8 p-0"
+                      title="Analyze sensitivity"
+                    >
+                      <IconChartBar className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => openEditDialog(event)}
                       className="h-8 w-8 p-0"
                     >
@@ -231,6 +328,19 @@ export function EventsList({ events, onEventsChange }: EventsListProps) {
         onSave={editingEvent ? handleEditEvent : handleAddEvent}
         editingEvent={editingEvent}
       />
+
+      {/* Sensitivity Analysis Dialog */}
+      {sensitivityParameter && (
+        <SensitivityAnalysisDialog
+          open={sensitivityDialogOpen}
+          onOpenChange={setSensitivityDialogOpen}
+          parameterName={sensitivityParameter.name}
+          parameterLabel={sensitivityParameter.label}
+          currentValue={sensitivityParameter.value}
+          baseConfig={baseConfig}
+          onUpdateValue={sensitivityParameter.updateFn}
+        />
+      )}
     </>
   );
 }
