@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 import type { ProjectionConfig, ProjectionResponse } from '@/lib/api-client';
@@ -126,6 +126,20 @@ export function Projections() {
 
   // Load exchange rates for currency conversion
   const { data: exchangeRates } = useExchangeRates();
+
+  // Auto-load first scenario on mount if scenarios exist
+  useEffect(() => {
+    if (scenariosData?.scenarios && scenariosData.scenarios.length > 0 && !currentScenarioId && !projectionData) {
+      // Find default scenario or use first one
+      const defaultScenario = scenariosData.scenarios.find(s => s.is_default) || scenariosData.scenarios[0];
+      setConfig(defaultScenario.config);
+      setCurrentScenarioId(defaultScenario.id);
+      // Trigger calculation after a brief delay to ensure config is set
+      setTimeout(() => {
+        calculateMutation.mutate();
+      }, 100);
+    }
+  }, [scenariosData, currentScenarioId, projectionData]);
 
   // Helper to convert currency to CAD
   const convertToCAD = (amount: number, fromCurrency: string): number => {
