@@ -45,7 +45,7 @@ import {
 } from '@/components/ui/dialog';
 
 const defaultConfig: ProjectionConfig = {
-  time_horizon_years: 10,
+  time_horizon_years: 5,
   inflation_rate: 0.02,
   annual_salary: 80000,
   annual_salary_growth: 0.03,
@@ -112,10 +112,50 @@ export function Projections() {
     queryFn: () => apiClient.getScenarios(),
   });
 
+  // Load recurring expenses
+  const { data: recurringExpensesData } = useQuery({
+    queryKey: ['recurring-expenses'],
+    queryFn: () => apiClient.getRecurringExpenses(),
+  });
+
+  // Load accounts to get mortgages and loans
+  const { data: accountsData } = useQuery({
+    queryKey: ['accounts'],
+    queryFn: () => apiClient.getAccounts(),
+  });
+
+  // Calculate monthly total from recurring expenses
+  const computedRecurringExpenses = recurringExpensesData?.expenses
+    .filter(e => e.is_active)
+    .reduce((total, expense) => {
+      let monthlyAmount = 0;
+      switch (expense.frequency) {
+        case 'weekly':
+          monthlyAmount = expense.amount * 4.33;
+          break;
+        case 'bi-weekly':
+          monthlyAmount = expense.amount * 2.17;
+          break;
+        case 'monthly':
+          monthlyAmount = expense.amount;
+          break;
+        case 'quarterly':
+          monthlyAmount = expense.amount / 3;
+          break;
+        case 'annually':
+          monthlyAmount = expense.amount / 12;
+          break;
+      }
+      return total + monthlyAmount;
+    }, 0) || 0;
+
+  const computedMonthlyExpenses = computedRecurringExpenses;
+
   // Calculate projection
   const calculateMutation = useMutation({
     mutationFn: () => {
       console.log('Calculating projection with config:', config);
+      console.log('Additional expenses:', config.monthly_expenses);
       console.log('Events being sent:', config.events);
       return apiClient.calculateProjection({ config });
     },
@@ -1187,13 +1227,13 @@ export function Projections() {
             <CardHeader>
               <CardTitle>Expenses & Inflation</CardTitle>
               <CardDescription>
-                Starting monthly expenses and automatic inflation rate
+                Additional monthly expenses and automatic inflation rate
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="monthlyExpenses">Starting Monthly Expenses ($)</Label>
+                  <Label htmlFor="monthlyExpenses">Additional Monthly Expenses ($)</Label>
                   <div className="flex gap-2">
                     <Input
                       id="monthlyExpenses"
@@ -1215,8 +1255,18 @@ export function Projections() {
                       <IconChartBar className="h-4 w-4" />
                     </Button>
                   </div>
+                  {computedRecurringExpenses > 0 && (
+                    <div className="p-3 border rounded bg-muted/50">
+                      <div className="text-sm text-muted-foreground">
+                        💡 Recurring expenses: ${Math.round(computedRecurringExpenses).toLocaleString()}/month
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        Note: Mortgage/loan payments are calculated separately in projections
+                      </div>
+                    </div>
+                  )}
                   <p className="text-sm text-muted-foreground">
-                    Living expenses (rent, food, utilities, etc.). Excludes loan/mortgage payments - those are calculated automatically.
+                    Additional living expenses not tracked above (groceries, entertainment, etc.). Tracked recurring expenses and loan/mortgage payments are shown above for reference.
                   </p>
                 </div>
 

@@ -1,12 +1,11 @@
 import { Link, useLocation } from 'react-router-dom';
 import {
-  IconLayoutDashboard,
   IconWallet,
-  IconChartLine,
   IconTrendingUp,
   IconSettings,
   IconPlugConnected,
   IconHome,
+  IconReceipt,
 } from '@tabler/icons-react';
 import {
   Sidebar,
@@ -23,11 +22,6 @@ import {
 
 const items = [
   {
-    title: 'Dashboard',
-    url: '/',
-    icon: IconLayoutDashboard,
-  },
-  {
     title: 'Accounts',
     url: '/accounts',
     icon: IconWallet,
@@ -43,9 +37,9 @@ const items = [
     icon: IconPlugConnected,
   },
   {
-    title: 'Analytics',
-    url: '/analytics',
-    icon: IconChartLine,
+    title: 'Expenses',
+    url: '/expenses',
+    icon: IconReceipt,
   },
   {
     title: 'Projections',
@@ -65,7 +59,7 @@ export function AppSidebar() {
   return (
     <Sidebar>
       <SidebarHeader className="border-b border-sidebar-border px-4 py-4">
-        <Link to="/" className="text-lg font-bold text-sidebar-foreground">
+        <Link to="/accounts" className="text-lg font-bold text-sidebar-foreground">
           Finance Dashboard
         </Link>
       </SidebarHeader>
