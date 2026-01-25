@@ -15,7 +15,6 @@ import { AssetDashboard } from './pages/AssetDashboard';
 import { Projections } from './pages/Projections';
 import { RecurringExpenses } from './pages/RecurringExpenses';
 import { Settings } from './pages/Settings';
-import Connections from './pages/Connections';
 
 function App() {
   return (
@@ -34,7 +33,6 @@ function App() {
             <Route path="assets" element={<Assets />} />
             <Route path="accounts/:accountId/asset/setup" element={<AssetSetup />} />
             <Route path="accounts/:accountId/asset" element={<AssetDashboard />} />
-            <Route path="connections" element={<Connections />} />
             <Route path="projections" element={<Projections />} />
             <Route path="expenses" element={<RecurringExpenses />} />
             <Route path="settings" element={<Settings />} />

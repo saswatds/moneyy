@@ -3,7 +3,6 @@ import {
   IconWallet,
   IconTrendingUp,
   IconSettings,
-  IconPlugConnected,
   IconHome,
   IconReceipt,
 } from '@tabler/icons-react';
@@ -30,11 +29,6 @@ const items = [
     title: 'Assets',
     url: '/assets',
     icon: IconHome,
-  },
-  {
-    title: 'Connections',
-    url: '/connections',
-    icon: IconPlugConnected,
   },
   {
     title: 'Expenses',
