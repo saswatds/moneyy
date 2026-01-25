@@ -1,5 +1,5 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiClient, type CreateHoldingRequest, type UpdateHoldingRequest } from '@/lib/api-client';
+import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiClient, type CreateHoldingRequest, type UpdateHoldingRequest, type Holding } from '@/lib/api-client';
 
 export function useAccountHoldings(accountId: string) {
   return useQuery({
@@ -7,6 +7,35 @@ export function useAccountHoldings(accountId: string) {
     queryFn: () => apiClient.getAccountHoldings(accountId),
     enabled: !!accountId,
   });
+}
+
+export function useAllHoldings(accountIds: string[]) {
+  const queries = useQueries({
+    queries: accountIds.map((accountId) => ({
+      queryKey: ['holdings', 'account', accountId],
+      queryFn: () => apiClient.getAccountHoldings(accountId),
+      enabled: !!accountId,
+    })),
+  });
+
+  // Aggregate all holdings
+  const allHoldings: Holding[] = [];
+  let isLoading = false;
+  let isError = false;
+
+  queries.forEach((query) => {
+    if (query.isLoading) isLoading = true;
+    if (query.isError) isError = true;
+    if (query.data?.holdings) {
+      allHoldings.push(...query.data.holdings);
+    }
+  });
+
+  return {
+    holdings: allHoldings,
+    isLoading,
+    isError,
+  };
 }
 
 export function useHolding(id: string) {

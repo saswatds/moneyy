@@ -33,21 +33,21 @@ import {
 } from 'recharts';
 import { apiClient } from '@/lib/api-client';
 import type {
-  MortgageDetails,
-  MortgagePayment,
+  LoanDetails,
+  LoanPayment,
   AmortizationEntry,
-  CreateMortgagePaymentRequest,
+  CreateLoanPaymentRequest,
 } from '@/lib/api-client';
 
-export function MortgageDashboard() {
+export function LoanDashboard() {
   const { accountId } = useParams<{ accountId: string }>();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
-  const [details, setDetails] = useState<MortgageDetails | null>(null);
+  const [details, setDetails] = useState<LoanDetails | null>(null);
   const [schedule, setSchedule] = useState<AmortizationEntry[]>([]);
-  const [payments, setPayments] = useState<MortgagePayment[]>([]);
+  const [payments, setPayments] = useState<LoanPayment[]>([]);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
-  const [paymentFormData, setPaymentFormData] = useState<Partial<CreateMortgagePaymentRequest>>({
+  const [paymentFormData, setPaymentFormData] = useState<Partial<CreateLoanPaymentRequest>>({
     payment_date: new Date().toISOString().split('T')[0],
     extra_payment: 0,
   });
@@ -56,26 +56,26 @@ export function MortgageDashboard() {
 
   useEffect(() => {
     if (accountId) {
-      fetchMortgageData();
+      fetchLoanData();
     }
   }, [accountId]);
 
-  const fetchMortgageData = async () => {
+  const fetchLoanData = async () => {
     if (!accountId) return;
 
     try {
       setLoading(true);
       const [detailsData, scheduleData, paymentsData] = await Promise.all([
-        apiClient.getMortgageDetails(accountId),
-        apiClient.getAmortizationSchedule(accountId),
-        apiClient.getMortgagePayments(accountId),
+        apiClient.getLoanDetails(accountId),
+        apiClient.getLoanAmortizationSchedule(accountId),
+        apiClient.getLoanPayments(accountId),
       ]);
 
       setDetails(detailsData);
       setSchedule(scheduleData.schedule);
       setPayments(paymentsData.payments);
     } catch (error) {
-      console.error('Failed to fetch mortgage data:', error);
+      console.error('Failed to fetch loan data:', error);
     } finally {
       setLoading(false);
     }
@@ -115,14 +115,14 @@ export function MortgageDashboard() {
     if (!accountId) return;
 
     try {
-      await apiClient.recordMortgagePayment(accountId, paymentFormData as CreateMortgagePaymentRequest);
+      await apiClient.recordLoanPayment(accountId, paymentFormData as CreateLoanPaymentRequest);
       setPaymentDialogOpen(false);
       setPaymentFormData({
         payment_date: new Date().toISOString().split('T')[0],
         extra_payment: 0,
       });
       setSelectedPaymentNumber(null);
-      fetchMortgageData();
+      fetchLoanData();
     } catch (error) {
       console.error('Failed to record payment:', error);
     }
@@ -160,7 +160,7 @@ export function MortgageDashboard() {
 
       // Record each payment
       for (const payment of missedPayments) {
-        await apiClient.recordMortgagePayment(accountId, {
+        await apiClient.recordLoanPayment(accountId, {
           account_id: accountId,
           payment_date: new Date(payment.payment_date).toISOString().split('T')[0],
           payment_amount: payment.payment_amount,
@@ -171,7 +171,7 @@ export function MortgageDashboard() {
         });
       }
 
-      await fetchMortgageData();
+      await fetchLoanData();
     } catch (error) {
       console.error('Failed to record bulk payments:', error);
     } finally {
@@ -212,7 +212,7 @@ export function MortgageDashboard() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
-        <div className="text-muted-foreground">Loading mortgage details...</div>
+        <div className="text-muted-foreground">Loading loan details...</div>
       </div>
     );
   }
@@ -220,7 +220,7 @@ export function MortgageDashboard() {
   if (!details) {
     return (
       <div className="flex items-center justify-center h-96">
-        <div className="text-muted-foreground">Mortgage details not found</div>
+        <div className="text-muted-foreground">Loan details not found</div>
       </div>
     );
   }
@@ -300,7 +300,7 @@ export function MortgageDashboard() {
             <IconArrowLeft className="h-4 w-4" />
           </Button>
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Mortgage Dashboard</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Loan Dashboard</h1>
             <p className="text-muted-foreground mt-1">
               {details.property_address || 'Property Mortgage'}
             </p>
@@ -328,7 +328,7 @@ export function MortgageDashboard() {
         <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Record Mortgage Payment</DialogTitle>
+              <DialogTitle>Record Loan Payment</DialogTitle>
               <DialogDescription>
                 {selectedPaymentNumber
                   ? `Recording payment #${selectedPaymentNumber} of ${schedule.length}`
@@ -494,7 +494,7 @@ export function MortgageDashboard() {
 
         <Card>
           <CardHeader className="pb-3">
-            <CardDescription>Monthly Payment</CardDescription>
+            <CardDescription>Payment Amount</CardDescription>
             <CardTitle className="text-2xl">
               {formatCurrency(details.payment_amount)}
             </CardTitle>
@@ -502,17 +502,29 @@ export function MortgageDashboard() {
         </Card>
       </div>
 
-      {/* Mortgage Details */}
+      {/* Loan Details */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
             <CardTitle>Loan Information</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
+            {details.loan_type && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Loan Type</span>
+                <span className="font-medium">{details.loan_type}</span>
+              </div>
+            )}
             <div className="flex justify-between">
               <span className="text-muted-foreground">Lender</span>
               <span className="font-medium">{details.lender || '-'}</span>
             </div>
+            {details.purpose && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Purpose</span>
+                <span className="font-medium">{details.purpose}</span>
+              </div>
+            )}
             <div className="flex justify-between">
               <span className="text-muted-foreground">Rate Type</span>
               <span className="font-medium capitalize">{details.rate_type}</span>
@@ -528,13 +540,7 @@ export function MortgageDashboard() {
             <div className="flex justify-between">
               <span className="text-muted-foreground">Term</span>
               <span className="font-medium">
-                {(details.term_months / 12).toFixed(0)} years
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Amortization</span>
-              <span className="font-medium">
-                {(details.amortization_months / 12).toFixed(0)} years
+                {(details.term_months / 12).toFixed(0)} years ({details.term_months} months)
               </span>
             </div>
             <div className="flex justify-between">
@@ -603,7 +609,7 @@ export function MortgageDashboard() {
       {/* Drawdown Chart */}
       <Card>
         <CardHeader>
-          <CardTitle>Mortgage Balance Over Time</CardTitle>
+          <CardTitle>Loan Balance Over Time</CardTitle>
           <CardDescription>
             Projected amortization schedule showing principal balance drawdown
           </CardDescription>

@@ -4,6 +4,8 @@ import { useAccount, useDeleteAccount } from '@/hooks/use-accounts';
 import { useAccountBalances } from '@/hooks/use-balances';
 import { useAccountHoldings } from '@/hooks/use-holdings';
 import { useMortgageDetails } from '@/hooks/use-mortgage';
+import { useLoanDetails } from '@/hooks/use-loan';
+import { useAssetDetails } from '@/hooks/use-assets';
 import type { Holding } from '@/lib/api-client';
 import {
   Card,
@@ -45,7 +47,13 @@ export function AccountDetail() {
   const { data: balancesData, isLoading: balancesLoading } = useAccountBalances(id!);
   const { data: holdingsData, isLoading: holdingsLoading } = useAccountHoldings(id!);
   const { data: mortgageDetails, isLoading: mortgageLoading, isError: mortgageError } = useMortgageDetails(id!);
+  const { data: loanDetails, isLoading: loanLoading, isError: loanError } = useLoanDetails(id!);
+
   const deleteAccount = useDeleteAccount();
+
+  // Check if this is an asset-type account
+  const assetTypes = ['real_estate', 'vehicle', 'collectible', 'other'];
+  const isAssetAccount = account ? assetTypes.includes(account.type) : false;
 
   // Redirect mortgage accounts to mortgage dashboard or setup
   useEffect(() => {
@@ -57,6 +65,24 @@ export function AccountDetail() {
       }
     }
   }, [account, mortgageDetails, mortgageLoading, id, navigate]);
+
+  // Redirect loan accounts to loan dashboard or setup
+  useEffect(() => {
+    if (account?.type === 'loan' && !loanLoading) {
+      if (loanDetails) {
+        navigate(`/accounts/${id}/loan`, { replace: true });
+      } else {
+        navigate(`/accounts/${id}/loan/setup`, { replace: true });
+      }
+    }
+  }, [account, loanDetails, loanLoading, id, navigate]);
+
+  // Redirect asset accounts to asset dashboard (it will redirect to setup if needed)
+  useEffect(() => {
+    if (isAssetAccount) {
+      navigate(`/accounts/${id}/asset`, { replace: true });
+    }
+  }, [isAssetAccount, id, navigate]);
 
   if (accountLoading || balancesLoading || holdingsLoading) {
     return (
@@ -71,6 +97,15 @@ export function AccountDetail() {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-muted-foreground">Loading mortgage details...</div>
+      </div>
+    );
+  }
+
+  // Show loading state for loan accounts while checking details
+  if (account?.type === 'loan' && loanLoading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-muted-foreground">Loading loan details...</div>
       </div>
     );
   }
