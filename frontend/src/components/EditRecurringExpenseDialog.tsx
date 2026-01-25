@@ -49,6 +49,12 @@ const FREQUENCIES = [
   { value: 'annually', label: 'Annually' },
 ];
 
+const CURRENCIES = [
+  { value: 'CAD', label: 'CAD' },
+  { value: 'USD', label: 'USD' },
+  { value: 'INR', label: 'INR' },
+];
+
 export function EditRecurringExpenseDialog({
   open,
   onOpenChange,
@@ -59,6 +65,7 @@ export function EditRecurringExpenseDialog({
     name: '',
     description: '',
     amount: '',
+    currency: 'CAD' as 'CAD' | 'USD' | 'INR',
     category: '',
     frequency: '',
   });
@@ -69,6 +76,7 @@ export function EditRecurringExpenseDialog({
         name: expense.name,
         description: expense.description || '',
         amount: expense.amount.toString(),
+        currency: expense.currency,
         category: expense.category,
         frequency: expense.frequency,
       });
@@ -81,6 +89,7 @@ export function EditRecurringExpenseDialog({
         name: data.name,
         description: data.description || undefined,
         amount: parseFloat(data.amount),
+        currency: data.currency,
         category: data.category,
         frequency: data.frequency as any,
       }),
@@ -135,8 +144,8 @@ export function EditRecurringExpenseDialog({
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2 col-span-2">
                 <Label htmlFor="amount">Amount</Label>
                 <Input
                   id="amount"
@@ -153,26 +162,48 @@ export function EditRecurringExpenseDialog({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="frequency">Frequency</Label>
+                <Label htmlFor="currency">Currency</Label>
                 <Select
-                  value={formData.frequency}
+                  value={formData.currency}
                   onValueChange={(value) =>
-                    setFormData({ ...formData, frequency: value })
+                    setFormData({ ...formData, currency: value as 'CAD' | 'USD' | 'INR' })
                   }
                   required
                 >
-                  <SelectTrigger id="frequency">
-                    <SelectValue placeholder="Select frequency" />
+                  <SelectTrigger id="currency">
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {FREQUENCIES.map((freq) => (
-                      <SelectItem key={freq.value} value={freq.value}>
-                        {freq.label}
+                    {CURRENCIES.map((curr) => (
+                      <SelectItem key={curr.value} value={curr.value}>
+                        {curr.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="frequency">Frequency</Label>
+              <Select
+                value={formData.frequency}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, frequency: value })
+                }
+                required
+              >
+                <SelectTrigger id="frequency">
+                  <SelectValue placeholder="Select frequency" />
+                </SelectTrigger>
+                <SelectContent>
+                  {FREQUENCIES.map((freq) => (
+                    <SelectItem key={freq.value} value={freq.value}>
+                      {freq.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2">

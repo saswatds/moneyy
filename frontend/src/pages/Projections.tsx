@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 import type { ProjectionConfig, ProjectionResponse } from '@/lib/api-client';
+import { useExchangeRates } from '@/hooks/use-exchange-rates';
 import { EventsList } from '@/components/projections/EventsList';
 import { SensitivityAnalysisDialog } from '@/components/projections/SensitivityAnalysisDialog';
 import { CurrencyInput } from '@/components/projections/CurrencyInput';
@@ -123,7 +124,20 @@ export function Projections() {
     queryFn: () => apiClient.getAccounts(),
   });
 
-  // Calculate monthly total from recurring expenses
+  // Load exchange rates for currency conversion
+  const { data: exchangeRates } = useExchangeRates();
+
+  // Helper to convert currency to CAD
+  const convertToCAD = (amount: number, fromCurrency: string): number => {
+    if (!exchangeRates?.rates || fromCurrency === 'CAD') {
+      return amount;
+    }
+    const rate = exchangeRates.rates[fromCurrency]?.['CAD'];
+    if (!rate) return amount; // Fallback to original amount if rate not found
+    return amount * rate;
+  };
+
+  // Calculate monthly total from recurring expenses (converted to CAD)
   const computedRecurringExpenses = recurringExpensesData?.expenses
     .filter(e => e.is_active)
     .reduce((total, expense) => {
@@ -145,7 +159,9 @@ export function Projections() {
           monthlyAmount = expense.amount / 12;
           break;
       }
-      return total + monthlyAmount;
+      // Convert to CAD before adding to total
+      const monthlyAmountInCAD = convertToCAD(monthlyAmount, expense.currency);
+      return total + monthlyAmountInCAD;
     }, 0) || 0;
 
   // Calculate projection
@@ -1233,7 +1249,7 @@ export function Projections() {
                   {computedRecurringExpenses > 0 && (
                     <div className="p-3 border rounded bg-muted/50">
                       <div className="text-sm text-muted-foreground">
-                        💡 Recurring expenses: ${Math.round(computedRecurringExpenses).toLocaleString()}/month
+                        💡 Recurring expenses: {Math.round(computedRecurringExpenses).toLocaleString()} CAD/month
                       </div>
                       <div className="text-xs text-muted-foreground mt-1">
                         Note: Mortgage/loan payments are calculated separately in projections
