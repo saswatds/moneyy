@@ -305,6 +305,12 @@ class ApiClient {
   async getMortgagePayments(accountId: string): Promise<{ payments: MortgagePayment[] }> {
     return this.request(`/accounts/${accountId}/mortgage/payments`);
   }
+
+  async syncMortgageBalance(accountId: string): Promise<void> {
+    return this.request(`/accounts/${accountId}/mortgage/sync-balance`, {
+      method: 'POST',
+    });
+  }
 }
 
 export const apiClient = new ApiClient(API_BASE_URL);

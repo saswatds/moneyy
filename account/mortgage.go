@@ -8,6 +8,7 @@ import (
 	"math"
 	"time"
 
+	balancesvc "encore.app/balance"
 	"github.com/google/uuid"
 )
 
@@ -229,6 +230,18 @@ func CreateMortgageDetails(ctx context.Context, accountID string, req *CreateMor
 		return nil, fmt.Errorf("failed to create mortgage details: %w", err)
 	}
 
+	// Create initial balance entry for the mortgage (as negative since it's a liability)
+	_, err = balancesvc.Create(ctx, &balancesvc.CreateBalanceRequest{
+		AccountID: accountID,
+		Amount:    -req.OriginalAmount,
+		Date:      req.StartDate.Time,
+		Notes:     "Mortgage initiated",
+	})
+	if err != nil {
+		// Log the error but don't fail the mortgage creation
+		fmt.Printf("Warning: failed to create initial balance entry: %v\n", err)
+	}
+
 	return &MortgageDetails{
 		ID:                 id,
 		AccountID:          accountID,
@@ -433,7 +446,62 @@ func RecordMortgagePayment(ctx context.Context, accountID string, req *CreateMor
 		return nil, fmt.Errorf("failed to record payment: %w", err)
 	}
 
+	// Also create a balance entry so the mortgage balance appears in the accounts list
+	_, err = balancesvc.Create(ctx, &balancesvc.CreateBalanceRequest{
+		AccountID: accountID,
+		Amount:    balanceAfter,
+		Date:      req.PaymentDate.Time,
+		Notes:     "Mortgage payment",
+	})
+	if err != nil {
+		// Log the error but don't fail the payment recording
+		fmt.Printf("Warning: failed to create balance entry: %v\n", err)
+	}
+
 	return &payment, nil
+}
+
+// SyncMortgageBalance syncs the mortgage balance to the balance service
+//
+//encore:api public method=POST path=/accounts/:accountID/mortgage/sync-balance
+func SyncMortgageBalance(ctx context.Context, accountID string) error {
+	// Get mortgage details
+	details, err := GetMortgageDetails(ctx, accountID)
+	if err != nil {
+		return fmt.Errorf("failed to get mortgage details: %w", err)
+	}
+
+	// Get the latest payment if any
+	var latestBalance float64
+	var latestDate time.Time
+
+	err = db.QueryRow(ctx, `
+		SELECT balance_after, payment_date
+		FROM mortgage_payments
+		WHERE account_id = $1
+		ORDER BY payment_date DESC, created_at DESC
+		LIMIT 1
+	`, accountID).Scan(&latestBalance, &latestDate)
+
+	if err != nil {
+		// No payments yet, use original amount
+		latestBalance = -details.OriginalAmount
+		latestDate = details.StartDate.Time
+	}
+
+	// Create or update the balance entry
+	_, err = balancesvc.Create(ctx, &balancesvc.CreateBalanceRequest{
+		AccountID: accountID,
+		Amount:    latestBalance,
+		Date:      latestDate,
+		Notes:     "Mortgage balance sync",
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to sync balance: %w", err)
+	}
+
+	return nil
 }
 
 // GetMortgagePayments retrieves all payments for a mortgage account
