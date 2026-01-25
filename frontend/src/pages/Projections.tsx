@@ -4,6 +4,8 @@ import { apiClient } from '@/lib/api-client';
 import type { ProjectionConfig, ProjectionResponse } from '@/lib/api-client';
 import { EventsList } from '@/components/projections/EventsList';
 import { SensitivityAnalysisDialog } from '@/components/projections/SensitivityAnalysisDialog';
+import { CurrencyInput } from '@/components/projections/CurrencyInput';
+import { PercentageInput } from '@/components/projections/PercentageInput';
 import {
   Card,
   CardContent,
@@ -27,7 +29,6 @@ import {
   IconDeviceFloppy,
   IconBulb,
   IconCopy,
-  IconChartBar
 } from '@tabler/icons-react';
 import {
   Select,
@@ -71,7 +72,6 @@ const defaultConfig: ProjectionConfig = {
   investment_returns: {
     'tfsa': 0.07,
     'rrsp': 0.07,
-    'stocks': 0.08,
     'brokerage': 0.06,
     'crypto': 0.10,
   },
@@ -81,9 +81,8 @@ const defaultConfig: ProjectionConfig = {
     'vehicle': -0.15,
   },
   savings_allocation: {
-    'tfsa': 0.4,
-    'rrsp': 0.3,
-    'stocks': 0.3,
+    'tfsa': 0.5,
+    'rrsp': 0.5,
   },
   events: [],
 };
@@ -962,57 +961,26 @@ export function Projections() {
               {/* Income */}
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="annualSalary">Starting Annual Salary ($)</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="annualSalary"
-                      type="number"
-                      min={0}
-                      step={1000}
-                      value={config.annual_salary}
-                      onChange={(e) => setConfig({ ...config, annual_salary: Math.round(parseFloat(e.target.value) || 0) })}
-                      className="flex-1"
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="px-2"
-                      onClick={() => openSensitivityAnalysis('annual_salary', 'Annual Salary', config.annual_salary)}
-                      title="Analyze sensitivity"
-                    >
-                      <IconChartBar className="h-4 w-4" />
-                    </Button>
-                  </div>
+                  <Label htmlFor="annualSalary">Starting Annual Salary</Label>
+                  <CurrencyInput
+                    value={config.annual_salary}
+                    onChange={(value) => setConfig({ ...config, annual_salary: value })}
+                    step={1000}
+                    onAnalyze={() => openSensitivityAnalysis('annual_salary', 'Annual Salary', config.annual_salary)}
+                  />
                   <p className="text-sm text-muted-foreground">
                     Your current gross annual salary
                   </p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="salaryGrowth">Automatic Annual Growth (%)</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="salaryGrowth"
-                      type="number"
-                      min={0}
-                      max={20}
-                      step={0.1}
-                      value={Math.round(config.annual_salary_growth * 10000) / 100}
-                      onChange={(e) => setConfig({ ...config, annual_salary_growth: Math.round(parseFloat(e.target.value) * 100) / 10000 })}
-                      className="flex-1"
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="px-2"
-                      onClick={() => openSensitivityAnalysis('annual_salary_growth', 'Annual Salary Growth', config.annual_salary_growth)}
-                      title="Analyze sensitivity"
-                    >
-                      <IconChartBar className="h-4 w-4" />
-                    </Button>
-                  </div>
+                  <Label htmlFor="salaryGrowth">Automatic Annual Growth</Label>
+                  <PercentageInput
+                    value={config.annual_salary_growth}
+                    onChange={(value) => setConfig({ ...config, annual_salary_growth: value })}
+                    max={20}
+                    onAnalyze={() => openSensitivityAnalysis('annual_salary_growth', 'Annual Salary Growth', config.annual_salary_growth)}
+                  />
                   <p className="text-sm text-muted-foreground">
                     Typical annual raise (e.g., 3% = inflation + merit)
                   </p>
@@ -1256,28 +1224,12 @@ export function Projections() {
             <CardContent className="space-y-6">
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="monthlyExpenses">Additional Monthly Expenses ($)</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="monthlyExpenses"
-                      type="number"
-                      min={0}
-                      step={100}
-                      value={config.monthly_expenses}
-                      onChange={(e) => setConfig({ ...config, monthly_expenses: Math.round(parseFloat(e.target.value) || 0) })}
-                      className="flex-1"
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="px-2"
-                      onClick={() => openSensitivityAnalysis('monthly_expenses', 'Monthly Expenses', config.monthly_expenses)}
-                      title="Analyze sensitivity"
-                    >
-                      <IconChartBar className="h-4 w-4" />
-                    </Button>
-                  </div>
+                  <Label htmlFor="monthlyExpenses">Additional Monthly Expenses</Label>
+                  <CurrencyInput
+                    value={config.monthly_expenses}
+                    onChange={(value) => setConfig({ ...config, monthly_expenses: value })}
+                    onAnalyze={() => openSensitivityAnalysis('monthly_expenses', 'Monthly Expenses', config.monthly_expenses)}
+                  />
                   {computedRecurringExpenses > 0 && (
                     <div className="p-3 border rounded bg-muted/50">
                       <div className="text-sm text-muted-foreground">
@@ -1294,15 +1246,11 @@ export function Projections() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="expenseGrowth">Automatic Annual Growth (%)</Label>
-                  <Input
-                    id="expenseGrowth"
-                    type="number"
-                    min={0}
+                  <Label htmlFor="expenseGrowth">Automatic Annual Growth</Label>
+                  <PercentageInput
+                    value={config.annual_expense_growth}
+                    onChange={(value) => setConfig({ ...config, annual_expense_growth: value })}
                     max={20}
-                    step={0.1}
-                    value={Math.round(config.annual_expense_growth * 10000) / 100}
-                    onChange={(e) => setConfig({ ...config, annual_expense_growth: Math.round(parseFloat(e.target.value) * 100) / 10000 })}
                   />
                   <p className="text-sm text-muted-foreground">
                     Typically matches inflation rate (2-3%)
@@ -1311,29 +1259,14 @@ export function Projections() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="inflationRate">General Inflation Rate (%)</Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="inflationRate"
-                    type="number"
-                    min={0}
-                    max={10}
-                    step={0.1}
-                    value={Math.round(config.inflation_rate * 10000) / 100}
-                    onChange={(e) => setConfig({ ...config, inflation_rate: Math.round(parseFloat(e.target.value) * 100) / 10000 })}
-                    className="w-32"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="px-2"
-                    onClick={() => openSensitivityAnalysis('inflation_rate', 'Inflation Rate', config.inflation_rate)}
-                    title="Analyze sensitivity"
-                  >
-                    <IconChartBar className="h-4 w-4" />
-                  </Button>
-                </div>
+                <Label htmlFor="inflationRate">General Inflation Rate</Label>
+                <PercentageInput
+                  value={config.inflation_rate}
+                  onChange={(value) => setConfig({ ...config, inflation_rate: value })}
+                  max={10}
+                  onAnalyze={() => openSensitivityAnalysis('inflation_rate', 'Inflation Rate', config.inflation_rate)}
+                  className="w-64"
+                />
                 <p className="text-sm text-muted-foreground">
                   Used for future value calculations
                 </p>
@@ -1350,36 +1283,21 @@ export function Projections() {
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-2">
-                <Label htmlFor="savingsRate">Savings Invested (%)</Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="savingsRate"
-                    type="number"
-                    min={0}
-                    max={100}
-                    step={1}
-                    value={Math.round(config.monthly_savings_rate * 10000) / 100}
-                    onChange={(e) => setConfig({ ...config, monthly_savings_rate: Math.round(parseFloat(e.target.value) * 100) / 10000 })}
-                    className="w-32"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="px-2"
-                    onClick={() => openSensitivityAnalysis('monthly_savings_rate', 'Savings Invested Rate', config.monthly_savings_rate)}
-                    title="Analyze sensitivity"
-                  >
-                    <IconChartBar className="h-4 w-4" />
-                  </Button>
-                </div>
+                <Label htmlFor="savingsRate">Savings Invested</Label>
+                <PercentageInput
+                  value={config.monthly_savings_rate}
+                  onChange={(value) => setConfig({ ...config, monthly_savings_rate: value })}
+                  step={1}
+                  onAnalyze={() => openSensitivityAnalysis('monthly_savings_rate', 'Savings Invested Rate', config.monthly_savings_rate)}
+                  className="w-64"
+                />
                 <p className="text-sm text-muted-foreground">
                   % of leftover money (after expenses) that gets invested. Remainder goes to cash/checking.
                 </p>
               </div>
 
               <div className="space-y-4">
-                <Label>Expected Annual Returns (%)</Label>
+                <Label>Expected Annual Returns</Label>
                 <p className="text-xs text-muted-foreground">
                   Expected returns by investment account type (compounded monthly)
                 </p>
@@ -1387,28 +1305,19 @@ export function Projections() {
                   {Object.entries(config.investment_returns).map(([accountType, rate]) => (
                     <div key={accountType} className="flex items-center gap-3">
                       <Label className="w-32 capitalize">{accountType.replace('_', ' ')}</Label>
-                      <Input
-                        type="number"
-                        min={-20}
-                        max={50}
-                        step={0.5}
-                        value={Math.round(rate * 10000) / 100}
-                        onChange={(e) => setConfig({
+                      <PercentageInput
+                        value={rate}
+                        onChange={(value) => setConfig({
                           ...config,
                           investment_returns: {
                             ...config.investment_returns,
-                            [accountType]: Math.round(parseFloat(e.target.value) * 100) / 10000,
+                            [accountType]: value,
                           },
                         })}
-                        className="w-32"
-                      />
-                      <span className="text-sm text-muted-foreground">%</span>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="px-2"
-                        onClick={() => openSensitivityAnalysis(
+                        min={-20}
+                        max={50}
+                        step={0.5}
+                        onAnalyze={() => openSensitivityAnalysis(
                           `investment_returns.${accountType}`,
                           `${accountType.replace('_', ' ')} Returns`,
                           rate,
@@ -1420,10 +1329,8 @@ export function Projections() {
                             },
                           })
                         )}
-                        title="Analyze sensitivity"
-                      >
-                        <IconChartBar className="h-4 w-4" />
-                      </Button>
+                        className="flex-1"
+                      />
                     </div>
                   ))}
                 </div>

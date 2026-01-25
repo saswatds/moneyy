@@ -39,6 +39,24 @@ export function Assets() {
     }).format(amount);
   };
 
+  const formatNumberOnly = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(Math.abs(amount));
+  };
+
+  const formatNumberWithSmallCents = (amount: number) => {
+    const formatted = formatNumberOnly(amount);
+    const [dollars, cents] = formatted.split('.');
+    return (
+      <>
+        {dollars}
+        <span className="text-xl">.{cents}</span>
+      </>
+    );
+  };
+
   const formatAssetType = (type: string) => {
     return type.split('_').map(word =>
       word.charAt(0).toUpperCase() + word.slice(1)
@@ -164,36 +182,50 @@ export function Assets() {
         <Card>
           <CardHeader className="pb-3">
             <CardDescription>Total Asset Value</CardDescription>
-            <CardTitle className="text-2xl text-green-600 dark:text-green-400">
-              {formatCurrency(totalValue, selectedCurrency)}
-            </CardTitle>
+            <div className="mt-2">
+              <div className="text-3xl font-bold tabular-nums text-green-600 dark:text-green-400">
+                {formatNumberWithSmallCents(totalValue)}
+              </div>
+              <div className="text-sm text-muted-foreground mt-1">{selectedCurrency}</div>
+            </div>
           </CardHeader>
         </Card>
 
         <Card>
           <CardHeader className="pb-3">
             <CardDescription>Total Purchase Price</CardDescription>
-            <CardTitle className="text-2xl">
-              {formatCurrency(totalPurchasePrice, selectedCurrency)}
-            </CardTitle>
+            <div className="mt-2">
+              <div className="text-3xl font-bold tabular-nums">
+                {formatNumberWithSmallCents(totalPurchasePrice)}
+              </div>
+              <div className="text-sm text-muted-foreground mt-1">{selectedCurrency}</div>
+            </div>
           </CardHeader>
         </Card>
 
         <Card>
           <CardHeader className="pb-3">
             <CardDescription>Total Depreciation</CardDescription>
-            <CardTitle className="text-2xl text-red-600 dark:text-red-400">
-              {formatCurrency(totalDepreciation, selectedCurrency)}
-            </CardTitle>
+            <div className="mt-2">
+              <div className="text-3xl font-bold tabular-nums text-red-600 dark:text-red-400">
+                {formatNumberWithSmallCents(totalDepreciation)}
+              </div>
+              <div className="text-sm text-muted-foreground mt-1">{selectedCurrency}</div>
+            </div>
           </CardHeader>
         </Card>
 
         <Card>
           <CardHeader className="pb-3">
             <CardDescription>Net Gain/Loss</CardDescription>
-            <CardTitle className={`text-2xl ${netGainLoss >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-              {formatCurrency(netGainLoss, selectedCurrency)}
-            </CardTitle>
+            <div className="mt-2">
+              <div className={`text-3xl font-bold tabular-nums ${netGainLoss >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                {netGainLoss < 0 && '('}
+                {formatNumberWithSmallCents(netGainLoss)}
+                {netGainLoss < 0 && ')'}
+              </div>
+              <div className="text-sm text-muted-foreground mt-1">{selectedCurrency}</div>
+            </div>
           </CardHeader>
         </Card>
       </div>

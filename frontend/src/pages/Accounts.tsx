@@ -24,6 +24,8 @@ export function Accounts() {
   const { data, isLoading } = useAccounts();
   const { data: exchangeRates } = useExchangeRates();
   const [selectedCurrency, setSelectedCurrency] = useState<string>('CAD');
+  const [filterType, setFilterType] = useState<string>('all');
+  const [filterCategory, setFilterCategory] = useState<string>('all');
 
   const formatCurrencyAccounting = (amount: number, currency: string) => {
     const formatted = new Intl.NumberFormat('en-US', {
@@ -33,6 +35,24 @@ export function Accounts() {
     }).format(Math.abs(amount));
 
     return amount < 0 ? `(${formatted})` : formatted;
+  };
+
+  const formatNumberOnly = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(Math.abs(amount));
+  };
+
+  const formatNumberWithSmallCents = (amount: number) => {
+    const formatted = formatNumberOnly(amount);
+    const [dollars, cents] = formatted.split('.');
+    return (
+      <>
+        {dollars}
+        <span className="text-xl">.{cents}</span>
+      </>
+    );
   };
 
   const getAccountTypeBadgeClass = (type: string) => {
@@ -145,6 +165,19 @@ export function Accounts() {
     );
   };
 
+  const filteredAccounts = data?.accounts.filter((account) => {
+    if (filterType !== 'all' && account.type !== filterType) {
+      return false;
+    }
+    if (filterCategory === 'asset' && !account.is_asset) {
+      return false;
+    }
+    if (filterCategory === 'liability' && account.is_asset) {
+      return false;
+    }
+    return true;
+  }) || [];
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -190,37 +223,95 @@ export function Accounts() {
         <Card>
           <CardHeader className="pb-3">
             <CardDescription>Net Worth</CardDescription>
-            <CardTitle className={`text-2xl ${netWorth < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-              {formatCurrencyAccounting(netWorth, selectedCurrency)}
-            </CardTitle>
+            <div className="mt-2">
+              <div className={`text-3xl font-bold tabular-nums ${netWorth < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+                {netWorth < 0 && '('}
+                {formatNumberWithSmallCents(netWorth)}
+                {netWorth < 0 && ')'}
+              </div>
+              <div className="text-sm text-muted-foreground mt-1">{selectedCurrency}</div>
+            </div>
           </CardHeader>
         </Card>
 
         <Card>
           <CardHeader className="pb-3">
             <CardDescription>Total Liabilities</CardDescription>
-            <CardTitle className="text-2xl text-red-600 dark:text-red-400">
-              {formatCurrencyAccounting(totalLiabilities, selectedCurrency)}
-            </CardTitle>
+            <div className="mt-2">
+              <div className="text-3xl font-bold tabular-nums text-red-600 dark:text-red-400">
+                {formatNumberWithSmallCents(totalLiabilities)}
+              </div>
+              <div className="text-sm text-muted-foreground mt-1">{selectedCurrency}</div>
+            </div>
           </CardHeader>
         </Card>
 
         <Card>
           <CardHeader className="pb-3">
             <CardDescription>Total Assets</CardDescription>
-            <CardTitle className="text-2xl">
-              {formatCurrencyAccounting(totalAssets, selectedCurrency)}
-            </CardTitle>
+            <div className="mt-2">
+              <div className="text-3xl font-bold tabular-nums">
+                {formatNumberWithSmallCents(totalAssets)}
+              </div>
+              <div className="text-sm text-muted-foreground mt-1">{selectedCurrency}</div>
+            </div>
           </CardHeader>
         </Card>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>All Accounts</CardTitle>
-          <CardDescription>
-            View and manage all your financial accounts
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>
+                {filterType !== 'all' || filterCategory !== 'all'
+                  ? `Filtered Accounts (${filteredAccounts.length})`
+                  : `All Accounts (${filteredAccounts.length})`}
+              </CardTitle>
+              <CardDescription className="mt-1.5">
+                {filterType !== 'all' || filterCategory !== 'all'
+                  ? 'Showing accounts matching selected filters'
+                  : 'View and manage all your financial accounts'}
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Type:</span>
+                <Select value={filterType} onValueChange={setFilterType}>
+                  <SelectTrigger className="w-[140px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Types</SelectItem>
+                    <SelectItem value="checking">Checking</SelectItem>
+                    <SelectItem value="savings">Savings</SelectItem>
+                    <SelectItem value="tfsa">TFSA</SelectItem>
+                    <SelectItem value="rrsp">RRSP</SelectItem>
+                    <SelectItem value="brokerage">Brokerage</SelectItem>
+                    <SelectItem value="crypto">Crypto</SelectItem>
+                    <SelectItem value="credit_card">Credit Card</SelectItem>
+                    <SelectItem value="loan">Loan</SelectItem>
+                    <SelectItem value="mortgage">Mortgage</SelectItem>
+                    <SelectItem value="real_estate">Real Estate</SelectItem>
+                    <SelectItem value="vehicle">Vehicle</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Category:</span>
+                <Select value={filterCategory} onValueChange={setFilterCategory}>
+                  <SelectTrigger className="w-[120px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="asset">Assets</SelectItem>
+                    <SelectItem value="liability">Liabilities</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -254,8 +345,8 @@ export function Accounts() {
                 </tr>
               </thead>
               <tbody>
-                {data?.accounts && data.accounts.length > 0 ? (
-                  data.accounts.map((account) => (
+                {filteredAccounts.length > 0 ? (
+                  filteredAccounts.map((account) => (
                     <tr key={account.id} className="border-b border-border last:border-0">
                       <td className="px-4 py-4">
                         <div className="text-sm text-muted-foreground">
@@ -318,7 +409,9 @@ export function Accounts() {
                   <tr>
                     <td colSpan={8} className="px-4 py-12 text-center">
                       <div className="text-muted-foreground">
-                        No accounts found. Create your first account to get started!
+                        {filterType !== 'all' || filterCategory !== 'all'
+                          ? 'No accounts match the selected filters.'
+                          : 'No accounts found. Create your first account to get started!'}
                       </div>
                     </td>
                   </tr>

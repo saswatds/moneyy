@@ -18,7 +18,6 @@ const (
 	AccountTypeBrokerage    AccountType = "brokerage"
 	AccountTypeTFSA         AccountType = "tfsa"
 	AccountTypeRRSP         AccountType = "rrsp"
-	AccountTypeStocks       AccountType = "stocks"
 	AccountTypeCrypto       AccountType = "crypto"
 	AccountTypeRealEstate   AccountType = "real_estate"
 	AccountTypeVehicle      AccountType = "vehicle"

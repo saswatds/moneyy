@@ -38,7 +38,6 @@ const accountTypes = [
   { value: 'brokerage', label: 'Brokerage Account', isAsset: true },
   { value: 'tfsa', label: 'TFSA', isAsset: true },
   { value: 'rrsp', label: 'RRSP', isAsset: true },
-  { value: 'stocks', label: 'Stocks', isAsset: true },
   { value: 'crypto', label: 'Cryptocurrency', isAsset: true },
   { value: 'real_estate', label: 'Real Estate', isAsset: true },
   { value: 'vehicle', label: 'Vehicle', isAsset: true },
