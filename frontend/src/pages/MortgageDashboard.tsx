@@ -19,7 +19,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { IconArrowLeft, IconPlus } from '@tabler/icons-react';
+import { IconArrowLeft, IconPlus, IconRefresh } from '@tabler/icons-react';
 import {
   LineChart,
   Line,
@@ -29,6 +29,7 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
+  ReferenceLine,
 } from 'recharts';
 import { apiClient } from '@/lib/api-client';
 import type {
@@ -50,6 +51,8 @@ export function MortgageDashboard() {
     payment_date: new Date().toISOString().split('T')[0],
     extra_payment: 0,
   });
+  const [selectedPaymentNumber, setSelectedPaymentNumber] = useState<number | null>(null);
+  const [recordingBulk, setRecordingBulk] = useState(false);
 
   useEffect(() => {
     if (accountId) {
@@ -78,6 +81,35 @@ export function MortgageDashboard() {
     }
   };
 
+  const calculatePaymentDetails = (date: string) => {
+    if (!details || schedule.length === 0) return;
+
+    // Find the next payment after the last recorded payment (or first payment if none recorded)
+    const lastRecordedPayment = payments.length > 0 ? payments[0] : null;
+    const lastPaymentNumber = lastRecordedPayment
+      ? schedule.findIndex(s => new Date(s.payment_date).toISOString().split('T')[0] === lastRecordedPayment.payment_date)
+      : -1;
+
+    // Find the payment in the schedule that matches or is closest to the selected date
+    const selectedDate = new Date(date);
+    const matchingPayment = schedule.find((entry, index) => {
+      const entryDate = new Date(entry.payment_date);
+      return index > lastPaymentNumber && entryDate >= selectedDate;
+    });
+
+    if (matchingPayment) {
+      setSelectedPaymentNumber(matchingPayment.payment_number);
+      setPaymentFormData(prev => ({
+        ...prev,
+        payment_date: date,
+        payment_amount: matchingPayment.payment_amount,
+        principal_amount: matchingPayment.principal_amount,
+        interest_amount: matchingPayment.interest_amount,
+        extra_payment: 0,
+      }));
+    }
+  };
+
   const handleRecordPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!accountId) return;
@@ -89,10 +121,77 @@ export function MortgageDashboard() {
         payment_date: new Date().toISOString().split('T')[0],
         extra_payment: 0,
       });
+      setSelectedPaymentNumber(null);
       fetchMortgageData();
     } catch (error) {
       console.error('Failed to record payment:', error);
     }
+  };
+
+  const openPaymentDialog = () => {
+    const today = new Date().toISOString().split('T')[0];
+    setPaymentFormData({
+      payment_date: today,
+      extra_payment: 0,
+    });
+    calculatePaymentDetails(today);
+    setPaymentDialogOpen(true);
+  };
+
+  const recordAllPaymentsToDate = async () => {
+    if (!accountId || !details || !window.confirm('Record all scheduled payments up to today? This will create multiple payment entries.')) {
+      return;
+    }
+
+    setRecordingBulk(true);
+    try {
+      // Find the last recorded payment
+      const lastRecordedPayment = payments.length > 0 ? payments[0] : null;
+      const lastPaymentNumber = lastRecordedPayment
+        ? schedule.findIndex(s => new Date(s.payment_date).toISOString().split('T')[0] === lastRecordedPayment.payment_date)
+        : -1;
+
+      // Get all payments from the schedule that should have been made by now
+      const today = new Date();
+      const missedPayments = schedule.filter((entry, index) => {
+        const entryDate = new Date(entry.payment_date);
+        return index > lastPaymentNumber && entryDate <= today;
+      });
+
+      // Record each payment
+      for (const payment of missedPayments) {
+        await apiClient.recordMortgagePayment(accountId, {
+          account_id: accountId,
+          payment_date: new Date(payment.payment_date).toISOString().split('T')[0],
+          payment_amount: payment.payment_amount,
+          principal_amount: payment.principal_amount,
+          interest_amount: payment.interest_amount,
+          extra_payment: 0,
+          notes: 'Auto-recorded',
+        });
+      }
+
+      await fetchMortgageData();
+    } catch (error) {
+      console.error('Failed to record bulk payments:', error);
+    } finally {
+      setRecordingBulk(false);
+    }
+  };
+
+  const getMissedPaymentsCount = () => {
+    if (!details || schedule.length === 0) return 0;
+
+    const lastRecordedPayment = payments.length > 0 ? payments[0] : null;
+    const lastPaymentNumber = lastRecordedPayment
+      ? schedule.findIndex(s => new Date(s.payment_date).toISOString().split('T')[0] === lastRecordedPayment.payment_date)
+      : -1;
+
+    const today = new Date();
+    return schedule.filter((entry, index) => {
+      const entryDate = new Date(entry.payment_date);
+      return index > lastPaymentNumber && entryDate <= today;
+    }).length;
   };
 
   const formatCurrency = (amount: number) => {
@@ -140,6 +239,13 @@ export function MortgageDashboard() {
       }),
     }));
 
+  // Find the payment number for today's date
+  const today = new Date();
+  const todayPayment = schedule.find(entry => {
+    const entryDate = new Date(entry.payment_date);
+    return entryDate >= today;
+  })?.payment_number || null;
+
   const currentBalance = payments.length > 0
     ? payments[0].balance_after
     : -details.original_amount;
@@ -147,6 +253,21 @@ export function MortgageDashboard() {
   const totalPaid = payments.reduce((sum, p) => sum + p.payment_amount, 0);
   const totalPrincipal = payments.reduce((sum, p) => sum + p.principal_amount, 0);
   const totalInterest = payments.reduce((sum, p) => sum + p.interest_amount, 0);
+
+  // Calculate totals over the term (not full amortization) from schedule
+  // Find payments within the term period (term starts from start_date)
+  const termEndDate = new Date(details.start_date);
+  termEndDate.setMonth(termEndDate.getMonth() + details.term_months);
+
+  const termSchedule = schedule.filter(entry => {
+    const entryDate = new Date(entry.payment_date);
+    return entryDate < termEndDate;
+  });
+
+  const totalPrincipalOverTerm = termSchedule.reduce((sum, entry) => sum + entry.principal_amount, 0);
+  const totalInterestOverTerm = termSchedule.reduce((sum, entry) => sum + entry.interest_amount, 0);
+  const totalCostOfBorrowing = totalInterestOverTerm;
+  const totalPaidOverTerm = totalPrincipalOverTerm + totalInterestOverTerm;
 
   return (
     <div className="space-y-6">
@@ -166,18 +287,33 @@ export function MortgageDashboard() {
             </p>
           </div>
         </div>
-        <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <IconPlus className="h-4 w-4 mr-2" />
-              Record Payment
+        <div className="flex gap-2">
+          {getMissedPaymentsCount() > 0 && (
+            <Button
+              variant="outline"
+              onClick={recordAllPaymentsToDate}
+              disabled={recordingBulk}
+            >
+              <IconRefresh className="h-4 w-4 mr-2" />
+              {recordingBulk
+                ? 'Recording...'
+                : `Record All Payments to Date (${getMissedPaymentsCount()})`}
             </Button>
-          </DialogTrigger>
+          )}
+          <Button onClick={openPaymentDialog}>
+            <IconPlus className="h-4 w-4 mr-2" />
+            Record Payment
+          </Button>
+        </div>
+
+        <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Record Mortgage Payment</DialogTitle>
               <DialogDescription>
-                Enter the details of your mortgage payment
+                {selectedPaymentNumber
+                  ? `Recording payment #${selectedPaymentNumber} of ${schedule.length}`
+                  : 'Enter the details of your mortgage payment'}
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleRecordPayment} className="space-y-4">
@@ -188,62 +324,86 @@ export function MortgageDashboard() {
                   type="date"
                   required
                   value={paymentFormData.payment_date || ''}
-                  onChange={(e) =>
-                    setPaymentFormData((prev) => ({ ...prev, payment_date: e.target.value }))
-                  }
+                  onChange={(e) => {
+                    calculatePaymentDetails(e.target.value);
+                  }}
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="payment_amount">Payment Amount</Label>
-                <Input
-                  id="payment_amount"
-                  type="number"
-                  step="0.01"
-                  required
-                  value={paymentFormData.payment_amount || ''}
-                  onChange={(e) =>
-                    setPaymentFormData((prev) => ({
-                      ...prev,
-                      payment_amount: parseFloat(e.target.value),
-                    }))
-                  }
-                />
-              </div>
+              {selectedPaymentNumber && (
+                <div className="p-3 bg-muted rounded-md text-sm">
+                  <p className="font-medium">Auto-calculated from amortization schedule:</p>
+                  <div className="grid grid-cols-2 gap-2 mt-2">
+                    <div>
+                      <span className="text-muted-foreground">Payment:</span>{' '}
+                      <span className="font-medium">{formatCurrency(paymentFormData.payment_amount || 0)}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Principal:</span>{' '}
+                      <span className="font-medium text-green-600">{formatCurrency(paymentFormData.principal_amount || 0)}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Interest:</span>{' '}
+                      <span className="font-medium text-red-600">{formatCurrency(paymentFormData.interest_amount || 0)}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
 
-              <div className="space-y-2">
-                <Label htmlFor="principal_amount">Principal Amount</Label>
-                <Input
-                  id="principal_amount"
-                  type="number"
-                  step="0.01"
-                  required
-                  value={paymentFormData.principal_amount || ''}
-                  onChange={(e) =>
-                    setPaymentFormData((prev) => ({
-                      ...prev,
-                      principal_amount: parseFloat(e.target.value),
-                    }))
-                  }
-                />
-              </div>
+              {!selectedPaymentNumber && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="payment_amount">Payment Amount</Label>
+                    <Input
+                      id="payment_amount"
+                      type="number"
+                      step="0.01"
+                      required
+                      value={paymentFormData.payment_amount || ''}
+                      onChange={(e) =>
+                        setPaymentFormData((prev) => ({
+                          ...prev,
+                          payment_amount: parseFloat(e.target.value),
+                        }))
+                      }
+                    />
+                  </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="interest_amount">Interest Amount</Label>
-                <Input
-                  id="interest_amount"
-                  type="number"
-                  step="0.01"
-                  required
-                  value={paymentFormData.interest_amount || ''}
-                  onChange={(e) =>
-                    setPaymentFormData((prev) => ({
-                      ...prev,
-                      interest_amount: parseFloat(e.target.value),
-                    }))
-                  }
-                />
-              </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="principal_amount">Principal Amount</Label>
+                    <Input
+                      id="principal_amount"
+                      type="number"
+                      step="0.01"
+                      required
+                      value={paymentFormData.principal_amount || ''}
+                      onChange={(e) =>
+                        setPaymentFormData((prev) => ({
+                          ...prev,
+                          principal_amount: parseFloat(e.target.value),
+                        }))
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="interest_amount">Interest Amount</Label>
+                    <Input
+                      id="interest_amount"
+                      type="number"
+                      step="0.01"
+                      required
+                      value={paymentFormData.interest_amount || ''}
+                      onChange={(e) =>
+                        setPaymentFormData((prev) => ({
+                          ...prev,
+                          interest_amount: parseFloat(e.target.value),
+                        }))
+                      }
+                    />
+                  </div>
+                </>
+              )}
 
               <div className="space-y-2">
                 <Label htmlFor="extra_payment">Extra Payment (Prepayment)</Label>
@@ -394,6 +554,29 @@ export function MortgageDashboard() {
               <span className="text-muted-foreground">Remaining Balance</span>
               <span className="font-medium">{formatCurrency(Math.abs(currentBalance))}</span>
             </div>
+            <div className="pt-3 border-t border-border">
+              <div className="flex justify-between mb-2">
+                <span className="text-muted-foreground font-semibold">Over Term ({(details.term_months / 12).toFixed(0)} years):</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Total Paid</span>
+                <span className="font-medium">
+                  {formatCurrency(totalPaidOverTerm)}
+                </span>
+              </div>
+              <div className="flex justify-between mt-2">
+                <span className="text-muted-foreground">Total Principal</span>
+                <span className="font-medium text-green-600 dark:text-green-400">
+                  {formatCurrency(totalPrincipalOverTerm)}
+                </span>
+              </div>
+              <div className="flex justify-between mt-2">
+                <span className="text-muted-foreground">Cost of Borrowing</span>
+                <span className="font-medium text-red-600 dark:text-red-400">
+                  {formatCurrency(totalCostOfBorrowing)}
+                </span>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -418,6 +601,15 @@ export function MortgageDashboard() {
                   labelStyle={{ color: '#000' }}
                 />
                 <Legend />
+                {todayPayment && (
+                  <ReferenceLine
+                    x={chartData.find(d => d.payment >= todayPayment)?.date}
+                    stroke="#8b5cf6"
+                    strokeWidth={2}
+                    strokeDasharray="5 5"
+                    label={{ value: 'Today', position: 'top', fill: '#8b5cf6' }}
+                  />
+                )}
                 <Line
                   type="monotone"
                   dataKey="balance"
@@ -451,6 +643,15 @@ export function MortgageDashboard() {
                   labelStyle={{ color: '#000' }}
                 />
                 <Legend />
+                {todayPayment && (
+                  <ReferenceLine
+                    x={chartData.find(d => d.payment >= todayPayment)?.date}
+                    stroke="#8b5cf6"
+                    strokeWidth={2}
+                    strokeDasharray="5 5"
+                    label={{ value: 'Today', position: 'top', fill: '#8b5cf6' }}
+                  />
+                )}
                 <Line
                   type="monotone"
                   dataKey="principal"
