@@ -14,7 +14,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { Line, LineChart, Area, AreaChart, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
+import { Line, LineChart, Area, AreaChart, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, ReferenceArea } from 'recharts';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -30,6 +30,7 @@ import {
   IconDeviceFloppy,
   IconBulb,
   IconCopy,
+  IconInfoCircle,
 } from '@tabler/icons-react';
 import {
   Select,
@@ -45,6 +46,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 
 const defaultConfig: ProjectionConfig = {
   time_horizon_years: 5,
@@ -181,9 +187,6 @@ export function Projections() {
   // Calculate projection
   const calculateMutation = useMutation({
     mutationFn: () => {
-      console.log('Calculating projection with config:', config);
-      console.log('Additional expenses:', config.monthly_expenses);
-      console.log('Events being sent:', config.events);
       return apiClient.calculateProjection({ config });
     },
     onSuccess: (data) => {
@@ -309,7 +312,7 @@ export function Projections() {
   // Format date for charts
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
-    return `${date.getMonth() + 1}/${date.getFullYear().toString().slice(2)}`;
+    return date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
   };
 
   // Get event color for markers
@@ -338,13 +341,39 @@ export function Projections() {
     }
   };
 
-  // Prepare net worth data
-  const netWorthData = projectionData?.net_worth.map((point, idx) => ({
-    date: formatDate(point.date),
-    netWorth: point.value,
-    assets: projectionData.assets[idx]?.value || 0,
-    liabilities: projectionData.liabilities[idx]?.value || 0,
-  })) || [];
+  // Prepare net worth data with debt-to-asset ratio zone color
+  const netWorthData = projectionData?.net_worth.map((point, idx) => {
+    const assets = projectionData.assets[idx]?.value || 0;
+    const liabilities = projectionData.liabilities[idx]?.value || 0;
+    const netWorth = point.value;
+
+    // Calculate debt-to-asset ratio at this point
+    const debtToAssetRatio = assets > 0 ? Math.abs(liabilities) / assets : 0;
+
+    // Determine zone color based on ratio
+    let zoneColor = '#10b981'; // Default green
+    if (debtToAssetRatio === 0) {
+      zoneColor = '#10b981'; // Green - Debt-free
+    } else if (debtToAssetRatio < 0.3) {
+      zoneColor = '#10b981'; // Green - Excellent
+    } else if (debtToAssetRatio < 0.5) {
+      zoneColor = '#3b82f6'; // Blue - Good
+    } else if (debtToAssetRatio < 0.7) {
+      zoneColor = '#eab308'; // Yellow - Moderate
+    } else {
+      zoneColor = '#ef4444'; // Red - High debt
+    }
+
+    return {
+      date: formatDate(point.date),
+      netWorth: netWorth,
+      assets: assets,
+      liabilities: liabilities,
+      debtToAssetRatio: debtToAssetRatio,
+      zoneColor: zoneColor,
+    };
+  }) || [];
+
 
   // Prepare cash flow data
   const cashFlowData = projectionData?.cash_flow.map((point) => ({
@@ -505,16 +534,6 @@ export function Projections() {
       }
     });
   }
-
-  // Debug logging
-  console.log('Chart data:', {
-    netWorthDataLength: netWorthData.length,
-    cashFlowDataLength: cashFlowData.length,
-    debtDataLength: debtData.length,
-    finalNetWorth,
-    initialNetWorth,
-    events: eventMarkers.length
-  });
 
   return (
     <div className="space-y-8">
@@ -763,7 +782,56 @@ export function Projections() {
               {/* Net Worth Chart */}
               <Card>
                 <CardHeader>
-                  <CardTitle>Net Worth Projection</CardTitle>
+                  <div className="flex items-center gap-1.5">
+                    <CardTitle>Net Worth Projection</CardTitle>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <button className="text-muted-foreground hover:text-foreground transition-colors">
+                          <IconInfoCircle className="h-4 w-4" />
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-80">
+                        <div className="space-y-3">
+                          <div>
+                            <h4 className="font-medium text-sm mb-2">Background Color Zones</h4>
+                            <p className="text-xs text-muted-foreground">
+                              The background color shows your debt-to-asset ratio at each point in time.
+                            </p>
+                          </div>
+                          <div className="space-y-2 text-xs">
+                            <div className="flex items-start gap-3">
+                              <div className="w-16 h-4 rounded" style={{ backgroundColor: '#10b981', opacity: 0.3 }}></div>
+                              <div className="flex-1">
+                                <div className="font-medium text-green-600 dark:text-green-400">0-30% Debt</div>
+                                <div className="text-muted-foreground">Debt-free or excellent financial position</div>
+                              </div>
+                            </div>
+                            <div className="flex items-start gap-3">
+                              <div className="w-16 h-4 rounded" style={{ backgroundColor: '#3b82f6', opacity: 0.3 }}></div>
+                              <div className="flex-1">
+                                <div className="font-medium text-blue-600 dark:text-blue-400">30-50% Debt</div>
+                                <div className="text-muted-foreground">Good debt level, well managed</div>
+                              </div>
+                            </div>
+                            <div className="flex items-start gap-3">
+                              <div className="w-16 h-4 rounded" style={{ backgroundColor: '#eab308', opacity: 0.3 }}></div>
+                              <div className="flex-1">
+                                <div className="font-medium text-yellow-600 dark:text-yellow-400">50-70% Debt</div>
+                                <div className="text-muted-foreground">Moderate debt level, consider paying down</div>
+                              </div>
+                            </div>
+                            <div className="flex items-start gap-3">
+                              <div className="w-16 h-4 rounded" style={{ backgroundColor: '#ef4444', opacity: 0.3 }}></div>
+                              <div className="flex-1">
+                                <div className="font-medium text-red-600 dark:text-red-400">&gt;70% Debt</div>
+                                <div className="text-muted-foreground">High debt level, focus on debt reduction</div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
                   <CardDescription>
                     Assets vs liabilities over the next {config.time_horizon_years} years
                   </CardDescription>
@@ -780,6 +848,23 @@ export function Projections() {
                           labelStyle={{ color: '#000' }}
                         />
                         <Legend />
+
+                        {/* Dynamic background bands - colored by debt-to-asset ratio zone */}
+                        {netWorthData.map((entry, index) => {
+                          if (index === netWorthData.length - 1) return null;
+                          const nextEntry = netWorthData[index + 1];
+                          return (
+                            <ReferenceArea
+                              key={`zone-${index}`}
+                              x1={entry.date}
+                              x2={nextEntry.date}
+                              fill={entry.zoneColor}
+                              fillOpacity={0.05}
+                              strokeOpacity={0}
+                            />
+                          );
+                        })}
+
                         {eventMarkers.map((event) => (
                           <ReferenceLine
                             key={event.id}
@@ -795,6 +880,7 @@ export function Projections() {
                             }}
                           />
                         ))}
+
                         <Line
                           type="monotone"
                           dataKey="netWorth"
