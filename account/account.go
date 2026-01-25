@@ -79,6 +79,7 @@ type UpdateAccountRequest struct {
 type AccountWithBalance struct {
 	Account
 	CurrentBalance *float64 `json:"current_balance,omitempty"`
+	BalanceDate    *string  `json:"balance_date,omitempty"`
 }
 
 // ListAccountsResponse represents the response for listing accounts
@@ -321,7 +322,7 @@ func ListWithBalance(ctx context.Context) (*ListAccountsWithBalanceResponse, err
 	if len(accountIDs) > 0 {
 		// Query the balance database for the latest balance of each account
 		balanceRows, err := balanceDB.Query(ctx, `
-			SELECT DISTINCT ON (account_id) account_id, amount
+			SELECT DISTINCT ON (account_id) account_id, amount, date
 			FROM balances
 			WHERE account_id = ANY($1)
 			ORDER BY account_id, date DESC
@@ -332,21 +333,30 @@ func ListWithBalance(ctx context.Context) (*ListAccountsWithBalanceResponse, err
 		}
 		defer balanceRows.Close()
 
-		// Create a map of account_id to balance
-		balanceMap := make(map[string]float64)
+		// Create a map of account_id to balance and date
+		type balanceInfo struct {
+			amount float64
+			date   string
+		}
+		balanceMap := make(map[string]balanceInfo)
 		for balanceRows.Next() {
 			var accountID string
 			var amount float64
-			if err := balanceRows.Scan(&accountID, &amount); err != nil {
+			var date time.Time
+			if err := balanceRows.Scan(&accountID, &amount, &date); err != nil {
 				continue
 			}
-			balanceMap[accountID] = amount
+			balanceMap[accountID] = balanceInfo{
+				amount: amount,
+				date:   date.Format(time.RFC3339),
+			}
 		}
 
 		// Attach balances to accounts
 		for _, account := range accounts {
-			if balance, ok := balanceMap[account.ID]; ok {
-				account.CurrentBalance = &balance
+			if balanceInfo, ok := balanceMap[account.ID]; ok {
+				account.CurrentBalance = &balanceInfo.amount
+				account.BalanceDate = &balanceInfo.date
 			}
 		}
 	}

@@ -2,7 +2,11 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAccounts } from '@/hooks/use-accounts';
 import { useExchangeRates } from '@/hooks/use-exchange-rates';
-import { IconPlus, IconLink } from '@tabler/icons-react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiClient } from '@/lib/api-client';
+import type { Account } from '@/lib/api-client';
+import { IconPlus, IconLink, IconEdit, IconTrash, IconAlertTriangle } from '@tabler/icons-react';
+import { getAccountTypeBadgeColor, getAccountTypeLabel } from '@/lib/account-types';
 import {
   Card,
   CardContent,
@@ -18,14 +22,38 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 export function Accounts() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { data, isLoading } = useAccounts();
   const { data: exchangeRates } = useExchangeRates();
   const [selectedCurrency, setSelectedCurrency] = useState<string>('CAD');
   const [filterType, setFilterType] = useState<string>('all');
   const [filterCategory, setFilterCategory] = useState<string>('all');
+  const [editingAccount, setEditingAccount] = useState<Account | null>(null);
+  const [editForm, setEditForm] = useState({ name: '', institution: '' });
+  const [deleteAccount, setDeleteAccount] = useState<Account | null>(null);
 
   const formatCurrencyAccounting = (amount: number, currency: string) => {
     const formatted = new Intl.NumberFormat('en-US', {
@@ -55,32 +83,28 @@ export function Accounts() {
     );
   };
 
-  const getAccountTypeBadgeClass = (type: string) => {
-    const normalizedType = type.toLowerCase();
-    switch (normalizedType) {
-      case 'checking':
-        return 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400';
-      case 'savings':
-        return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400';
-      case 'investment':
-      case 'brokerage':
-      case 'tfsa':
-      case 'rrsp':
-        return 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-400';
-      case 'credit_card':
-        return 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400';
-      case 'loan':
-      case 'mortgage':
-        return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400';
-      default:
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400';
-    }
+
+  const isBalanceStale = (balanceDate?: string): boolean => {
+    if (!balanceDate) return false;
+    const date = new Date(balanceDate);
+    const now = new Date();
+    const oneMonthAgo = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+    return date < oneMonthAgo;
   };
 
-  const formatAccountType = (type: string) => {
-    return type.split('_').map(word =>
-      word.charAt(0).toUpperCase() + word.slice(1)
-    ).join(' ');
+  const getBalanceAge = (balanceDate?: string): string => {
+    if (!balanceDate) return '';
+    const date = new Date(balanceDate);
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - date.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays < 30) {
+      return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+    } else {
+      const months = Math.floor(diffDays / 30);
+      return `${months} month${months !== 1 ? 's' : ''} ago`;
+    }
   };
 
   const convertAmount = (amount: number, fromCurrency: string, toCurrency: string) => {
@@ -90,6 +114,50 @@ export function Accounts() {
     const rate = exchangeRates.rates[fromCurrency]?.[toCurrency];
     if (!rate) return null;
     return amount * rate;
+  };
+
+  // Update account mutation
+  const updateMutation = useMutation({
+    mutationFn: (data: { id: string; name: string; institution: string }) =>
+      apiClient.updateAccount(data.id, { name: data.name, institution: data.institution }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      setEditingAccount(null);
+    },
+  });
+
+  // Delete account mutation
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiClient.deleteAccount(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      setDeleteAccount(null);
+    },
+  });
+
+  const handleEdit = (account: Account) => {
+    setEditingAccount(account);
+    setEditForm({ name: account.name, institution: account.institution || '' });
+  };
+
+  const handleSaveEdit = () => {
+    if (editingAccount) {
+      updateMutation.mutate({
+        id: editingAccount.id,
+        name: editForm.name,
+        institution: editForm.institution,
+      });
+    }
+  };
+
+  const handleDelete = (account: Account) => {
+    setDeleteAccount(account);
+  };
+
+  const confirmDelete = () => {
+    if (deleteAccount) {
+      deleteMutation.mutate(deleteAccount.id);
+    }
   };
 
   const calculateTotals = () => {
@@ -358,12 +426,27 @@ export function Accounts() {
                           {account.is_synced && (
                             <IconLink className="h-4 w-4 text-muted-foreground" />
                           )}
-                          <div className="text-sm font-medium">{account.name}</div>
+                          <div>
+                            <div className="text-sm font-medium flex items-center gap-2">
+                              {account.name}
+                              {isBalanceStale(account.balance_date) && (
+                                <div className="flex items-center gap-1 text-amber-600 dark:text-amber-400" title={`Balance is ${getBalanceAge(account.balance_date)} old`}>
+                                  <IconAlertTriangle className="h-4 w-4" />
+                                  <span className="text-xs">Stale</span>
+                                </div>
+                              )}
+                            </div>
+                            {account.balance_date && isBalanceStale(account.balance_date) && (
+                              <div className="text-xs text-muted-foreground mt-0.5">
+                                Last updated: {getBalanceAge(account.balance_date)}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </td>
                       <td className="px-4 py-4">
-                        <span className={`px-2 py-1 text-xs font-medium rounded ${getAccountTypeBadgeClass(account.type)}`}>
-                          {formatAccountType(account.type)}
+                        <span className={`px-2 py-1 text-xs font-medium rounded ${getAccountTypeBadgeColor(account.type)}`}>
+                          {getAccountTypeLabel(account.type)}
                         </span>
                       </td>
                       <td className="px-4 py-4 text-right">
@@ -395,13 +478,36 @@ export function Accounts() {
                         </span>
                       </td>
                       <td className="px-4 py-4">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => navigate(`/accounts/${account.id}`)}
-                        >
-                          View
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => navigate(`/accounts/${account.id}`)}
+                          >
+                            View
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEdit(account);
+                            }}
+                          >
+                            <IconEdit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDelete(account);
+                            }}
+                            className="text-destructive hover:text-destructive"
+                          >
+                            <IconTrash className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -421,6 +527,69 @@ export function Accounts() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Edit Account Dialog */}
+      <Dialog open={!!editingAccount} onOpenChange={(open) => !open && setEditingAccount(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Account</DialogTitle>
+            <DialogDescription>
+              Update account details. Account type and currency cannot be changed.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">Account Name</Label>
+              <Input
+                id="edit-name"
+                value={editForm.name}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                placeholder="My Account"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-institution">Institution</Label>
+              <Input
+                id="edit-institution"
+                value={editForm.institution}
+                onChange={(e) => setEditForm({ ...editForm, institution: e.target.value })}
+                placeholder="Bank Name"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingAccount(null)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveEdit} disabled={updateMutation.isPending || !editForm.name}>
+              {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteAccount} onOpenChange={(open) => !open && setDeleteAccount(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Account</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{deleteAccount?.name}"? This action cannot be undone.
+              All associated data including balances, transactions, and holdings will be permanently deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? 'Deleting...' : 'Delete Account'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

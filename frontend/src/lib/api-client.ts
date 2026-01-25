@@ -15,6 +15,7 @@ export interface Account {
   created_at: string;
   updated_at: string;
   current_balance?: number;
+  balance_date?: string;
 }
 
 export interface Balance {
