@@ -34,30 +34,15 @@ type Config struct {
 	MonthlySavingsRate    float64                    `json:"monthly_savings_rate"`    // % of net income to save (e.g., 0.2 for 20%)
 	InvestmentReturns     map[string]float64         `json:"investment_returns"`      // Expected annual returns by account type
 	ExtraDebtPayments     map[string]float64         `json:"extra_debt_payments"`     // Extra monthly principal by account ID
-	OneTimeExpenses       []OneTimeExpense           `json:"one_time_expenses"`       // Future planned expenses
-	OneTimeIncomes        []OneTimeIncome            `json:"one_time_incomes"`        // Future planned incomes
 	AssetAppreciation     map[string]float64         `json:"asset_appreciation"`      // Annual appreciation rate by account type
 	SavingsAllocation     map[string]float64         `json:"savings_allocation"`      // How to allocate monthly savings by account type
+	Events                []Event                    `json:"events"`                  // Timeline events
 }
 
 // TaxBracket represents a progressive tax bracket
 type TaxBracket struct {
 	UpToIncome float64 `json:"up_to_income"` // Income threshold (0 = unlimited)
 	Rate       float64 `json:"rate"`         // Tax rate for this bracket (e.g., 0.15 for 15%)
-}
-
-// OneTimeExpense represents a planned future expense
-type OneTimeExpense struct {
-	Date        time.Time `json:"date"`
-	Amount      float64   `json:"amount"`
-	Description string    `json:"description"`
-}
-
-// OneTimeIncome represents a planned future income
-type OneTimeIncome struct {
-	Date        time.Time `json:"date"`
-	Amount      float64   `json:"amount"`
-	Description string    `json:"description"`
 }
 
 // ProjectionRequest represents a request to calculate projections
@@ -143,6 +128,15 @@ var balanceDB = sqldb.Named("balance")
 func CalculateProjection(ctx context.Context, req *ProjectionRequest) (*ProjectionResponse, error) {
 	config := req.Config
 
+	// Debug: Log events
+	fmt.Printf("DEBUG: Received %d events\n", len(config.Events))
+	for i, event := range config.Events {
+		fmt.Printf("DEBUG: Event %d: Type=%s, Date=%s, Description=%s\n", i, event.Type, event.Date, event.Description)
+	}
+
+	// Sort events by date
+	sortEvents(config.Events)
+
 	// Get current accounts and balances
 	accounts, err := getCurrentAccounts(ctx)
 	if err != nil {
@@ -174,6 +168,9 @@ func CalculateProjection(ctx context.Context, req *ProjectionRequest) (*Projecti
 	startDate := time.Now()
 	totalMonths := config.TimeHorizonYears * 12
 
+	// Initialize projection state
+	state := NewProjectionState(config)
+
 	// Track running balances for all accounts
 	accountBalances := make(map[string]float64)
 	for _, acc := range accounts {
@@ -196,8 +193,26 @@ func CalculateProjection(ctx context.Context, req *ProjectionRequest) (*Projecti
 		currentDate := startDate.AddDate(0, month, 0)
 		yearsElapsed := float64(month) / 12.0
 
-		// Calculate gross annual salary for this year
-		annualGrossSalary := config.AnnualSalary * math.Pow(1+config.AnnualSalaryGrowth, yearsElapsed)
+		// Process events for this month
+		monthEvents := findEventsForMonth(config.Events, currentDate)
+		eventIncome := 0.0
+		eventExpense := 0.0
+		if len(monthEvents) > 0 {
+			fmt.Printf("DEBUG: Found %d events for %s\n", len(monthEvents), currentDate.Format("2006-01"))
+		}
+		for _, event := range monthEvents {
+			income, expense, err := applyEvent(event, state, currentDate, debtBalances, mortgages, loans)
+			if err != nil {
+				// Log error but continue processing
+				fmt.Printf("Error applying event %s: %v\n", event.ID, err)
+			}
+			fmt.Printf("DEBUG: Applied event %s: income=%.2f, expense=%.2f\n", event.Type, income, expense)
+			eventIncome += income
+			eventExpense += expense
+		}
+
+		// Calculate gross annual salary for this year (using state which may have been updated by events)
+		annualGrossSalary := state.AnnualSalary * math.Pow(1+state.AnnualSalaryGrowth, yearsElapsed)
 
 		// Calculate federal and provincial tax separately
 		federalTax := calculateTax(annualGrossSalary, config.FederalTaxBrackets)
@@ -208,29 +223,49 @@ func CalculateProjection(ctx context.Context, req *ProjectionRequest) (*Projecti
 		annualNetSalary := annualGrossSalary - annualTax
 		monthlyNetIncome := annualNetSalary / 12.0
 
-		// Calculate expenses for this month
-		expenses := config.MonthlyExpenses * math.Pow(1+config.AnnualExpenseGrowth, yearsElapsed)
+		// Calculate expenses for this month (using state which may have been updated by events)
+		expenses := state.MonthlyExpenses * math.Pow(1+state.AnnualExpenseGrowth, yearsElapsed)
 
-		// Add one-time incomes/expenses
-		oneTimeIncome := 0.0
-		for _, oneTime := range config.OneTimeIncomes {
-			if isSameMonth(oneTime.Date, currentDate) {
-				oneTimeIncome += oneTime.Amount
-			}
-		}
-		for _, oneTime := range config.OneTimeExpenses {
-			if isSameMonth(oneTime.Date, currentDate) {
-				expenses += oneTime.Amount
-			}
-		}
-
-		totalMonthlyIncome := monthlyNetIncome + oneTimeIncome
+		// Add event-based income and expenses
+		expenses += eventExpense
+		totalMonthlyIncome := monthlyNetIncome + eventIncome
 
 		// Calculate net cash flow
 		netCashFlow := totalMonthlyIncome - expenses
 
-		// Calculate savings based on savings rate
-		savings := netCashFlow * config.MonthlySavingsRate
+		// Handle negative cash flow (expenses exceed income)
+		// This happens when extra debt payments or large expenses occur
+		if netCashFlow < 0 {
+			shortfall := -netCashFlow
+			fmt.Printf("DEBUG: Negative cash flow of %.2f, withdrawing from assets\n", shortfall)
+
+			// Withdraw from asset accounts proportionally based on savings allocation
+			totalWithdrawn := 0.0
+			for accountID, balance := range accountBalances {
+				account := findAccount(accounts, accountID)
+				if account == nil || !account.IsAsset {
+					continue
+				}
+
+				// Use savings allocation to determine withdrawal proportion
+				if alloc, ok := config.SavingsAllocation[string(account.Type)]; ok && alloc > 0 {
+					withdrawAmount := shortfall * alloc
+					if withdrawAmount > balance {
+						withdrawAmount = balance // Can't withdraw more than available
+					}
+					accountBalances[accountID] = balance - withdrawAmount
+					totalWithdrawn += withdrawAmount
+					fmt.Printf("DEBUG: Withdrew %.2f from %s (balance: %.2f -> %.2f)\n",
+						withdrawAmount, account.Type, balance, accountBalances[accountID])
+				}
+			}
+
+			// Update net cash flow to reflect that we covered the shortfall
+			netCashFlow = 0
+		}
+
+		// Calculate savings based on savings rate (using state which may have been updated by events)
+		savings := netCashFlow * state.MonthlySavingsRate
 		if savings < 0 {
 			savings = 0
 		}
@@ -282,7 +317,7 @@ func CalculateProjection(ctx context.Context, req *ProjectionRequest) (*Projecti
 		liabilityTotal := 0.0
 		debtBreakdown := make(map[string]float64)
 
-		// First, add all liability accounts (credit cards, lines of credit, etc.)
+		// First, handle liability accounts without detailed tracking (credit cards, lines of credit, etc.)
 		for accountID, balance := range accountBalances {
 			account := findAccount(accounts, accountID)
 			if account == nil {
@@ -307,12 +342,13 @@ func CalculateProjection(ctx context.Context, req *ProjectionRequest) (*Projecti
 					}
 				}
 
-				// If no detailed tracking, use account balance as liability
-				// Use absolute value since liability balances might be negative
+				// If no detailed tracking, exclude from projection as these are managed separately
+				// (credit cards, lines of credit that don't have formal payment schedules)
 				if !hasDetailedTracking {
-					liabilityAmount := math.Abs(balance)
-					liabilityTotal += liabilityAmount
-					debtBreakdown[accountID] = liabilityAmount
+					// Skip - don't include in projection liabilities
+					if month == 0 {
+						fmt.Printf("DEBUG: Skipping liability account %s (balance=%.2f) - no detailed tracking\n", accountID, math.Abs(balance))
+					}
 				}
 			}
 		}
@@ -325,8 +361,12 @@ func CalculateProjection(ctx context.Context, req *ProjectionRequest) (*Projecti
 
 				if balance > 0 {
 					// Calculate monthly payment components
-					monthlyRate := m.InterestRate / 12.0 / 100.0
-					payment := m.PaymentAmount
+					// InterestRate is stored as decimal (e.g., 0.04 for 4%)
+					monthlyRate := m.InterestRate / 12.0
+
+					// Convert payment to monthly equivalent based on frequency
+					monthlyPayment := convertToMonthlyPayment(m.PaymentAmount, m.PaymentFrequency)
+					payment := monthlyPayment
 
 					// Add extra payment if configured
 					if extra, ok := config.ExtraDebtPayments[m.AccountID]; ok {
@@ -335,13 +375,25 @@ func CalculateProjection(ctx context.Context, req *ProjectionRequest) (*Projecti
 
 					interest := balance * monthlyRate
 					principal := payment - interest
-					if principal > balance {
-						principal = balance
-					}
 
-					newBalance := balance - principal
-					if newBalance < 0 {
-						newBalance = 0
+					var newBalance float64
+					// If payment covers entire balance, just pay it off
+					if principal >= balance {
+						principal = balance
+						newBalance = 0.0
+						fmt.Printf("DEBUG Mortgage %s PAID OFF: Month=%d, FinalBalance=%.2f, Payment=%.2f, Interest=%.2f, Principal=%.2f\n",
+							m.AccountID, month, balance, payment, interest, principal)
+					} else {
+						newBalance = balance - principal
+						if newBalance < 1.0 {
+							// If less than $1 remaining, consider it paid off
+							newBalance = 0
+						}
+
+						if month == 0 || (month > 0 && month <= 24) || newBalance == 0 || newBalance < 500 {
+							fmt.Printf("DEBUG Mortgage %s: Month=%d, Freq=%s, BiweeklyPmt=%.2f, MonthlyPmt=%.2f, Balance=%.2f, Interest=%.2f, Principal=%.2f, NewBalance=%.2f\n",
+								m.AccountID, month, m.PaymentFrequency, m.PaymentAmount, monthlyPayment, balance, interest, principal, newBalance)
+						}
 					}
 
 					debtBalances[m.AccountID] = newBalance
@@ -358,8 +410,12 @@ func CalculateProjection(ctx context.Context, req *ProjectionRequest) (*Projecti
 				balance = math.Abs(balance)
 
 				if balance > 0 {
-					monthlyRate := l.InterestRate / 12.0 / 100.0
-					payment := l.PaymentAmount
+					// InterestRate is stored as decimal (e.g., 0.04 for 4%)
+					monthlyRate := l.InterestRate / 12.0
+
+					// Convert payment to monthly equivalent based on frequency
+					monthlyPayment := convertToMonthlyPayment(l.PaymentAmount, l.PaymentFrequency)
+					payment := monthlyPayment
 
 					if extra, ok := config.ExtraDebtPayments[l.AccountID]; ok {
 						payment += extra
@@ -367,13 +423,25 @@ func CalculateProjection(ctx context.Context, req *ProjectionRequest) (*Projecti
 
 					interest := balance * monthlyRate
 					principal := payment - interest
-					if principal > balance {
-						principal = balance
-					}
 
-					newBalance := balance - principal
-					if newBalance < 0 {
-						newBalance = 0
+					var newBalance float64
+					// If payment covers entire balance, just pay it off
+					if principal >= balance {
+						principal = balance
+						newBalance = 0.0
+						fmt.Printf("DEBUG Loan %s PAID OFF: Month=%d, FinalBalance=%.2f, Payment=%.2f, Interest=%.2f, Principal=%.2f\n",
+							l.AccountID, month, balance, payment, interest, principal)
+					} else {
+						newBalance = balance - principal
+						if newBalance < 1.0 {
+							// If less than $1 remaining, consider it paid off
+							newBalance = 0
+						}
+
+						if month == 0 || (month > 0 && month <= 36) || newBalance == 0 || newBalance < 500 {
+							fmt.Printf("DEBUG Loan %s: Month=%d, Freq=%s, BiweeklyPmt=%.2f, MonthlyPmt=%.2f, Balance=%.2f, Interest=%.2f, Principal=%.2f, NewBalance=%.2f\n",
+								l.AccountID, month, l.PaymentFrequency, l.PaymentAmount, monthlyPayment, balance, interest, principal, newBalance)
+						}
 					}
 
 					debtBalances[l.AccountID] = newBalance
@@ -410,6 +478,13 @@ func CalculateProjection(ctx context.Context, req *ProjectionRequest) (*Projecti
 		})
 	}
 
+	// Final debug: show final debt balances
+	fmt.Printf("\nDEBUG: Final debt balances after %d months:\n", totalMonths)
+	for accountID, balance := range debtBalances {
+		fmt.Printf("  %s: %.2f\n", accountID, balance)
+	}
+	fmt.Printf("  Total liabilities: %.2f\n", response.Liabilities[len(response.Liabilities)-1].Value)
+
 	return response, nil
 }
 
@@ -423,17 +498,19 @@ type AccountData struct {
 }
 
 type MortgageData struct {
-	AccountID      string
-	CurrentBalance float64
-	InterestRate   float64
-	PaymentAmount  float64
+	AccountID        string
+	CurrentBalance   float64
+	InterestRate     float64
+	PaymentAmount    float64
+	PaymentFrequency string
 }
 
 type LoanData struct {
-	AccountID      string
-	CurrentBalance float64
-	InterestRate   float64
-	PaymentAmount  float64
+	AccountID        string
+	CurrentBalance   float64
+	InterestRate     float64
+	PaymentAmount    float64
+	PaymentFrequency string
 }
 
 func getCurrentAccounts(ctx context.Context) ([]AccountData, error) {
@@ -493,7 +570,7 @@ func getCurrentAccounts(ctx context.Context) ([]AccountData, error) {
 
 func getMortgageDetails(ctx context.Context) ([]MortgageData, error) {
 	rows, err := accountDB.Query(ctx, `
-		SELECT m.account_id, m.original_amount, m.interest_rate, m.payment_amount,
+		SELECT m.account_id, m.original_amount, m.interest_rate, m.payment_amount, m.payment_frequency,
 		       COALESCE((
 		           SELECT balance_after
 		           FROM mortgage_payments mp
@@ -512,7 +589,7 @@ func getMortgageDetails(ctx context.Context) ([]MortgageData, error) {
 	for rows.Next() {
 		var m MortgageData
 		var originalAmount float64
-		err := rows.Scan(&m.AccountID, &originalAmount, &m.InterestRate, &m.PaymentAmount, &m.CurrentBalance)
+		err := rows.Scan(&m.AccountID, &originalAmount, &m.InterestRate, &m.PaymentAmount, &m.PaymentFrequency, &m.CurrentBalance)
 		if err != nil {
 			return nil, err
 		}
@@ -524,7 +601,7 @@ func getMortgageDetails(ctx context.Context) ([]MortgageData, error) {
 
 func getLoanDetails(ctx context.Context) ([]LoanData, error) {
 	rows, err := accountDB.Query(ctx, `
-		SELECT l.account_id, l.original_amount, l.interest_rate, l.payment_amount,
+		SELECT l.account_id, l.original_amount, l.interest_rate, l.payment_amount, l.payment_frequency,
 		       COALESCE((
 		           SELECT balance_after
 		           FROM loan_payments lp
@@ -543,7 +620,7 @@ func getLoanDetails(ctx context.Context) ([]LoanData, error) {
 	for rows.Next() {
 		var l LoanData
 		var originalAmount float64
-		err := rows.Scan(&l.AccountID, &originalAmount, &l.InterestRate, &l.PaymentAmount, &l.CurrentBalance)
+		err := rows.Scan(&l.AccountID, &originalAmount, &l.InterestRate, &l.PaymentAmount, &l.PaymentFrequency, &l.CurrentBalance)
 		if err != nil {
 			return nil, err
 		}
@@ -564,6 +641,27 @@ func findAccount(accounts []AccountData, id string) *AccountData {
 
 func isSameMonth(date1, date2 time.Time) bool {
 	return date1.Year() == date2.Year() && date1.Month() == date2.Month()
+}
+
+// convertToMonthlyPayment converts a payment amount based on frequency to monthly equivalent
+func convertToMonthlyPayment(paymentAmount float64, frequency string) float64 {
+	switch frequency {
+	case "weekly":
+		// 52 weeks / 12 months = 4.333 weeks per month
+		return paymentAmount * 52.0 / 12.0
+	case "bi-weekly":
+		// 26 bi-weekly periods / 12 months = 2.167 payments per month
+		return paymentAmount * 26.0 / 12.0
+	case "semi-monthly":
+		// 2 payments per month
+		return paymentAmount * 2.0
+	case "monthly":
+		// Already monthly
+		return paymentAmount
+	default:
+		// Default to monthly
+		return paymentAmount
+	}
 }
 
 // calculateTax calculates tax based on progressive tax brackets
