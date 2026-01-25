@@ -10,6 +10,8 @@ export interface Account {
   institution?: string;
   is_asset: boolean;
   is_active: boolean;
+  is_synced: boolean;
+  connection_id?: string;
   created_at: string;
   updated_at: string;
   current_balance?: number;
@@ -76,6 +78,86 @@ export interface UpdateHoldingRequest {
 export interface ExchangeRates {
   rates: Record<string, Record<string, number>>;
   date: string;
+}
+
+export interface MortgageDetails {
+  id: string;
+  account_id: string;
+  original_amount: number;
+  interest_rate: number;
+  rate_type: 'fixed' | 'variable';
+  start_date: string;
+  term_months: number;
+  amortization_months: number;
+  payment_amount: number;
+  payment_frequency: 'weekly' | 'bi-weekly' | 'semi-monthly' | 'monthly';
+  payment_day?: number;
+  property_address?: string;
+  property_city?: string;
+  property_province?: string;
+  property_postal_code?: string;
+  property_value?: number;
+  renewal_date?: string;
+  maturity_date: string;
+  lender?: string;
+  mortgage_number?: string;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MortgagePayment {
+  id: string;
+  account_id: string;
+  payment_date: string;
+  payment_amount: number;
+  principal_amount: number;
+  interest_amount: number;
+  extra_payment: number;
+  balance_after: number;
+  notes?: string;
+  created_at: string;
+}
+
+export interface AmortizationEntry {
+  payment_number: number;
+  payment_date: string;
+  payment_amount: number;
+  principal_amount: number;
+  interest_amount: number;
+  balance_after: number;
+}
+
+export interface CreateMortgageDetailsRequest {
+  account_id: string;
+  original_amount: number;
+  interest_rate: number;
+  rate_type: 'fixed' | 'variable';
+  start_date: string;
+  term_months: number;
+  amortization_months: number;
+  payment_amount: number;
+  payment_frequency: 'weekly' | 'bi-weekly' | 'semi-monthly' | 'monthly';
+  payment_day?: number;
+  property_address?: string;
+  property_city?: string;
+  property_province?: string;
+  property_postal_code?: string;
+  property_value?: number;
+  renewal_date?: string;
+  lender?: string;
+  mortgage_number?: string;
+  notes?: string;
+}
+
+export interface CreateMortgagePaymentRequest {
+  account_id: string;
+  payment_date: string;
+  payment_amount: number;
+  principal_amount: number;
+  interest_amount: number;
+  extra_payment: number;
+  notes?: string;
 }
 
 class ApiClient {
@@ -195,6 +277,33 @@ class ApiClient {
   // Currency endpoints
   async getExchangeRates(): Promise<ExchangeRates> {
     return this.request('/currency/rates');
+  }
+
+  // Mortgage endpoints
+  async createMortgageDetails(accountId: string, data: CreateMortgageDetailsRequest): Promise<MortgageDetails> {
+    return this.request(`/accounts/${accountId}/mortgage`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getMortgageDetails(accountId: string): Promise<MortgageDetails> {
+    return this.request(`/accounts/${accountId}/mortgage`);
+  }
+
+  async getAmortizationSchedule(accountId: string): Promise<{ schedule: AmortizationEntry[] }> {
+    return this.request(`/accounts/${accountId}/mortgage/amortization`);
+  }
+
+  async recordMortgagePayment(accountId: string, data: CreateMortgagePaymentRequest): Promise<MortgagePayment> {
+    return this.request(`/accounts/${accountId}/mortgage/payments`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getMortgagePayments(accountId: string): Promise<{ payments: MortgagePayment[] }> {
+    return this.request(`/accounts/${accountId}/mortgage/payments`);
   }
 }
 

@@ -1,7 +1,9 @@
+import { useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAccount, useDeleteAccount } from '@/hooks/use-accounts';
 import { useAccountBalances } from '@/hooks/use-balances';
 import { useAccountHoldings } from '@/hooks/use-holdings';
+import { useMortgageDetails } from '@/hooks/use-mortgage';
 import type { Holding } from '@/lib/api-client';
 import {
   Card,
@@ -42,12 +44,33 @@ export function AccountDetail() {
   const { data: account, isLoading: accountLoading } = useAccount(id!);
   const { data: balancesData, isLoading: balancesLoading } = useAccountBalances(id!);
   const { data: holdingsData, isLoading: holdingsLoading } = useAccountHoldings(id!);
+  const { data: mortgageDetails, isLoading: mortgageLoading, isError: mortgageError } = useMortgageDetails(id!);
   const deleteAccount = useDeleteAccount();
+
+  // Redirect mortgage accounts to mortgage dashboard or setup
+  useEffect(() => {
+    if (account?.type === 'mortgage' && !mortgageLoading) {
+      if (mortgageDetails) {
+        navigate(`/accounts/${id}/mortgage`, { replace: true });
+      } else {
+        navigate(`/accounts/${id}/mortgage/setup`, { replace: true });
+      }
+    }
+  }, [account, mortgageDetails, mortgageLoading, id, navigate]);
 
   if (accountLoading || balancesLoading || holdingsLoading) {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
+
+  // Show loading state for mortgage accounts while checking details
+  if (account?.type === 'mortgage' && mortgageLoading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-muted-foreground">Loading mortgage details...</div>
       </div>
     );
   }

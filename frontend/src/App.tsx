@@ -6,6 +6,8 @@ import { Dashboard } from './pages/Dashboard';
 import { Accounts } from './pages/Accounts';
 import { AccountNew } from './pages/AccountNew';
 import { AccountDetail } from './pages/AccountDetail';
+import { MortgageSetup } from './pages/MortgageSetup';
+import { MortgageDashboard } from './pages/MortgageDashboard';
 import { Analytics } from './pages/Analytics';
 import { Projections } from './pages/Projections';
 import { Settings } from './pages/Settings';
@@ -21,6 +23,8 @@ function App() {
             <Route path="accounts" element={<Accounts />} />
             <Route path="accounts/new" element={<AccountNew />} />
             <Route path="accounts/:id" element={<AccountDetail />} />
+            <Route path="accounts/:accountId/mortgage/setup" element={<MortgageSetup />} />
+            <Route path="accounts/:accountId/mortgage" element={<MortgageDashboard />} />
             <Route path="connections" element={<Connections />} />
             <Route path="analytics" element={<Analytics />} />
             <Route path="projections" element={<Projections />} />
