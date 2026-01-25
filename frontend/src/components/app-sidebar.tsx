@@ -60,7 +60,7 @@ export function AppSidebar() {
     <Sidebar>
       <SidebarHeader className="border-b border-sidebar-border px-4 py-4">
         <Link to="/accounts" className="text-lg font-bold text-sidebar-foreground">
-          Finance Dashboard
+          Moneyy
         </Link>
       </SidebarHeader>
       <SidebarContent>

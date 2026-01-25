@@ -5,7 +5,7 @@ CREATE TABLE accounts (
     name TEXT NOT NULL,
     type TEXT NOT NULL CHECK (type IN (
         'checking', 'savings', 'cash',
-        'brokerage', 'tfsa', 'rrsp', 'stocks', 'crypto',
+        'brokerage', 'tfsa', 'rrsp', 'crypto',
         'real_estate', 'vehicle', 'collectible', 'other',
         'credit_card', 'loan', 'mortgage', 'line_of_credit'
     )),

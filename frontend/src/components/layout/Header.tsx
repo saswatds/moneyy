@@ -7,10 +7,7 @@ export function Header() {
         <SidebarTrigger className="-ml-1" />
         <div className="flex flex-1 items-center justify-between">
           <div className="text-sm font-medium text-muted-foreground">
-            Personal Finance Dashboard
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-muted-foreground">User Menu</span>
+            Let's keep track of your finances!
           </div>
         </div>
       </div>
