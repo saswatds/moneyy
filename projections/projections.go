@@ -25,18 +25,25 @@ type ProjectionScenario struct {
 type Config struct {
 	TimeHorizonYears      int                        `json:"time_horizon_years"`      // 1-30 years
 	InflationRate         float64                    `json:"inflation_rate"`          // e.g., 0.02 for 2%
-	MonthlyIncome         float64                    `json:"monthly_income"`          // Base monthly income
-	AnnualIncomeGrowth    float64                    `json:"annual_income_growth"`    // e.g., 0.03 for 3%
+	AnnualSalary          float64                    `json:"annual_salary"`           // Gross annual salary
+	AnnualSalaryGrowth    float64                    `json:"annual_salary_growth"`    // e.g., 0.03 for 3%
+	FederalTaxBrackets    []TaxBracket               `json:"federal_tax_brackets"`    // Federal progressive tax brackets
+	ProvincialTaxBrackets []TaxBracket               `json:"provincial_tax_brackets"` // Provincial/state progressive tax brackets
 	MonthlyExpenses       float64                    `json:"monthly_expenses"`        // Base monthly expenses
 	AnnualExpenseGrowth   float64                    `json:"annual_expense_growth"`   // e.g., 0.02 for 2%
-	MonthlySavings        float64                    `json:"monthly_savings"`         // Amount to save/invest each month
+	MonthlySavingsRate    float64                    `json:"monthly_savings_rate"`    // % of net income to save (e.g., 0.2 for 20%)
 	InvestmentReturns     map[string]float64         `json:"investment_returns"`      // Expected annual returns by account type
 	ExtraDebtPayments     map[string]float64         `json:"extra_debt_payments"`     // Extra monthly principal by account ID
 	OneTimeExpenses       []OneTimeExpense           `json:"one_time_expenses"`       // Future planned expenses
 	OneTimeIncomes        []OneTimeIncome            `json:"one_time_incomes"`        // Future planned incomes
 	AssetAppreciation     map[string]float64         `json:"asset_appreciation"`      // Annual appreciation rate by account type
-	TaxRate               float64                    `json:"tax_rate"`                // Effective tax rate
 	SavingsAllocation     map[string]float64         `json:"savings_allocation"`      // How to allocate monthly savings by account type
+}
+
+// TaxBracket represents a progressive tax bracket
+type TaxBracket struct {
+	UpToIncome float64 `json:"up_to_income"` // Income threshold (0 = unlimited)
+	Rate       float64 `json:"rate"`         // Tax rate for this bracket (e.g., 0.15 for 15%)
 }
 
 // OneTimeExpense represents a planned future expense
@@ -167,13 +174,13 @@ func CalculateProjection(ctx context.Context, req *ProjectionRequest) (*Projecti
 	startDate := time.Now()
 	totalMonths := config.TimeHorizonYears * 12
 
-	// Track running balances
+	// Track running balances for all accounts
 	accountBalances := make(map[string]float64)
 	for _, acc := range accounts {
 		accountBalances[acc.ID] = acc.Balance
 	}
 
-	// Track mortgage/loan balances
+	// Track mortgage/loan balances with detailed payment schedules
 	debtBalances := make(map[string]float64)
 	for _, m := range mortgages {
 		debtBalances[m.AccountID] = m.CurrentBalance
@@ -182,20 +189,33 @@ func CalculateProjection(ctx context.Context, req *ProjectionRequest) (*Projecti
 		debtBalances[l.AccountID] = l.CurrentBalance
 	}
 
+	// Note: Other liability accounts (credit cards, lines of credit, etc.)
+	// are tracked in accountBalances and will be included as static liabilities
+
 	for month := 0; month <= totalMonths; month++ {
 		currentDate := startDate.AddDate(0, month, 0)
 		yearsElapsed := float64(month) / 12.0
 
-		// Calculate income for this month
-		income := config.MonthlyIncome * math.Pow(1+config.AnnualIncomeGrowth, yearsElapsed)
+		// Calculate gross annual salary for this year
+		annualGrossSalary := config.AnnualSalary * math.Pow(1+config.AnnualSalaryGrowth, yearsElapsed)
+
+		// Calculate federal and provincial tax separately
+		federalTax := calculateTax(annualGrossSalary, config.FederalTaxBrackets)
+		provincialTax := calculateTax(annualGrossSalary, config.ProvincialTaxBrackets)
+		annualTax := federalTax + provincialTax
+
+		// Calculate net monthly income (after tax)
+		annualNetSalary := annualGrossSalary - annualTax
+		monthlyNetIncome := annualNetSalary / 12.0
 
 		// Calculate expenses for this month
 		expenses := config.MonthlyExpenses * math.Pow(1+config.AnnualExpenseGrowth, yearsElapsed)
 
 		// Add one-time incomes/expenses
+		oneTimeIncome := 0.0
 		for _, oneTime := range config.OneTimeIncomes {
 			if isSameMonth(oneTime.Date, currentDate) {
-				income += oneTime.Amount
+				oneTimeIncome += oneTime.Amount
 			}
 		}
 		for _, oneTime := range config.OneTimeExpenses {
@@ -204,9 +224,16 @@ func CalculateProjection(ctx context.Context, req *ProjectionRequest) (*Projecti
 			}
 		}
 
+		totalMonthlyIncome := monthlyNetIncome + oneTimeIncome
+
 		// Calculate net cash flow
-		netCashFlow := income - expenses
-		savings := config.MonthlySavings
+		netCashFlow := totalMonthlyIncome - expenses
+
+		// Calculate savings based on savings rate
+		savings := netCashFlow * config.MonthlySavingsRate
+		if savings < 0 {
+			savings = 0
+		}
 		if savings > netCashFlow {
 			savings = netCashFlow
 		}
@@ -214,7 +241,7 @@ func CalculateProjection(ctx context.Context, req *ProjectionRequest) (*Projecti
 		// Record cash flow
 		response.CashFlow = append(response.CashFlow, CashFlowPoint{
 			Date:     currentDate,
-			Income:   income,
+			Income:   totalMonthlyIncome,
 			Expenses: expenses,
 			Net:      netCashFlow,
 		})
@@ -255,59 +282,104 @@ func CalculateProjection(ctx context.Context, req *ProjectionRequest) (*Projecti
 		liabilityTotal := 0.0
 		debtBreakdown := make(map[string]float64)
 
-		// Update mortgage balances
+		// First, add all liability accounts (credit cards, lines of credit, etc.)
+		for accountID, balance := range accountBalances {
+			account := findAccount(accounts, accountID)
+			if account == nil {
+				continue
+			}
+
+			if !account.IsAsset && balance != 0 {
+				// Check if this account has detailed mortgage/loan tracking
+				hasDetailedTracking := false
+				for _, m := range mortgages {
+					if m.AccountID == accountID {
+						hasDetailedTracking = true
+						break
+					}
+				}
+				if !hasDetailedTracking {
+					for _, l := range loans {
+						if l.AccountID == accountID {
+							hasDetailedTracking = true
+							break
+						}
+					}
+				}
+
+				// If no detailed tracking, use account balance as liability
+				// Use absolute value since liability balances might be negative
+				if !hasDetailedTracking {
+					liabilityAmount := math.Abs(balance)
+					liabilityTotal += liabilityAmount
+					debtBreakdown[accountID] = liabilityAmount
+				}
+			}
+		}
+
+		// Update mortgage balances (with detailed payment tracking)
 		for _, m := range mortgages {
-			if balance, exists := debtBalances[m.AccountID]; exists && balance > 0 {
-				// Calculate monthly payment components
-				monthlyRate := m.InterestRate / 12.0 / 100.0
-				payment := m.PaymentAmount
+			if balance, exists := debtBalances[m.AccountID]; exists {
+				// Use absolute value in case balance is stored as negative
+				balance = math.Abs(balance)
 
-				// Add extra payment if configured
-				if extra, ok := config.ExtraDebtPayments[m.AccountID]; ok {
-					payment += extra
+				if balance > 0 {
+					// Calculate monthly payment components
+					monthlyRate := m.InterestRate / 12.0 / 100.0
+					payment := m.PaymentAmount
+
+					// Add extra payment if configured
+					if extra, ok := config.ExtraDebtPayments[m.AccountID]; ok {
+						payment += extra
+					}
+
+					interest := balance * monthlyRate
+					principal := payment - interest
+					if principal > balance {
+						principal = balance
+					}
+
+					newBalance := balance - principal
+					if newBalance < 0 {
+						newBalance = 0
+					}
+
+					debtBalances[m.AccountID] = newBalance
+					liabilityTotal += newBalance
+					debtBreakdown[m.AccountID] = newBalance
 				}
-
-				interest := balance * monthlyRate
-				principal := payment - interest
-				if principal > balance {
-					principal = balance
-				}
-
-				newBalance := balance - principal
-				if newBalance < 0 {
-					newBalance = 0
-				}
-
-				debtBalances[m.AccountID] = newBalance
-				liabilityTotal += newBalance
-				debtBreakdown[m.AccountID] = newBalance
 			}
 		}
 
 		// Update loan balances
 		for _, l := range loans {
-			if balance, exists := debtBalances[l.AccountID]; exists && balance > 0 {
-				monthlyRate := l.InterestRate / 12.0 / 100.0
-				payment := l.PaymentAmount
+			if balance, exists := debtBalances[l.AccountID]; exists {
+				// Use absolute value in case balance is stored as negative
+				balance = math.Abs(balance)
 
-				if extra, ok := config.ExtraDebtPayments[l.AccountID]; ok {
-					payment += extra
+				if balance > 0 {
+					monthlyRate := l.InterestRate / 12.0 / 100.0
+					payment := l.PaymentAmount
+
+					if extra, ok := config.ExtraDebtPayments[l.AccountID]; ok {
+						payment += extra
+					}
+
+					interest := balance * monthlyRate
+					principal := payment - interest
+					if principal > balance {
+						principal = balance
+					}
+
+					newBalance := balance - principal
+					if newBalance < 0 {
+						newBalance = 0
+					}
+
+					debtBalances[l.AccountID] = newBalance
+					liabilityTotal += newBalance
+					debtBreakdown[l.AccountID] = newBalance
 				}
-
-				interest := balance * monthlyRate
-				principal := payment - interest
-				if principal > balance {
-					principal = balance
-				}
-
-				newBalance := balance - principal
-				if newBalance < 0 {
-					newBalance = 0
-				}
-
-				debtBalances[l.AccountID] = newBalance
-				liabilityTotal += newBalance
-				debtBreakdown[l.AccountID] = newBalance
 			}
 		}
 
@@ -492,6 +564,43 @@ func findAccount(accounts []AccountData, id string) *AccountData {
 
 func isSameMonth(date1, date2 time.Time) bool {
 	return date1.Year() == date2.Year() && date1.Month() == date2.Month()
+}
+
+// calculateTax calculates tax based on progressive tax brackets
+func calculateTax(income float64, brackets []TaxBracket) float64 {
+	if len(brackets) == 0 {
+		return 0
+	}
+
+	var totalTax float64
+	remainingIncome := income
+
+	for i, bracket := range brackets {
+		var bracketIncome float64
+
+		if bracket.UpToIncome == 0 {
+			// Last bracket (unlimited)
+			bracketIncome = remainingIncome
+		} else if i == 0 {
+			// First bracket
+			bracketIncome = math.Min(remainingIncome, bracket.UpToIncome)
+		} else {
+			// Middle brackets
+			prevBracket := brackets[i-1]
+			bracketWidth := bracket.UpToIncome - prevBracket.UpToIncome
+			bracketIncome = math.Min(remainingIncome, bracketWidth)
+		}
+
+		totalTax += bracketIncome * bracket.Rate
+
+		remainingIncome -= bracketIncome
+
+		if remainingIncome <= 0 {
+			break
+		}
+	}
+
+	return totalTax
 }
 
 // CreateScenario creates a new projection scenario

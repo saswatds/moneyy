@@ -293,20 +293,26 @@ export interface CreateDepreciationEntryRequest {
   notes?: string;
 }
 
+export interface TaxBracket {
+  up_to_income: number; // 0 = unlimited
+  rate: number;
+}
+
 export interface ProjectionConfig {
   time_horizon_years: number;
   inflation_rate: number;
-  monthly_income: number;
-  annual_income_growth: number;
+  annual_salary: number;
+  annual_salary_growth: number;
+  federal_tax_brackets: TaxBracket[];
+  provincial_tax_brackets: TaxBracket[];
   monthly_expenses: number;
   annual_expense_growth: number;
-  monthly_savings: number;
+  monthly_savings_rate: number; // % of net income
   investment_returns: Record<string, number>;
   extra_debt_payments: Record<string, number>;
   one_time_expenses: OneTimeExpense[];
   one_time_incomes: OneTimeIncome[];
   asset_appreciation: Record<string, number>;
-  tax_rate: number;
   savings_allocation: Record<string, number>;
 }
 
