@@ -409,6 +409,45 @@ export interface UpdateScenarioRequest {
   config?: ProjectionConfig;
 }
 
+export interface RecurringExpense {
+  id: string;
+  user_id: string;
+  name: string;
+  description?: string;
+  amount: number;
+  category: string;
+  account_id?: string;
+  frequency: 'weekly' | 'bi-weekly' | 'monthly' | 'quarterly' | 'annually';
+  day_of_month?: number;
+  day_of_week?: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateRecurringExpenseRequest {
+  name: string;
+  description?: string;
+  amount: number;
+  category: string;
+  account_id?: string;
+  frequency: 'weekly' | 'bi-weekly' | 'monthly' | 'quarterly' | 'annually';
+  day_of_month?: number;
+  day_of_week?: number;
+}
+
+export interface UpdateRecurringExpenseRequest {
+  name?: string;
+  description?: string;
+  amount?: number;
+  category?: string;
+  account_id?: string;
+  frequency?: 'weekly' | 'bi-weekly' | 'monthly' | 'quarterly' | 'annually';
+  day_of_month?: number;
+  day_of_week?: number;
+  is_active?: boolean;
+}
+
 class ApiClient {
   private baseUrl: string;
 
@@ -674,6 +713,35 @@ class ApiClient {
 
   async deleteScenario(id: string): Promise<{ success: boolean }> {
     return this.request(`/projections/scenarios/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Recurring Expenses
+  async getRecurringExpenses(): Promise<{ expenses: RecurringExpense[] }> {
+    return this.request('/recurring-expenses');
+  }
+
+  async getRecurringExpense(id: string): Promise<RecurringExpense> {
+    return this.request(`/recurring-expenses/${id}`);
+  }
+
+  async createRecurringExpense(data: CreateRecurringExpenseRequest): Promise<RecurringExpense> {
+    return this.request('/recurring-expenses', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateRecurringExpense(id: string, data: UpdateRecurringExpenseRequest): Promise<RecurringExpense> {
+    return this.request(`/recurring-expenses/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteRecurringExpense(id: string): Promise<void> {
+    return this.request(`/recurring-expenses/${id}`, {
       method: 'DELETE',
     });
   }

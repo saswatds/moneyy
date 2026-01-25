@@ -122,24 +122,37 @@ var accountDB = sqldb.Named("account")
 // Balance database instance (to query balance history)
 var balanceDB = sqldb.Named("balance")
 
+// Transaction database instance (to query recurring expenses)
+var transactionDB = sqldb.Named("transaction")
+
 // CalculateProjection calculates financial projections based on configuration
 //
 //encore:api public path=/projections/calculate method=POST
 func CalculateProjection(ctx context.Context, req *ProjectionRequest) (*ProjectionResponse, error) {
 	config := req.Config
 
-	// Debug: Log events
-	fmt.Printf("DEBUG: Received %d events\n", len(config.Events))
-	for i, event := range config.Events {
-		fmt.Printf("DEBUG: Event %d: Type=%s, Date=%s, Description=%s, IsRecurring=%v\n", i, event.Type, event.Date, event.Description, event.IsRecurring)
+	// Calculate total monthly expenses from all sources
+	additionalExpenses := config.MonthlyExpenses // What user entered
+
+	// Get recurring expenses
+	recurringTotal, err := getRecurringExpensesTotal(ctx)
+	if err != nil {
+		fmt.Printf("Warning: Failed to get recurring expenses: %v\n", err)
+		recurringTotal = 0 // Continue without recurring expenses
 	}
+
+	// Note: Mortgage/loan payments are NOT added here because they're
+	// calculated separately through amortization schedules later
+
+	// Sum expenses (excluding mortgage/loan payments to avoid double counting)
+	totalMonthlyExpenses := additionalExpenses + recurringTotal
+	config.MonthlyExpenses = totalMonthlyExpenses
 
 	// Calculate projection end date
 	endDate := time.Now().AddDate(config.TimeHorizonYears, 0, 0)
 
 	// Expand recurring events into individual occurrences
 	config.Events = expandRecurringEvents(config.Events, endDate)
-	fmt.Printf("DEBUG: After expansion: %d events\n", len(config.Events))
 
 	// Sort events by date
 	sortEvents(config.Events)
@@ -205,16 +218,14 @@ func CalculateProjection(ctx context.Context, req *ProjectionRequest) (*Projecti
 		eventIncome := 0.0
 		eventExpense := 0.0
 		if len(monthEvents) > 0 {
-			fmt.Printf("DEBUG: Found %d events for %s\n", len(monthEvents), currentDate.Format("2006-01"))
-		}
+			}
 		for _, event := range monthEvents {
 			income, expense, err := applyEvent(event, state, currentDate, debtBalances, mortgages, loans)
 			if err != nil {
 				// Log error but continue processing
 				fmt.Printf("Error applying event %s: %v\n", event.ID, err)
 			}
-			fmt.Printf("DEBUG: Applied event %s: income=%.2f, expense=%.2f\n", event.Type, income, expense)
-			eventIncome += income
+				eventIncome += income
 			eventExpense += expense
 		}
 
@@ -271,7 +282,6 @@ func CalculateProjection(ctx context.Context, req *ProjectionRequest) (*Projecti
 		// This happens when extra debt payments or large expenses occur
 		if netCashFlow < 0 {
 			shortfall := -netCashFlow
-			fmt.Printf("DEBUG: Negative cash flow of %.2f, withdrawing from assets\n", shortfall)
 
 			// Withdraw from asset accounts proportionally based on savings allocation
 			totalWithdrawn := 0.0
@@ -704,10 +714,50 @@ func convertToMonthlyPayment(paymentAmount float64, frequency string) float64 {
 	case "monthly":
 		// Already monthly
 		return paymentAmount
+	case "quarterly":
+		// 4 quarters / 12 months
+		return paymentAmount * 4.0 / 12.0
+	case "annually":
+		// 1 per year / 12 months
+		return paymentAmount / 12.0
 	default:
 		// Default to monthly
 		return paymentAmount
 	}
+}
+
+// RecurringExpense represents a recurring expense from the transaction service
+type RecurringExpense struct {
+	ID          string  `json:"id"`
+	Amount      float64 `json:"amount"`
+	Frequency   string  `json:"frequency"`
+	IsActive    bool    `json:"is_active"`
+}
+
+// getRecurringExpensesTotal fetches and calculates monthly total from recurring expenses
+func getRecurringExpensesTotal(ctx context.Context) (float64, error) {
+	// Query the transaction database
+	resp, err := transactionDB.Query(ctx, `
+		SELECT amount, frequency
+		FROM recurring_expenses
+		WHERE is_active = true
+	`)
+	if err != nil {
+		return 0, fmt.Errorf("failed to query recurring expenses: %w", err)
+	}
+	defer resp.Close()
+
+	var total float64
+	for resp.Next() {
+		var amount float64
+		var frequency string
+		if err := resp.Scan(&amount, &frequency); err != nil {
+			return 0, fmt.Errorf("failed to scan recurring expense: %w", err)
+		}
+		total += convertToMonthlyPayment(amount, frequency)
+	}
+
+	return total, nil
 }
 
 // calculateTax calculates tax based on progressive tax brackets
