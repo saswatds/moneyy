@@ -19,7 +19,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { IconArrowLeft, IconPlus, IconRefresh } from '@tabler/icons-react';
+import { IconArrowLeft, IconPlus, IconRefresh, IconChevronLeft, IconChevronRight } from '@tabler/icons-react';
 import {
   LineChart,
   Line,
@@ -53,6 +53,8 @@ export function MortgageDashboard() {
   });
   const [selectedPaymentNumber, setSelectedPaymentNumber] = useState<number | null>(null);
   const [recordingBulk, setRecordingBulk] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const paymentsPerPage = 10;
 
   useEffect(() => {
     if (accountId) {
@@ -600,104 +602,116 @@ export function MortgageDashboard() {
         </Card>
       </div>
 
-      {/* Drawdown Chart */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Mortgage Balance Over Time</CardTitle>
-          <CardDescription>
-            Projected amortization schedule showing principal balance drawdown
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="h-[400px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" />
-                <YAxis />
-                <Tooltip
-                  formatter={(value: number) => formatCurrency(value)}
-                  labelStyle={{ color: '#000' }}
-                />
-                <Legend />
-                {todayPayment !== null && todayChartIndex >= 0 && (
-                  <ReferenceLine
-                    x={todayChartIndex}
-                    stroke="#8b5cf6"
-                    strokeWidth={2}
-                    strokeDasharray="5 5"
-                    label={{ value: 'Today', position: 'top', fill: '#8b5cf6' }}
-                    isFront={true}
+      {/* Charts - Side by Side */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Drawdown Chart */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Mortgage Balance Over Time</CardTitle>
+            <CardDescription>
+              Projected amortization schedule showing principal balance drawdown
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[400px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" />
+                  <YAxis />
+                  <Tooltip
+                    formatter={(value: number) => formatCurrency(value)}
+                    labelStyle={{ color: '#000' }}
                   />
-                )}
-                <Line
-                  type="monotone"
-                  dataKey="balance"
-                  stroke="#ef4444"
-                  name="Balance"
-                  strokeWidth={2}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </CardContent>
-      </Card>
+                  <Legend />
+                  {todayPayment !== null && todayChartIndex >= 0 && (
+                    <ReferenceLine
+                      x={todayChartIndex}
+                      stroke="#8b5cf6"
+                      strokeWidth={2}
+                      strokeDasharray="5 5"
+                      label={{ value: 'Today', position: 'top', fill: '#8b5cf6' }}
+                      isFront={true}
+                    />
+                  )}
+                  <Line
+                    type="monotone"
+                    dataKey="balance"
+                    stroke="#ef4444"
+                    name="Balance"
+                    strokeWidth={2}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
 
-      {/* Principal vs Interest Chart */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Principal vs Interest Breakdown</CardTitle>
-          <CardDescription>
-            See how your payment is split between principal and interest over time
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="h-[400px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" />
-                <YAxis />
-                <Tooltip
-                  formatter={(value: number) => formatCurrency(value)}
-                  labelStyle={{ color: '#000' }}
-                />
-                <Legend />
-                {todayPayment !== null && todayChartIndex >= 0 && (
-                  <ReferenceLine
-                    x={todayChartIndex}
-                    stroke="#8b5cf6"
-                    strokeWidth={2}
-                    strokeDasharray="5 5"
-                    label={{ value: 'Today', position: 'top', fill: '#8b5cf6' }}
-                    isFront={true}
+        {/* Principal vs Interest Chart */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Principal vs Interest Breakdown</CardTitle>
+            <CardDescription>
+              See how your payment is split between principal and interest over time
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[400px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" />
+                  <YAxis />
+                  <Tooltip
+                    formatter={(value: number) => formatCurrency(value)}
+                    labelStyle={{ color: '#000' }}
                   />
-                )}
-                <Line
-                  type="monotone"
-                  dataKey="principal"
-                  stroke="#10b981"
-                  name="Principal"
-                  strokeWidth={2}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="interest"
-                  stroke="#f59e0b"
-                  name="Interest"
-                  strokeWidth={2}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </CardContent>
-      </Card>
+                  <Legend />
+                  {todayPayment !== null && todayChartIndex >= 0 && (
+                    <ReferenceLine
+                      x={todayChartIndex}
+                      stroke="#8b5cf6"
+                      strokeWidth={2}
+                      strokeDasharray="5 5"
+                      label={{ value: 'Today', position: 'top', fill: '#8b5cf6' }}
+                      isFront={true}
+                    />
+                  )}
+                  <Line
+                    type="monotone"
+                    dataKey="principal"
+                    stroke="#10b981"
+                    name="Principal"
+                    strokeWidth={2}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="interest"
+                    stroke="#f59e0b"
+                    name="Interest"
+                    strokeWidth={2}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Recent Payments */}
       <Card>
         <CardHeader>
-          <CardTitle>Recent Payments</CardTitle>
-          <CardDescription>History of recorded mortgage payments</CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Recent Payments</CardTitle>
+              <CardDescription>History of recorded mortgage payments</CardDescription>
+            </div>
+            {payments.length > 0 && (
+              <div className="text-sm text-muted-foreground">
+                {payments.length} total payment{payments.length !== 1 ? 's' : ''}
+              </div>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -726,28 +740,35 @@ export function MortgageDashboard() {
               </thead>
               <tbody>
                 {payments.length > 0 ? (
-                  payments.slice(0, 10).map((payment) => (
-                    <tr key={payment.id} className="border-b border-border last:border-0">
-                      <td className="px-4 py-3 text-sm">
-                        {formatDate(payment.payment_date)}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-right">
-                        {formatCurrency(payment.payment_amount)}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-right text-green-600 dark:text-green-400">
-                        {formatCurrency(payment.principal_amount)}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-right text-red-600 dark:text-red-400">
-                        {formatCurrency(payment.interest_amount)}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-right">
-                        {payment.extra_payment > 0 ? formatCurrency(payment.extra_payment) : '-'}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-right font-medium">
-                        {formatCurrency(Math.abs(payment.balance_after))}
-                      </td>
-                    </tr>
-                  ))
+                  (() => {
+                    const totalPages = Math.ceil(payments.length / paymentsPerPage);
+                    const startIndex = (currentPage - 1) * paymentsPerPage;
+                    const endIndex = startIndex + paymentsPerPage;
+                    const currentPayments = payments.slice(startIndex, endIndex);
+
+                    return currentPayments.map((payment) => (
+                      <tr key={payment.id} className="border-b border-border last:border-0">
+                        <td className="px-4 py-3 text-sm">
+                          {formatDate(payment.payment_date)}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-right">
+                          {formatCurrency(payment.payment_amount)}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-right text-green-600 dark:text-green-400">
+                          {formatCurrency(payment.principal_amount)}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-right text-red-600 dark:text-red-400">
+                          {formatCurrency(payment.interest_amount)}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-right">
+                          {payment.extra_payment > 0 ? formatCurrency(payment.extra_payment) : '-'}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-right font-medium">
+                          {formatCurrency(Math.abs(payment.balance_after))}
+                        </td>
+                      </tr>
+                    ));
+                  })()
                 ) : (
                   <tr>
                     <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
@@ -758,6 +779,42 @@ export function MortgageDashboard() {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          {payments.length > paymentsPerPage && (() => {
+            const totalPages = Math.ceil(payments.length / paymentsPerPage);
+            const startIndex = (currentPage - 1) * paymentsPerPage + 1;
+            const endIndex = Math.min(currentPage * paymentsPerPage, payments.length);
+
+            return (
+              <div className="flex items-center justify-between mt-4 pt-4 border-t border-border">
+                <div className="text-sm text-muted-foreground">
+                  Showing {startIndex} to {endIndex} of {payments.length}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    <IconChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <div className="text-sm">
+                    Page {currentPage} of {totalPages}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                  >
+                    <IconChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            );
+          })()}
         </CardContent>
       </Card>
     </div>

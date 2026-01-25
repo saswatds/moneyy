@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useCreateAccount } from '@/hooks/use-accounts';
+import { getAllAccountTypes } from '@/lib/account-types';
 import {
   Card,
   CardContent,
@@ -31,23 +32,13 @@ import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { IconArrowLeft } from '@tabler/icons-react';
 
-const accountTypes = [
-  { value: 'checking', label: 'Checking Account', isAsset: true },
-  { value: 'savings', label: 'Savings Account', isAsset: true },
-  { value: 'cash', label: 'Cash', isAsset: true },
-  { value: 'brokerage', label: 'Brokerage Account', isAsset: true },
-  { value: 'tfsa', label: 'TFSA', isAsset: true },
-  { value: 'rrsp', label: 'RRSP', isAsset: true },
-  { value: 'crypto', label: 'Cryptocurrency', isAsset: true },
-  { value: 'real_estate', label: 'Real Estate', isAsset: true },
-  { value: 'vehicle', label: 'Vehicle', isAsset: true },
-  { value: 'collectible', label: 'Collectible', isAsset: true },
-  { value: 'credit_card', label: 'Credit Card', isAsset: false },
-  { value: 'loan', label: 'Loan', isAsset: false },
-  { value: 'mortgage', label: 'Mortgage', isAsset: false },
-  { value: 'line_of_credit', label: 'Line of Credit', isAsset: false },
-  { value: 'other', label: 'Other', isAsset: true },
-];
+// Get account types from framework
+const accountTypes = getAllAccountTypes().map(config => ({
+  value: config.type,
+  label: config.label,
+  isAsset: config.isAsset,
+  description: config.description,
+}));
 
 const currencies = [
   { value: 'CAD', label: 'CAD - Canadian Dollar' },
