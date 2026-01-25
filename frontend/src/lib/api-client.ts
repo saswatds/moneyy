@@ -293,6 +293,93 @@ export interface CreateDepreciationEntryRequest {
   notes?: string;
 }
 
+export interface ProjectionConfig {
+  time_horizon_years: number;
+  inflation_rate: number;
+  monthly_income: number;
+  annual_income_growth: number;
+  monthly_expenses: number;
+  annual_expense_growth: number;
+  monthly_savings: number;
+  investment_returns: Record<string, number>;
+  extra_debt_payments: Record<string, number>;
+  one_time_expenses: OneTimeExpense[];
+  one_time_incomes: OneTimeIncome[];
+  asset_appreciation: Record<string, number>;
+  tax_rate: number;
+  savings_allocation: Record<string, number>;
+}
+
+export interface OneTimeExpense {
+  date: string;
+  amount: number;
+  description: string;
+}
+
+export interface OneTimeIncome {
+  date: string;
+  amount: number;
+  description: string;
+}
+
+export interface ProjectionScenario {
+  id: string;
+  user_id: string;
+  name: string;
+  is_default: boolean;
+  config: ProjectionConfig;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DataPoint {
+  date: string;
+  value: number;
+}
+
+export interface CashFlowPoint {
+  date: string;
+  income: number;
+  expenses: number;
+  net: number;
+}
+
+export interface AssetBreakdownPoint {
+  date: string;
+  assets: Record<string, number>;
+}
+
+export interface DebtPayoffPoint {
+  date: string;
+  debts: Record<string, number>;
+  total_debt: number;
+}
+
+export interface ProjectionResponse {
+  net_worth: DataPoint[];
+  assets: DataPoint[];
+  liabilities: DataPoint[];
+  cash_flow: CashFlowPoint[];
+  asset_breakdown: AssetBreakdownPoint[];
+  debt_payoff: DebtPayoffPoint[];
+}
+
+export interface CalculateProjectionRequest {
+  config: ProjectionConfig;
+}
+
+export interface CreateScenarioRequest {
+  name: string;
+  is_default: boolean;
+  config: ProjectionConfig;
+}
+
+export interface UpdateScenarioRequest {
+  name?: string;
+  is_default?: boolean;
+  config?: ProjectionConfig;
+}
+
 class ApiClient {
   private baseUrl: string;
 
@@ -523,6 +610,42 @@ class ApiClient {
   async syncAssetBalance(accountId: string): Promise<void> {
     return this.request(`/accounts/${accountId}/asset/sync-balance`, {
       method: 'POST',
+    });
+  }
+
+  // Projection endpoints
+  async calculateProjection(data: CalculateProjectionRequest): Promise<ProjectionResponse> {
+    return this.request('/projections/calculate', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async createScenario(data: CreateScenarioRequest): Promise<ProjectionScenario> {
+    return this.request('/projections/scenarios', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getScenarios(): Promise<{ scenarios: ProjectionScenario[] }> {
+    return this.request('/projections/scenarios');
+  }
+
+  async getScenario(id: string): Promise<ProjectionScenario> {
+    return this.request(`/projections/scenarios/${id}`);
+  }
+
+  async updateScenario(id: string, data: UpdateScenarioRequest): Promise<ProjectionScenario> {
+    return this.request(`/projections/scenarios/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteScenario(id: string): Promise<{ success: boolean }> {
+    return this.request(`/projections/scenarios/${id}`, {
+      method: 'DELETE',
     });
   }
 }

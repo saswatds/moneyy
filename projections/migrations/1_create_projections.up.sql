@@ -1,17 +1,16 @@
--- Create projections table
-CREATE TABLE projections (
+-- Create projection_scenarios table
+CREATE TABLE projection_scenarios (
     id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
-    account_id TEXT NOT NULL,
-    annual_return_rate DECIMAL(5, 2) NOT NULL,
-    monthly_contribution DECIMAL(20, 2) NOT NULL DEFAULT 0,
-    projection_type TEXT NOT NULL CHECK (projection_type IN ('historical', 'manual', 'contribution')),
-    is_active BOOLEAN NOT NULL DEFAULT true,
+    user_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    is_default BOOLEAN NOT NULL DEFAULT false,
+    config JSONB NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
--- Create index on account_id for faster queries
-CREATE INDEX idx_projections_account_id ON projections(account_id);
+-- Create index on user_id for faster queries
+CREATE INDEX idx_projection_scenarios_user_id ON projection_scenarios(user_id);
 
--- Create index on is_active for active projections
-CREATE INDEX idx_projections_is_active ON projections(is_active);
+-- Create index on is_default for quick default lookup
+CREATE INDEX idx_projection_scenarios_is_default ON projection_scenarios(is_default) WHERE is_default = true;
