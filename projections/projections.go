@@ -299,8 +299,6 @@ func CalculateProjection(ctx context.Context, req *ProjectionRequest) (*Projecti
 					}
 					accountBalances[accountID] = balance - withdrawAmount
 					totalWithdrawn += withdrawAmount
-					fmt.Printf("DEBUG: Withdrew %.2f from %s (balance: %.2f -> %.2f)\n",
-						withdrawAmount, account.Type, balance, accountBalances[accountID])
 				}
 			}
 
@@ -403,8 +401,7 @@ func CalculateProjection(ctx context.Context, req *ProjectionRequest) (*Projecti
 				if !hasDetailedTracking {
 					// Skip - don't include in projection liabilities
 					if month == 0 {
-						fmt.Printf("DEBUG: Skipping liability account %s (balance=%.2f) - no detailed tracking\n", accountID, math.Abs(balance))
-					}
+						}
 				}
 			}
 		}
@@ -437,18 +434,11 @@ func CalculateProjection(ctx context.Context, req *ProjectionRequest) (*Projecti
 					if principal >= balance {
 						principal = balance
 						newBalance = 0.0
-						fmt.Printf("DEBUG Mortgage %s PAID OFF: Month=%d, FinalBalance=%.2f, Payment=%.2f, Interest=%.2f, Principal=%.2f\n",
-							m.AccountID, month, balance, payment, interest, principal)
 					} else {
 						newBalance = balance - principal
 						if newBalance < 1.0 {
 							// If less than $1 remaining, consider it paid off
 							newBalance = 0
-						}
-
-						if month == 0 || (month > 0 && month <= 24) || newBalance == 0 || newBalance < 500 {
-							fmt.Printf("DEBUG Mortgage %s: Month=%d, Freq=%s, BiweeklyPmt=%.2f, MonthlyPmt=%.2f, Balance=%.2f, Interest=%.2f, Principal=%.2f, NewBalance=%.2f\n",
-								m.AccountID, month, m.PaymentFrequency, m.PaymentAmount, monthlyPayment, balance, interest, principal, newBalance)
 						}
 					}
 
@@ -485,18 +475,11 @@ func CalculateProjection(ctx context.Context, req *ProjectionRequest) (*Projecti
 					if principal >= balance {
 						principal = balance
 						newBalance = 0.0
-						fmt.Printf("DEBUG Loan %s PAID OFF: Month=%d, FinalBalance=%.2f, Payment=%.2f, Interest=%.2f, Principal=%.2f\n",
-							l.AccountID, month, balance, payment, interest, principal)
 					} else {
 						newBalance = balance - principal
 						if newBalance < 1.0 {
 							// If less than $1 remaining, consider it paid off
 							newBalance = 0
-						}
-
-						if month == 0 || (month > 0 && month <= 36) || newBalance == 0 || newBalance < 500 {
-							fmt.Printf("DEBUG Loan %s: Month=%d, Freq=%s, BiweeklyPmt=%.2f, MonthlyPmt=%.2f, Balance=%.2f, Interest=%.2f, Principal=%.2f, NewBalance=%.2f\n",
-								l.AccountID, month, l.PaymentFrequency, l.PaymentAmount, monthlyPayment, balance, interest, principal, newBalance)
 						}
 					}
 
@@ -533,13 +516,6 @@ func CalculateProjection(ctx context.Context, req *ProjectionRequest) (*Projecti
 			TotalDebt: liabilityTotal,
 		})
 	}
-
-	// Final debug: show final debt balances
-	fmt.Printf("\nDEBUG: Final debt balances after %d months:\n", totalMonths)
-	for accountID, balance := range debtBalances {
-		fmt.Printf("  %s: %.2f\n", accountID, balance)
-	}
-	fmt.Printf("  Total liabilities: %.2f\n", response.Liabilities[len(response.Liabilities)-1].Value)
 
 	return response, nil
 }
