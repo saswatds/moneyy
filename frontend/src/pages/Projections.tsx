@@ -26,7 +26,8 @@ import {
   IconTrash,
   IconDeviceFloppy,
   IconFolder,
-  IconBulb
+  IconBulb,
+  IconCopy
 } from '@tabler/icons-react';
 import {
   Select,
@@ -147,10 +148,27 @@ export function Projections() {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => apiClient.deleteScenario(id),
     onSuccess: () => {
-      if (currentScenarioId) {
-        setCurrentScenarioId(null);
-        setConfig(defaultConfig);
-      }
+      setCurrentScenarioId(null);
+      setConfig(defaultConfig);
+      refetchScenarios();
+      // Trigger recalculation with default config
+      setTimeout(() => handleCalculate(), 100);
+    },
+  });
+
+  const handleDeleteScenario = () => {
+    if (currentScenarioId && confirm('Are you sure you want to delete this scenario?')) {
+      deleteMutation.mutate(currentScenarioId);
+    }
+  };
+
+  // Clone scenario
+  const cloneMutation = useMutation({
+    mutationFn: (name: string) => apiClient.createScenario({ name, is_default: false, config }),
+    onSuccess: (data) => {
+      setCurrentScenarioId(data.id);
+      setCloneDialogOpen(false);
+      setCloneName('');
       refetchScenarios();
     },
   });
@@ -173,12 +191,24 @@ export function Projections() {
     if (scenario) {
       setConfig(scenario.config);
       setCurrentScenarioId(scenario.id);
+      // Trigger recalculation with new config
+      setTimeout(() => handleCalculate(), 100);
     }
   };
 
   const handleNewScenario = () => {
     setConfig(defaultConfig);
     setCurrentScenarioId(null);
+    // Trigger recalculation with default config
+    setTimeout(() => handleCalculate(), 100);
+  };
+
+  const handleCloneScenario = () => {
+    const currentScenario = scenariosData?.scenarios.find(s => s.id === currentScenarioId);
+    if (currentScenario) {
+      setCloneName(`${currentScenario.name} (Copy)`);
+      setCloneDialogOpen(true);
+    }
   };
 
   // Load default scenario on mount
@@ -268,6 +298,9 @@ export function Projections() {
   const netWorthGrowth = finalNetWorth - initialNetWorth;
   const finalDebt = debtData[debtData.length - 1]?.totalDebt || 0;
 
+  // Calculate inflation-adjusted "real value" (in today's dollars)
+  const realNetWorth = finalNetWorth / Math.pow(1 + config.inflation_rate, config.time_horizon_years);
+
   // Map events to chart dates
   const eventMarkers = config.events.map(event => {
     const eventDate = formatDate(event.date);
@@ -295,8 +328,15 @@ export function Projections() {
     }
   };
 
+  // Helper function to calculate years from now
+  const getYearsFromNow = (futureDate: Date): number => {
+    const now = new Date();
+    const diffMs = futureDate.getTime() - now.getTime();
+    return diffMs / (1000 * 60 * 60 * 24 * 365.25);
+  };
+
   // Calculate interesting points
-  const interestingPoints: Array<{ date: string; relativeTime: string; description: string; icon: string }> = [];
+  const interestingPoints: Array<{ date: string; relativeTime: string; description: string; icon: string; realValue?: number }> = [];
 
   if (projectionData) {
     // When net worth exceeds liabilities
@@ -347,11 +387,15 @@ export function Projections() {
       const milestoneIdx = projectionData.net_worth.findIndex(point => point.value >= milestone);
       if (milestoneIdx > 0) {
         const milestoneDate = new Date(projectionData.net_worth[milestoneIdx].date);
+        const yearsFromNow = getYearsFromNow(milestoneDate);
+        const realValue = milestone / Math.pow(1 + config.inflation_rate, yearsFromNow);
+
         interestingPoints.push({
           date: milestoneDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
           relativeTime: getRelativeTime(milestoneDate),
           description: `Net worth reaches ${formatCurrency(milestone)}`,
           icon: '🎯',
+          realValue: realValue,
         });
       }
     });
@@ -401,8 +445,51 @@ export function Projections() {
               ))}
             </SelectContent>
           </Select>
+          {currentScenarioId && (
+            <>
+              <Button onClick={handleCloneScenario} variant="outline" size="sm">
+                <IconCopy className="h-4 w-4 mr-2" />
+                Clone
+              </Button>
+              <Button onClick={handleDeleteScenario} variant="outline" size="sm" className="text-destructive hover:text-destructive">
+                <IconTrash className="h-4 w-4 mr-2" />
+                Delete
+              </Button>
+            </>
+          )}
         </div>
       </div>
+
+      {/* Clone Scenario Dialog */}
+      <Dialog open={cloneDialogOpen} onOpenChange={setCloneDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Clone Scenario</DialogTitle>
+            <DialogDescription>
+              Create a copy of the current scenario
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="cloneName">Scenario Name</Label>
+              <Input
+                id="cloneName"
+                placeholder="e.g., My Scenario (Copy)"
+                value={cloneName}
+                onChange={(e) => setCloneName(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setCloneDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={() => cloneMutation.mutate(cloneName)} disabled={!cloneName || cloneMutation.isPending}>
+              {cloneMutation.isPending ? 'Cloning...' : 'Clone Scenario'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
         <DialogContent>
@@ -520,14 +607,14 @@ export function Projections() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
-                  Savings Rate
+                  Inflation Adj. Net Worth
                 </CardTitle>
-                <IconCash className="h-4 w-4 text-muted-foreground" />
+                <IconTrendingUp className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{(config.monthly_savings_rate * 100).toFixed(0)}%</div>
+                <div className="text-2xl font-bold">{formatCurrency(realNetWorth)}</div>
                 <p className="text-xs text-muted-foreground">
-                  Of net income saved
+                  In today's dollars
                 </p>
               </CardContent>
             </Card>
