@@ -298,6 +298,39 @@ export interface TaxBracket {
   rate: number;
 }
 
+export type EventType =
+  | 'one_time_income'
+  | 'one_time_expense'
+  | 'extra_debt_payment'
+  | 'salary_change'
+  | 'expense_level_change'
+  | 'savings_rate_change';
+
+export interface EventParameters {
+  // One-time financial
+  amount?: number;
+  category?: string;
+  account_id?: string;
+
+  // Recurring changes
+  new_salary?: number;
+  new_salary_growth?: number;
+  new_expenses?: number;
+  expense_change?: number;
+  expense_change_type?: 'absolute' | 'relative_amount' | 'relative_percent';
+  new_expense_growth?: number;
+  new_savings_rate?: number;
+  reason?: string;
+}
+
+export type Event = {
+  id: string;
+  type: EventType;
+  date: string;
+  description: string;
+  parameters: EventParameters;
+};
+
 export interface ProjectionConfig {
   time_horizon_years: number;
   inflation_rate: number;
@@ -310,22 +343,9 @@ export interface ProjectionConfig {
   monthly_savings_rate: number; // % of net income
   investment_returns: Record<string, number>;
   extra_debt_payments: Record<string, number>;
-  one_time_expenses: OneTimeExpense[];
-  one_time_incomes: OneTimeIncome[];
   asset_appreciation: Record<string, number>;
   savings_allocation: Record<string, number>;
-}
-
-export interface OneTimeExpense {
-  date: string;
-  amount: number;
-  description: string;
-}
-
-export interface OneTimeIncome {
-  date: string;
-  amount: number;
-  description: string;
+  events: Event[];
 }
 
 export interface ProjectionScenario {
