@@ -210,6 +210,7 @@ docker compose -f docker-compose.prod.yml down
 Services:
 - App (Frontend + API): http://localhost:4000
 - Database: localhost:5432
+- Database data stored in: `./data/postgres/`
 
 ## Build & Publish
 

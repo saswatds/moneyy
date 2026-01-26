@@ -44,6 +44,9 @@ logs/
 # Database backups
 backups/*.sql
 
+# Database data
+data/postgres/
+
 # Docker
 *.bak
 docker-compose.override.yml
