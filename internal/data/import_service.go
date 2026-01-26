@@ -207,12 +207,17 @@ func (s *ImportService) importInTransaction(ctx context.Context, userID string, 
 		Isolation: sql.LevelSerializable,
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to start transaction: %w", err)
 	}
 
 	defer func() {
 		if result.Success {
-			tx.Commit()
+			if err := tx.Commit(); err != nil {
+				result.Success = false
+				result.Errors = append(result.Errors, ImportError{
+					Message: fmt.Sprintf("Failed to commit transaction: %v", err),
+				})
+			}
 		} else {
 			tx.Rollback()
 		}
@@ -246,27 +251,40 @@ func (s *ImportService) importInTransaction(ctx context.Context, userID string, 
 				result.Success = false
 				result.Errors = append(result.Errors, ImportError{
 					Table:   table.name,
-					Message: err.Error(),
+					Message: fmt.Sprintf("Import failed: %v", err),
 				})
-				return result, nil
+				// Continue processing other tables to collect all errors
+				continue
 			}
 			result.Summary[table.name] = summary
+
+			// Log summary for debugging
+			if summary.Errors > 0 || summary.Skipped > 0 {
+				result.Warnings = append(result.Warnings,
+					fmt.Sprintf("%s: %d created, %d updated, %d errors, %d skipped",
+						table.name, summary.Created, summary.Updated, summary.Errors, summary.Skipped))
+			}
 		}
+	}
+
+	// If we had any errors, fail the whole import
+	if len(result.Errors) > 0 {
+		result.Success = false
 	}
 
 	return result, nil
 }
 
 // importAccounts imports account records
-func (s *ImportService) importAccounts(ctx context.Context, tx *sql.Tx, userID string, data []byte, mode string) (ImportTableSummary, error) {
+func (s *ImportService) importAccounts(ctx context.Context, tx *sql.Tx, userID string, data []byte, _ string) (ImportTableSummary, error) {
 	var accounts []Account
 	if err := json.Unmarshal(data, &accounts); err != nil {
-		return ImportTableSummary{}, err
+		return ImportTableSummary{}, fmt.Errorf("failed to parse accounts JSON: %w", err)
 	}
 
 	summary := ImportTableSummary{}
 
-	for _, acc := range accounts {
+	for i, acc := range accounts {
 		// Override user_id with current user
 		acc.UserID = userID
 
@@ -290,6 +308,10 @@ func (s *ImportService) importAccounts(ctx context.Context, tx *sql.Tx, userID s
 		)
 		if err != nil {
 			summary.Errors++
+			// Return error with context about which record failed
+			if summary.Errors > 5 {
+				return summary, fmt.Errorf("too many errors (stopped at record %d): last error: %w", i+1, err)
+			}
 			continue
 		}
 
@@ -301,11 +323,15 @@ func (s *ImportService) importAccounts(ctx context.Context, tx *sql.Tx, userID s
 		}
 	}
 
+	if summary.Errors > 0 {
+		return summary, fmt.Errorf("completed with %d errors out of %d records", summary.Errors, len(accounts))
+	}
+
 	return summary, nil
 }
 
 // importBalances imports balance records
-func (s *ImportService) importBalances(ctx context.Context, tx *sql.Tx, userID string, data []byte, mode string) (ImportTableSummary, error) {
+func (s *ImportService) importBalances(ctx context.Context, tx *sql.Tx, userID string, data []byte, _ string) (ImportTableSummary, error) {
 	var balances []Balance
 	if err := json.Unmarshal(data, &balances); err != nil {
 		return ImportTableSummary{}, err
@@ -343,7 +369,7 @@ func (s *ImportService) importBalances(ctx context.Context, tx *sql.Tx, userID s
 }
 
 // importHoldings imports holding records
-func (s *ImportService) importHoldings(ctx context.Context, tx *sql.Tx, userID string, data []byte, mode string) (ImportTableSummary, error) {
+func (s *ImportService) importHoldings(ctx context.Context, tx *sql.Tx, userID string, data []byte, _ string) (ImportTableSummary, error) {
 	var holdings []Holding
 	if err := json.Unmarshal(data, &holdings); err != nil {
 		return ImportTableSummary{}, err
@@ -389,7 +415,7 @@ func (s *ImportService) importHoldings(ctx context.Context, tx *sql.Tx, userID s
 }
 
 // importHoldingTransactions imports holding transaction records
-func (s *ImportService) importHoldingTransactions(ctx context.Context, tx *sql.Tx, userID string, data []byte, mode string) (ImportTableSummary, error) {
+func (s *ImportService) importHoldingTransactions(ctx context.Context, tx *sql.Tx, userID string, data []byte, _ string) (ImportTableSummary, error) {
 	var transactions []HoldingTransaction
 	if err := json.Unmarshal(data, &transactions); err != nil {
 		return ImportTableSummary{}, err
@@ -431,7 +457,7 @@ func (s *ImportService) importHoldingTransactions(ctx context.Context, tx *sql.T
 }
 
 // importMortgageDetails imports mortgage details records
-func (s *ImportService) importMortgageDetails(ctx context.Context, tx *sql.Tx, userID string, data []byte, mode string) (ImportTableSummary, error) {
+func (s *ImportService) importMortgageDetails(ctx context.Context, tx *sql.Tx, userID string, data []byte, _ string) (ImportTableSummary, error) {
 	var details []MortgageDetails
 	if err := json.Unmarshal(data, &details); err != nil {
 		return ImportTableSummary{}, err
@@ -482,7 +508,7 @@ func (s *ImportService) importMortgageDetails(ctx context.Context, tx *sql.Tx, u
 }
 
 // importMortgagePayments imports mortgage payment records
-func (s *ImportService) importMortgagePayments(ctx context.Context, tx *sql.Tx, userID string, data []byte, mode string) (ImportTableSummary, error) {
+func (s *ImportService) importMortgagePayments(ctx context.Context, tx *sql.Tx, userID string, data []byte, _ string) (ImportTableSummary, error) {
 	var payments []MortgagePayment
 	if err := json.Unmarshal(data, &payments); err != nil {
 		return ImportTableSummary{}, err
@@ -493,19 +519,20 @@ func (s *ImportService) importMortgagePayments(ctx context.Context, tx *sql.Tx, 
 	for _, mp := range payments {
 		query := `
 			INSERT INTO mortgage_payments (id, account_id, payment_date, payment_amount, principal_amount, interest_amount, extra_payment, balance_after, notes, created_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 			ON CONFLICT (id) DO UPDATE SET
 				payment_date = EXCLUDED.payment_date,
 				payment_amount = EXCLUDED.payment_amount,
 				principal_amount = EXCLUDED.principal_amount,
 				interest_amount = EXCLUDED.interest_amount,
+				extra_payment = EXCLUDED.extra_payment,
 				balance_after = EXCLUDED.balance_after,
 				notes = EXCLUDED.notes
 		`
 
 		result, err := tx.ExecContext(ctx, query,
 			mp.ID, mp.AccountID, mp.PaymentDate, mp.PaymentAmount,
-			mp.PrincipalAmount, mp.InterestAmount, mp.BalanceAfter,
+			mp.PrincipalAmount, mp.InterestAmount, mp.ExtraPayment, mp.BalanceAfter,
 			mp.Notes, mp.CreatedAt,
 		)
 		if err != nil {
@@ -525,7 +552,7 @@ func (s *ImportService) importMortgagePayments(ctx context.Context, tx *sql.Tx, 
 }
 
 // importLoanDetails imports loan details records
-func (s *ImportService) importLoanDetails(ctx context.Context, tx *sql.Tx, userID string, data []byte, mode string) (ImportTableSummary, error) {
+func (s *ImportService) importLoanDetails(ctx context.Context, tx *sql.Tx, userID string, data []byte, _ string) (ImportTableSummary, error) {
 	var details []LoanDetails
 	if err := json.Unmarshal(data, &details); err != nil {
 		return ImportTableSummary{}, err
@@ -572,7 +599,7 @@ func (s *ImportService) importLoanDetails(ctx context.Context, tx *sql.Tx, userI
 }
 
 // importLoanPayments imports loan payment records
-func (s *ImportService) importLoanPayments(ctx context.Context, tx *sql.Tx, userID string, data []byte, mode string) (ImportTableSummary, error) {
+func (s *ImportService) importLoanPayments(ctx context.Context, tx *sql.Tx, userID string, data []byte, _ string) (ImportTableSummary, error) {
 	var payments []LoanPayment
 	if err := json.Unmarshal(data, &payments); err != nil {
 		return ImportTableSummary{}, err
@@ -616,7 +643,7 @@ func (s *ImportService) importLoanPayments(ctx context.Context, tx *sql.Tx, user
 }
 
 // importAssetDetails imports asset details records
-func (s *ImportService) importAssetDetails(ctx context.Context, tx *sql.Tx, userID string, data []byte, mode string) (ImportTableSummary, error) {
+func (s *ImportService) importAssetDetails(ctx context.Context, tx *sql.Tx, userID string, data []byte, _ string) (ImportTableSummary, error) {
 	var details []AssetDetails
 	if err := json.Unmarshal(data, &details); err != nil {
 		return ImportTableSummary{}, err
@@ -666,7 +693,7 @@ func (s *ImportService) importAssetDetails(ctx context.Context, tx *sql.Tx, user
 }
 
 // importAssetDepreciation imports asset depreciation entry records
-func (s *ImportService) importAssetDepreciation(ctx context.Context, tx *sql.Tx, userID string, data []byte, mode string) (ImportTableSummary, error) {
+func (s *ImportService) importAssetDepreciation(ctx context.Context, tx *sql.Tx, userID string, data []byte, _ string) (ImportTableSummary, error) {
 	var entries []AssetDepreciationEntry
 	if err := json.Unmarshal(data, &entries); err != nil {
 		return ImportTableSummary{}, err
@@ -706,7 +733,7 @@ func (s *ImportService) importAssetDepreciation(ctx context.Context, tx *sql.Tx,
 }
 
 // importRecurringExpenses imports recurring expense records
-func (s *ImportService) importRecurringExpenses(ctx context.Context, tx *sql.Tx, userID string, data []byte, mode string) (ImportTableSummary, error) {
+func (s *ImportService) importRecurringExpenses(ctx context.Context, tx *sql.Tx, userID string, data []byte, _ string) (ImportTableSummary, error) {
 	var expenses []RecurringExpense
 	if err := json.Unmarshal(data, &expenses); err != nil {
 		return ImportTableSummary{}, err
@@ -754,7 +781,7 @@ func (s *ImportService) importRecurringExpenses(ctx context.Context, tx *sql.Tx,
 }
 
 // importProjections imports projection scenario records
-func (s *ImportService) importProjections(ctx context.Context, tx *sql.Tx, userID string, data []byte, mode string) (ImportTableSummary, error) {
+func (s *ImportService) importProjections(ctx context.Context, tx *sql.Tx, userID string, data []byte, _ string) (ImportTableSummary, error) {
 	var scenarios []ProjectionScenario
 	if err := json.Unmarshal(data, &scenarios); err != nil {
 		return ImportTableSummary{}, err
@@ -797,7 +824,7 @@ func (s *ImportService) importProjections(ctx context.Context, tx *sql.Tx, userI
 }
 
 // importExchangeRates imports exchange rate records
-func (s *ImportService) importExchangeRates(ctx context.Context, tx *sql.Tx, userID string, data []byte, mode string) (ImportTableSummary, error) {
+func (s *ImportService) importExchangeRates(ctx context.Context, tx *sql.Tx, userID string, data []byte, _ string) (ImportTableSummary, error) {
 	var rates []ExchangeRate
 	if err := json.Unmarshal(data, &rates); err != nil {
 		return ImportTableSummary{}, err
@@ -856,7 +883,7 @@ func readZipFile(file *zip.File) ([]byte, error) {
 }
 
 // importConnections imports connection records (forced to 'disconnected' status since no credentials)
-func (s *ImportService) importConnections(ctx context.Context, tx *sql.Tx, userID string, data []byte, mode string) (ImportTableSummary, error) {
+func (s *ImportService) importConnections(ctx context.Context, tx *sql.Tx, userID string, data []byte, _ string) (ImportTableSummary, error) {
 	var connections []Connection
 	if err := json.Unmarshal(data, &connections); err != nil {
 		return ImportTableSummary{}, err
@@ -918,7 +945,7 @@ func (s *ImportService) importConnections(ctx context.Context, tx *sql.Tx, userI
 }
 
 // importSyncedAccounts imports synced account records (mapping between local and provider accounts)
-func (s *ImportService) importSyncedAccounts(ctx context.Context, tx *sql.Tx, userID string, data []byte, mode string) (ImportTableSummary, error) {
+func (s *ImportService) importSyncedAccounts(ctx context.Context, tx *sql.Tx, userID string, data []byte, _ string) (ImportTableSummary, error) {
 	var syncedAccounts []SyncedAccount
 	if err := json.Unmarshal(data, &syncedAccounts); err != nil {
 		return ImportTableSummary{}, err

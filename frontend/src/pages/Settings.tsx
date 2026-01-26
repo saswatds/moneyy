@@ -670,7 +670,7 @@ export function Settings() {
           }
         }
       }}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-6xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Import Data</DialogTitle>
             <DialogDescription>
@@ -704,48 +704,82 @@ export function Settings() {
                 <AlertTitle>
                   {importResult.success ? 'Import Successful' : 'Import Failed'}
                 </AlertTitle>
+                <AlertDescription>
+                  {importResult.success
+                    ? 'Your data has been imported successfully.'
+                    : 'Some errors occurred during import. Check the details below.'}
+                </AlertDescription>
               </Alert>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Import Summary</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Table</TableHead>
-                        <TableHead className="text-right">Created</TableHead>
-                        <TableHead className="text-right">Updated</TableHead>
-                        <TableHead className="text-right">Skipped</TableHead>
-                        <TableHead className="text-right">Errors</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {Object.entries(importResult.summary || {}).map(([table, stats]: [string, any]) => (
-                        <TableRow key={table}>
-                          <TableCell className="font-medium">{table}</TableCell>
-                          <TableCell className="text-right text-green-600">{stats.created}</TableCell>
-                          <TableCell className="text-right text-blue-600">{stats.updated}</TableCell>
-                          <TableCell className="text-right text-gray-600">{stats.skipped}</TableCell>
-                          <TableCell className="text-right text-red-600">{stats.errors}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
+              {/* Summary Table */}
+              {importResult.summary && Object.keys(importResult.summary).length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Import Summary</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="max-h-96 overflow-y-auto">
+                      <Table>
+                        <TableHeader className="sticky top-0 bg-background">
+                          <TableRow>
+                            <TableHead>Table</TableHead>
+                            <TableHead className="text-right">Created</TableHead>
+                            <TableHead className="text-right">Updated</TableHead>
+                            <TableHead className="text-right">Skipped</TableHead>
+                            <TableHead className="text-right">Errors</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {Object.entries(importResult.summary || {}).map(([table, stats]: [string, any]) => (
+                            <TableRow key={table}>
+                              <TableCell className="font-medium">{table}</TableCell>
+                              <TableCell className="text-right text-green-600 font-semibold">{stats.created || 0}</TableCell>
+                              <TableCell className="text-right text-blue-600 font-semibold">{stats.updated || 0}</TableCell>
+                              <TableCell className="text-right text-gray-600">{stats.skipped || 0}</TableCell>
+                              <TableCell className="text-right text-red-600 font-semibold">{stats.errors || 0}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
+              {/* Warnings */}
+              {importResult.warnings && importResult.warnings.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base text-yellow-600">Warnings</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="max-h-48 overflow-y-auto space-y-2">
+                      {importResult.warnings.map((warning: string, i: number) => (
+                        <div key={i} className="text-sm text-yellow-700 dark:text-yellow-500 p-2 bg-yellow-50 dark:bg-yellow-950 rounded border border-yellow-200 dark:border-yellow-800">
+                          {warning}
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Errors */}
               {importResult.errors && importResult.errors.length > 0 && (
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-base text-red-600">Errors</CardTitle>
+                    <CardTitle className="text-base text-red-600">Errors ({importResult.errors.length})</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-1 text-sm">
+                    <div className="max-h-64 overflow-y-auto space-y-2">
                       {importResult.errors.map((error: any, i: number) => (
-                        <div key={i} className="text-red-600">
-                          {error.table}: {error.message}
+                        <div key={i} className="p-3 bg-red-50 dark:bg-red-950 rounded border border-red-200 dark:border-red-800">
+                          <div className="font-semibold text-sm text-red-700 dark:text-red-400">
+                            {error.table ? `Table: ${error.table}` : 'General Error'}
+                          </div>
+                          <div className="text-sm text-red-600 dark:text-red-300 mt-1 font-mono break-words">
+                            {error.message}
+                          </div>
                         </div>
                       ))}
                     </div>
