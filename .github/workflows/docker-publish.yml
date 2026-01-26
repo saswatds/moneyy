@@ -140,12 +140,7 @@ jobs:
 
       - name: Create and push manifest
         run: |
-          # Create manifest for latest tag
+          # Create multi-arch manifest for latest tag
           docker buildx imagetools create -t ${{ steps.image.outputs.name }}:latest \
-            ${{ steps.image.outputs.name }}:amd64 \
-            ${{ steps.image.outputs.name }}:arm64
-
-          # Create manifest for main tag
-          docker buildx imagetools create -t ${{ steps.image.outputs.name }}:main \
             ${{ steps.image.outputs.name }}:amd64 \
             ${{ steps.image.outputs.name }}:arm64
