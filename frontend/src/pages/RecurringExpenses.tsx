@@ -66,18 +66,6 @@ const getFrequencyLabel = (frequency: string) => {
   }
 };
 
-const groupByCategory = (expenses: RecurringExpense[]) => {
-  const grouped = expenses.reduce((acc, expense) => {
-    if (!acc[expense.category]) {
-      acc[expense.category] = [];
-    }
-    acc[expense.category].push(expense);
-    return acc;
-  }, {} as Record<string, RecurringExpense[]>);
-
-  return Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b));
-};
-
 const getCategoryBadgeColor = (category: string) => {
   const colors: Record<string, string> = {
     housing: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
@@ -160,7 +148,6 @@ export function RecurringExpenses() {
     return true;
   });
 
-  const groupedExpenses = groupByCategory(filteredExpenses);
   const monthlyTotal = calculateMonthlyTotal(filteredExpenses);
   const annualTotal = monthlyTotal * 12;
 

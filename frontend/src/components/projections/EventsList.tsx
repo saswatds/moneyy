@@ -206,7 +206,7 @@ export function EventsList({ events, onEventsChange, baseConfig }: EventsListPro
     }
 
     // Create update function that modifies this event parameter in the config
-    const updateFn = (path: string, value: number): ProjectionConfig => {
+    const updateFn = (_path: string, value: number): ProjectionConfig => {
       const modifiedEvent: Event = {
         ...event,
         parameters: {
