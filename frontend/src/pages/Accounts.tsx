@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAccounts } from '@/hooks/use-accounts';
 import { useExchangeRates } from '@/hooks/use-exchange-rates';
@@ -7,6 +7,8 @@ import { apiClient } from '@/lib/api-client';
 import type { Account } from '@/lib/api-client';
 import { IconPlus, IconLink, IconEdit, IconTrash, IconAlertTriangle, IconInfoCircle } from '@tabler/icons-react';
 import { getAccountTypeBadgeColor, getAccountTypeLabel } from '@/lib/account-types';
+import { useDemoMode } from '@/lib/demo-context';
+import { WelcomeDialog } from '@/components/onboarding/WelcomeDialog';
 import {
   Card,
   CardContent,
@@ -53,12 +55,29 @@ export function Accounts() {
   const queryClient = useQueryClient();
   const { data, isLoading } = useAccounts();
   const { data: exchangeRates } = useExchangeRates();
+  const { isDemoMode } = useDemoMode();
   const [selectedCurrency, setSelectedCurrency] = useState<string>('CAD');
   const [filterType, setFilterType] = useState<string>('all');
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [editForm, setEditForm] = useState({ name: '', institution: '' });
   const [deleteAccount, setDeleteAccount] = useState<Account | null>(null);
+  const [showWelcomeDialog, setShowWelcomeDialog] = useState(false);
+
+  // Check if we should show the welcome dialog
+  useEffect(() => {
+    const hasSeenWelcome = localStorage.getItem('has_seen_welcome');
+    const accounts = data?.accounts || [];
+
+    // Show welcome dialog if:
+    // 1. User hasn't seen it before
+    // 2. No accounts exist
+    // 3. Not currently in demo mode
+    // 4. Data has finished loading
+    if (!hasSeenWelcome && accounts.length === 0 && !isDemoMode && !isLoading) {
+      setShowWelcomeDialog(true);
+    }
+  }, [data, isDemoMode, isLoading]);
 
   const formatCurrencyAccounting = (amount: number, currency: string) => {
     const formatted = new Intl.NumberFormat('en-US', {
@@ -672,6 +691,12 @@ export function Accounts() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Welcome Dialog */}
+      <WelcomeDialog
+        open={showWelcomeDialog}
+        onOpenChange={setShowWelcomeDialog}
+      />
     </div>
   );
 }

@@ -303,12 +303,6 @@ export function RecurringExpenses() {
                   ? 'No recurring expenses tracked yet.'
                   : 'No expenses match the selected filters.'}
               </p>
-              {activeExpenses.length === 0 && (
-                <Button onClick={() => setAddDialogOpen(true)}>
-                  <IconPlus className="h-4 w-4 mr-2" />
-                  Add Your First Expense
-                </Button>
-              )}
             </div>
           ) : (
             <Table>

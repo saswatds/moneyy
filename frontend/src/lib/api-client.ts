@@ -523,6 +523,11 @@ class ApiClient {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
+    // Add demo mode header if enabled
+    if (localStorage.getItem('demo_mode') === 'true') {
+      headers['X-Demo-Mode'] = 'true';
+    }
+
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
       ...options,
       headers,
@@ -926,6 +931,23 @@ class ApiClient {
     }
 
     return response.json();
+  }
+
+  // Demo mode endpoints
+  async seedDemoData(): Promise<{ success: boolean; message: string }> {
+    return this.request('/demo/seed', {
+      method: 'POST',
+    });
+  }
+
+  async resetDemoData(): Promise<{ success: boolean; message: string }> {
+    return this.request('/demo/reset', {
+      method: 'POST',
+    });
+  }
+
+  async getDemoStatus(): Promise<{ has_data: boolean }> {
+    return this.request('/demo/status');
   }
 }
 
