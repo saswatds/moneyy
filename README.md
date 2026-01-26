@@ -2,6 +2,8 @@
 
 **Your financial data belongs to you. Host it yourself.**
 
+![Moneyy](docs/hero.png)
+
 Money is a modern, self-hosted personal finance management platform that gives you complete control over your financial data. No third-party services, no data selling, no privacy concerns—just you and your money.
 
 ## Why Moneyy?
