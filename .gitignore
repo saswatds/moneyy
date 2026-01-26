@@ -1,9 +1,3 @@
-# Encore (old framework - can be removed after migration)
-/.encore
-encore.gen.go
-encore.gen.cue
-/encore.gen
-
 # Node
 node_modules
 dist
@@ -53,9 +47,3 @@ backups/*.sql
 # Docker
 *.bak
 docker-compose.override.yml
-
-# Old migrated code (can be removed after verification)
-_old_*/
-
-# Production config
-config.prod.yaml
