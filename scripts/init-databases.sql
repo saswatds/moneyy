@@ -1,9 +1,5 @@
--- Initialize all databases for local development
+-- Initialize database for local development
+-- This script runs when PostgreSQL container is first created
 
-CREATE DATABASE IF NOT EXISTS account;
-CREATE DATABASE IF NOT EXISTS balance;
-CREATE DATABASE IF NOT EXISTS currency;
-CREATE DATABASE IF NOT EXISTS holdings;
-CREATE DATABASE IF NOT EXISTS projections;
-CREATE DATABASE IF NOT EXISTS sync;
-CREATE DATABASE IF NOT EXISTS transaction;
+-- Check and create database only if it doesn't exist
+SELECT 'CREATE DATABASE money' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'money')\gexec

@@ -161,15 +161,23 @@ ENC_MASTER_KEY=your_32_byte_encryption_master_key_here
 
 ### Using Docker
 
-1. **Build and run with Docker Compose**:
+1. **Build and run with Docker Compose V2**:
    ```bash
-   docker-compose up --build
+   docker compose up -d --build
    ```
+
+   > **Note**: Use `docker compose` (not `docker-compose`). The old standalone tool is deprecated.
 
 2. **Access the application**:
    - API: http://localhost:4000
    - Frontend: http://localhost:5173
    - Health check: http://localhost:4000/health
+
+3. **Migration Strategy**:
+   - The `money-migrate` container runs continuously and watches the `migrations/` directory
+   - When you add or modify migration files, it automatically detects changes and runs migrations
+   - The API server (`money-api`) never runs migrations - it only serves requests
+   - This separation of concerns ensures clean architecture and prevents race conditions
 
 ### Production Deployment
 

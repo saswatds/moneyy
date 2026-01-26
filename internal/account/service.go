@@ -242,7 +242,7 @@ func (s *Service) List(ctx context.Context) (*ListAccountsResponse, error) {
 	}
 	defer rows.Close()
 
-	var accounts []*Account
+	accounts := make([]*Account, 0)
 	for rows.Next() {
 		account := &Account{}
 		var connectionID *string
@@ -289,8 +289,8 @@ func (s *Service) ListWithBalance(ctx context.Context) (*ListAccountsWithBalance
 	}
 	defer rows.Close()
 
-	var accounts []*AccountWithBalance
-	accountIDs := []string{}
+	accounts := make([]*AccountWithBalance, 0)
+	accountIDs := make([]string, 0)
 
 	for rows.Next() {
 		accountWithBalance := &AccountWithBalance{}

@@ -1,7 +1,61 @@
+# Encore (old framework - can be removed after migration)
 /.encore
 encore.gen.go
 encore.gen.cue
 /encore.gen
 
+# Node
 node_modules
 dist
+
+# Go Binaries
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/server
+/migrate
+*.test
+*.out
+go.work
+
+# Air (hot reload)
+tmp/
+build-errors.log
+
+# Environment
+.env
+.env.local
+.env.*.local
+.env.prod
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+/tmp/money-*.log
+
+# Database backups
+backups/*.sql
+
+# Docker
+*.bak
+docker-compose.override.yml
+
+# Old migrated code (can be removed after verification)
+_old_*/
+
+# Production config
+config.prod.yaml

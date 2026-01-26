@@ -24,15 +24,14 @@ func NewHoldingsHandler(service *holdings.Service) *HoldingsHandler {
 
 // RegisterRoutes registers all holdings routes
 func (h *HoldingsHandler) RegisterRoutes(r chi.Router) {
+	r.Get("/account-holdings/{accountId}", h.GetAccountHoldings)
+
 	r.Route("/holdings", func(r chi.Router) {
 		r.Post("/", h.Create)
 		r.Get("/{id}", h.Get)
 		r.Put("/{id}", h.Update)
 		r.Delete("/{id}", h.Delete)
 	})
-
-	// Account-specific holdings
-	r.Get("/accounts/{accountId}/holdings", h.GetAccountHoldings)
 }
 
 // Create creates a new holding

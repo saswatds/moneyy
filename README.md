@@ -1,182 +1,369 @@
-# REST API Starter
+# Money App - Docker-Based Development
 
-This is a RESTful API Starter with a single Hello World API endpoint.
+A complete personal finance management application running entirely in Docker containers.
 
-## Prerequisites 
+## 🚀 Quick Start
 
-**Install Encore:**
-- **macOS:** `brew install encoredev/tap/encore`
-- **Linux:** `curl -L https://encore.dev/install.sh | bash`
-- **Windows:** `iwr https://encore.dev/install.ps1 | iex`
+### Prerequisites
+- **Docker Desktop** (includes Docker Compose V2)
+- That's it! No need for Go, Node, or PostgreSQL locally
 
-## Create app
+> **Note**: This project uses Docker Compose V2 (`docker compose` command, not `docker-compose`). Make sure you have Docker Desktop or Docker CLI with Compose plugin installed.
 
-Create a local app from this template:
-
-```bash
-encore app create my-app-name --example=hello-world
-```
-
-## Run app locally
-
-Run this command from your application's root folder:
+### First Time Setup
 
 ```bash
-encore run
-```
-## Using the API
+# 1. Clone the repository
+git clone <your-repo>
+cd money
 
-To see that your app is running, you can ping the API.
+# 2. Run setup (creates .env file)
+make setup
+
+# 3. Edit .env with your credentials
+# - Set DB_PASSWORD
+# - Set ENC_MASTER_KEY (32 character string)
+
+# 4. Start the entire stack
+make dev
+```
+
+That's it! The application will be available at:
+- **Frontend**: http://localhost:5173
+- **API**: http://localhost:4000
+- **Database**: localhost:5432
+
+## 📋 Available Commands
+
+Run `make` or `make help` to see all available commands.
+
+### Essential Commands
 
 ```bash
-curl http://localhost:4000/hello/World
+make dev              # Start entire stack (database + API + frontend)
+make stop             # Stop all services
+make logs             # View logs from all services
+make status           # Check status of all containers
+make health           # Health check for all services
 ```
 
-### Local Development Dashboard
-
-While `encore run` is running, open [http://localhost:9400/](http://localhost:9400/) to access Encore's [local developer dashboard](https://encore.dev/docs/go/observability/dev-dash).
-
-Here you can see traces for all requests that you made, see your architecture diagram (just a single service for this simple example), and view API documentation in the Service Catalog.
-
-## Development
-
-### Add a new service
-
-With Encore.go you can create a new service by creating a regular Go package and then defining at least one API within it. Encore recognizes this as a service, and uses the package name as the service name.
-
-On disk it might look like this:
-
-```
-/my-app
-├── encore.app          // ... and other top-level project files
-│
-├── hello               // hello service (a Go package)
-│   ├── hello.go        // hello service code
-│   └── hello_test.go   // tests for hello service
-│
-└── world               // world service (a Go package)
-    └── world.go        // world service code
-```
-
-Learn more in the docs: https://encore.dev/docs/go/primitives/services
-
-### Create an API endpoint
-
-With Encore.go you can turn a regular Go function into an API endpoint by adding the `//encore:api` annotation to it. This tells Encore that the function should be exposed as an API endpoint and Encore will automatically generate the necessary boilerplate at compile-time.
-
-For example, in this app you app will have a `hello` service with a `Ping` API endpoint:
-
-```go
-//encore:api public path=/hello/:name
-func World(ctx context.Context, name string) (*Response, error) {
-	msg := "Hello, " + name + "!"
-	return &Response{Message: msg}, nil
-}
-
-type Response struct {
-	Message string
-}
-```
-
-You can define different access controls using:
-- `//encore:api public` - Public API endpoint
-- `//encore:api private` - Defines a private API that is never accessible to the outside world. It can only be called from other services in your app
-- `//encore:api auth` - Defines an API that anybody can call, but requires valid authentication
-
-Learn more in the docs: https://encore.dev/docs/go/primitives/defining-apis
-
-### Service-to-service API calls
-
-Calling an API endpoint looks like a regular function call with Encore.go. To call an endpoint you first import the other service as a Go package using `import "encore.app/package-name"`.
-
-In the example below, we import the service `hello` and call the `Ping` endpoint using a function call to `hello.Ping`:
-
-```go
-import "encore.app/hello" // import service
-
-//encore:api public
-func MyOtherAPI(ctx context.Context) error {
-    resp, err := hello.Ping(ctx, &hello.PingParams{Name: "World"})
-    if err == nil {
-        log.Println(resp.Message) // "Hello, World!"
-    }
-    return err
-}
-```
-
-Learn more in the docs: https://encore.dev/docs/go/primitives/api-calls
-
-### Add a database
-
-To create a database, import `encore.dev/storage/sqldb` and call `new SQLDatabase`, assigning the result to a top-level variable. For example:
-
-```go
-import "encore.dev/storage/sqldb"
-
-// Create the todo database and assign it to the "tododb" variable
-var tododb = sqldb.NewDatabase("todo", sqldb.DatabaseConfig{
-	Migrations: "./migrations",
-})
-```
-
-Then create a directory `migrations` inside the service directory and add a migration file `0001_create_table.up.sql` to define the database schema. For example:
-
-```sql
-CREATE TABLE todo_item (
-  id BIGSERIAL PRIMARY KEY,
-  title TEXT NOT NULL,
-  done BOOLEAN NOT NULL DEFAULT false
-  -- etc...
-);
-```
-
-Once you've added a migration, restart your app with `encore run` to start up the database and apply the migration. Keep in mind that you need to have [Docker](https://docker.com) installed and running to start the database.
-
-Learn more in the docs: https://encore.dev/docs/go/primitives/databases
-
-### Learn more
-
-There are many more features to explore in Encore.go, for example:
-
-- [Cron jobs](https://encore.dev/docs/go/primitives/cron-jobs)
-- [Pub/Sub](https://encore.dev/docs/go/primitives/pubsub)
-- [Object Storage](https://encore.dev/docs/go/primitives/object-storage)
-- [Secrets](https://encore.dev/docs/go/primitives/secrets)
-- [Authentication handlers](https://encore.dev/docs/go/develop/auth)
-- [Middleware](https://encore.dev/docs/go/develop/middleware)
-
-## Deployment
-
-### Self-hosting
-
-See the [self-hosting instructions](https://encore.dev/docs/go/self-host/docker-build) for how to use `encore build docker` to create a Docker image and configure it.
-
-### Encore Cloud Platform
-
-Deploy your application to a free staging environment in Encore's development cloud using `git push encore`:
+### Development Commands
 
 ```bash
-git add -A .
-git commit -m 'Commit message'
-git push encore
+make api-logs         # View API logs only
+make frontend-logs    # View frontend logs only
+make db-logs          # View database logs
+make shell            # Open shell in API container
+make restart          # Restart all services
 ```
 
-You can also open your app in the [Cloud Dashboard](https://app.encore.dev) to integrate with GitHub, or connect your AWS/GCP account, enabling Encore to automatically handle cloud deployments for you.
-
-## Link to GitHub
-
-Follow these steps to link your app to GitHub:
-
-1. Create a GitHub repo, commit and push the app.
-2. Open your app in the [Cloud Dashboard](https://app.encore.dev).
-3. Go to **Settings ➔ GitHub** and click on **Link app to GitHub** to link your app to GitHub and select the repo you just created.
-4. To configure Encore to automatically trigger deploys when you push to a specific branch name, go to the **Overview** page for your intended environment. Click on **Settings** and then in the section **Branch Push** configure the **Branch name** and hit **Save**.
-5. Commit and push a change to GitHub to trigger a deploy.
-
-[Learn more in the docs](https://encore.dev/docs/platform/integrations/github)
-
-## Testing
+### Database Commands
 
 ```bash
-encore test ./...
+make migrate          # Run database migrations
+make db-shell DB=account  # Connect to specific database
+make backup           # Backup all databases
+make restore FILE=<backup-file>  # Restore from backup
 ```
+
+### Build Commands
+
+```bash
+make build            # Build production images
+make rebuild          # Rebuild everything from scratch
+make clean            # Remove all containers and volumes
+```
+
+## 🏗️ Architecture
+
+### Development Stack
+- **PostgreSQL 16**: 7 databases (account, balance, currency, holdings, projections, sync, transaction)
+- **Go API Server**: Runs with hot reload (Air)
+- **React Frontend**: Runs with Vite dev server and hot module replacement
+- **Docker Volumes**: Persistent data and Go module caching
+
+### Services
+
+```
+money-postgres    → PostgreSQL database container
+money-api         → Go API server with hot reload
+money-frontend    → React frontend with hot reload
+money-migrate     → One-time migration runner
+```
+
+## 🔥 Hot Reload
+
+**Both API and Frontend have hot reload enabled!**
+
+- **API**: Uses Air for hot reload
+  - Edit any Go file → API automatically rebuilds and restarts
+  - Build cache persists in Docker volumes for fast rebuilds
+
+- **Frontend**: Uses Vite's HMR
+  - Edit any React/TypeScript file → instant updates in browser
+  - No page refresh needed
+
+## 📊 Monitoring
+
+### Check Service Status
+```bash
+make status
+```
+
+### View Logs
+```bash
+# All services
+make logs
+
+# Specific service
+make api-logs
+make frontend-logs
+make db-logs
+```
+
+### Health Checks
+```bash
+make health
+```
+
+Output example:
+```
+  Database:  ✓ Healthy
+  API:       ✓ Healthy
+  Frontend:  ✓ Healthy
+```
+
+## 🗄️ Database Management
+
+### Connect to Database
+```bash
+# Open psql shell for specific database
+make db-shell DB=account
+make db-shell DB=balance
+# etc.
+```
+
+### Run Migrations
+```bash
+make migrate
+```
+
+### Backup & Restore
+```bash
+# Create backup
+make backup
+# Creates file: backups/backup_20260125_120000.sql
+
+# Restore from backup
+make restore FILE=backups/backup_20260125_120000.sql
+```
+
+## 🐛 Debugging
+
+### Access API Container
+```bash
+make shell
+# Now you're inside the container
+# Run go commands, check files, etc.
+```
+
+### Check Specific Service
+```bash
+# Start only API
+make api
+
+# Start only frontend
+make frontend
+
+# Start only database
+make db
+```
+
+### View Specific Logs
+```bash
+# API logs in real-time
+docker compose logs -f api
+
+# Check last 100 lines
+docker compose logs --tail=100 api
+```
+
+## 🏭 Production Deployment
+
+### Build Production Images
+```bash
+make build
+```
+
+### Deploy with Production Compose
+```bash
+docker compose -f docker-compose.prod.yml up -d
+```
+
+### Environment Variables for Production
+Create `.env.prod`:
+```bash
+# Database
+DB_HOST=your-production-db.example.com
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=your-secure-password
+
+# Encryption
+ENC_MASTER_KEY=your-32-character-encryption-key
+
+# Server
+LOG_LEVEL=info
+LOG_FORMAT=json
+
+# URLs
+API_PORT=4000
+API_URL=https://api.yourdomain.com
+FRONTEND_PORT=80
+```
+
+Then deploy:
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
+```
+
+## 🧹 Cleanup
+
+### Remove Containers (Keep Data)
+```bash
+make stop
+```
+
+### Remove Everything (Including Data)
+```bash
+make clean
+# ⚠️ This removes all data! Backup first with: make backup
+```
+
+### Start Fresh
+```bash
+make rebuild
+# Stops everything, removes volumes, rebuilds, and starts
+```
+
+## 🔧 Troubleshooting
+
+### Containers Won't Start
+```bash
+# Check Docker is running
+docker ps
+
+# Check logs for errors
+make logs
+
+# Rebuild everything
+make rebuild
+```
+
+### Database Connection Issues
+```bash
+# Check database is running
+make status
+
+# Check database health
+make health
+
+# View database logs
+make db-logs
+
+# Connect to database directly
+make db-shell DB=account
+```
+
+### API Not Responding
+```bash
+# Check API logs
+make api-logs
+
+# Restart API only
+docker compose restart api
+
+# Rebuild API
+docker compose up -d --build api
+```
+
+### Port Already in Use
+Edit `.env` and change ports:
+```bash
+DB_PORT=5433  # Instead of 5432
+```
+
+Then:
+```bash
+make restart
+```
+
+## 📁 Project Structure
+
+```
+money/
+├── cmd/
+│   ├── server/         # API server entry point
+│   └── migrate/        # Migration tool
+├── internal/
+│   ├── account/        # Account service
+│   ├── balance/        # Balance service
+│   ├── currency/       # Currency service
+│   ├── holdings/       # Holdings service
+│   ├── projections/    # Projections service
+│   ├── sync/           # Sync service
+│   ├── transaction/    # Transaction service
+│   ├── database/       # Database manager
+│   ├── config/         # Configuration
+│   ├── logger/         # Logging
+│   └── server/         # HTTP server and handlers
+├── frontend/           # React frontend
+├── migrations/         # Database migrations
+├── scripts/            # Setup scripts
+├── docker-compose.yml  # Development compose
+├── docker-compose.prod.yml  # Production compose
+├── Dockerfile.dev      # Development Dockerfile
+├── Dockerfile          # Production Dockerfile
+├── Makefile            # All commands
+└── .env                # Environment variables
+```
+
+## 🎯 Development Workflow
+
+1. **Start development**:
+   ```bash
+   make dev
+   ```
+
+2. **Edit code**:
+   - API changes: Edit Go files → Auto-reloads
+   - Frontend changes: Edit React files → Instant HMR
+
+3. **View logs**:
+   ```bash
+   make logs
+   ```
+
+4. **Test changes**:
+   ```bash
+   make test
+   ```
+
+5. **Stop when done**:
+   ```bash
+   make stop
+   ```
+
+## 🆘 Getting Help
+
+Run `make` or `make help` to see all available commands.
+
+For issues:
+1. Check `make status`
+2. Check `make logs`
+3. Try `make restart`
+4. If stuck, `make rebuild`
+
+## 📝 License
+
+MIT

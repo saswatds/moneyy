@@ -171,7 +171,7 @@ func (s *Service) GetAccountHoldings(ctx context.Context, accountID string) (*Li
 	}
 	defer rows.Close()
 
-	var holdings []*Holding
+	holdings := make([]*Holding, 0)
 	for rows.Next() {
 		holding := &Holding{}
 		err := rows.Scan(

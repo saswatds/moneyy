@@ -24,6 +24,8 @@ func NewBalanceHandler(service *balance.Service) *BalanceHandler {
 
 // RegisterRoutes registers all balance routes
 func (h *BalanceHandler) RegisterRoutes(r chi.Router) {
+	r.Get("/account-balances/{accountId}", h.GetAccountBalances)
+
 	r.Route("/balances", func(r chi.Router) {
 		r.Post("/", h.Create)
 		r.Post("/bulk", h.BulkImport)
@@ -31,9 +33,6 @@ func (h *BalanceHandler) RegisterRoutes(r chi.Router) {
 		r.Put("/{id}", h.Update)
 		r.Delete("/{id}", h.Delete)
 	})
-
-	// Account-specific balances
-	r.Get("/accounts/{accountId}/balances", h.GetAccountBalances)
 }
 
 // Create creates a new balance entry

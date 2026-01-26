@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"money/internal/config"
+	"money/internal/env"
 	"money/internal/logger"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -15,39 +15,22 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
-// Manager manages multiple database connections
+// Manager manages the database connection
 type Manager struct {
-	dbs    map[string]*sql.DB
-	config map[string]config.DatabaseConfig
+	db *sql.DB
 }
 
-// NewManager creates a new database manager
-func NewManager(configs map[string]config.DatabaseConfig) (*Manager, error) {
-	m := &Manager{
-		dbs:    make(map[string]*sql.DB),
-		config: configs,
-	}
+// NewManager creates a new database manager from environment variables
+func NewManager() (*Manager, error) {
+	// Build connection string from environment
+	host := env.Get("DB_HOST", "localhost")
+	port := env.GetInt("DB_PORT", 5432)
+	name := env.Get("DB_NAME", "money")
+	user := env.Get("DB_USER", "postgres")
+	password := env.MustGet("DB_PASSWORD")
 
-	for name, cfg := range configs {
-		db, err := m.connect(name, cfg)
-		if err != nil {
-			// Close any already opened connections
-			m.Close()
-			return nil, fmt.Errorf("failed to connect to database %s: %w", name, err)
-		}
-		m.dbs[name] = db
-		logger.Info("Connected to database", "name", name, "host", cfg.Host)
-	}
-
-	return m, nil
-}
-
-// connect establishes a connection to a database
-func (m *Manager) connect(name string, cfg config.DatabaseConfig) (*sql.DB, error) {
-	dsn := fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
-		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.Name,
-	)
+	dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
+		host, port, user, password, name)
 
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
@@ -55,11 +38,15 @@ func (m *Manager) connect(name string, cfg config.DatabaseConfig) (*sql.DB, erro
 	}
 
 	// Configure connection pool
-	db.SetMaxOpenConns(cfg.MaxOpenConns)
-	db.SetMaxIdleConns(cfg.MaxIdleConns)
-	db.SetConnMaxLifetime(cfg.ConnMaxLifetime)
+	maxOpenConns := env.GetInt("DB_MAX_OPEN_CONNS", 25)
+	maxIdleConns := env.GetInt("DB_MAX_IDLE_CONNS", 5)
+	connMaxLifetime := time.Duration(env.GetInt("DB_CONN_MAX_LIFETIME_MINUTES", 5)) * time.Minute
 
-	// Test connection
+	db.SetMaxOpenConns(maxOpenConns)
+	db.SetMaxIdleConns(maxIdleConns)
+	db.SetConnMaxLifetime(connMaxLifetime)
+
+	// Verify connection
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -68,119 +55,99 @@ func (m *Manager) connect(name string, cfg config.DatabaseConfig) (*sql.DB, erro
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	return db, nil
+	m := &Manager{db: db}
+	logger.Info("Connected to database", "name", name, "host", host)
+
+	return m, nil
 }
 
-// DB returns the database connection for the given name
-func (m *Manager) DB(name string) *sql.DB {
-	return m.dbs[name]
+// DB returns the database connection
+func (m *Manager) DB() *sql.DB {
+	return m.db
 }
 
-// Close closes all database connections
+// Close closes the database connection
 func (m *Manager) Close() error {
-	var lastErr error
-	for name, db := range m.dbs {
-		if err := db.Close(); err != nil {
-			logger.Error("Failed to close database", "name", name, "error", err)
-			lastErr = err
-		} else {
-			logger.Info("Closed database connection", "name", name)
-		}
+	if err := m.db.Close(); err != nil {
+		logger.Error("Failed to close database", "error", err)
+		return err
 	}
-	return lastErr
+	logger.Info("Closed database connection")
+	return nil
 }
 
-// HealthCheck checks the health of all database connections
+// HealthCheck checks the health of the database connection
 func (m *Manager) HealthCheck(ctx context.Context) error {
-	for name, db := range m.dbs {
-		if err := db.PingContext(ctx); err != nil {
-			return fmt.Errorf("database %s health check failed: %w", name, err)
-		}
+	if err := m.db.PingContext(ctx); err != nil {
+		return fmt.Errorf("database health check failed: %w", err)
 	}
 	return nil
 }
 
-// Migrate runs migrations for a specific database
-func (m *Manager) Migrate(dbName string) error {
-	db := m.dbs[dbName]
-	if db == nil {
-		return fmt.Errorf("database %s not found", dbName)
-	}
-
-	cfg := m.config[dbName]
-	migrationPath := fmt.Sprintf("file://migrations/%s", dbName)
+// Migrate runs all pending migrations
+func (m *Manager) Migrate() error {
+	migrationPath := "file://migrations"
 
 	// Create postgres driver instance
-	driver, err := postgres.WithInstance(db, &postgres.Config{})
+	driver, err := postgres.WithInstance(m.db, &postgres.Config{})
 	if err != nil {
 		return fmt.Errorf("failed to create migration driver: %w", err)
 	}
 
+	dbName := env.Get("DB_NAME", "money")
+
 	// Create migrate instance
 	migrator, err := migrate.NewWithDatabaseInstance(
 		migrationPath,
-		cfg.Name,
+		dbName,
 		driver,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create migrator: %w", err)
 	}
-	defer migrator.Close()
+	// Note: Don't close migrator as it will close the underlying database connection
 
 	// Run migrations
 	if err := migrator.Up(); err != nil && err != migrate.ErrNoChange {
 		return fmt.Errorf("failed to run migrations: %w", err)
 	}
 
-	logger.Info("Migrations completed", "database", dbName)
+	logger.Info("Migrations completed")
 	return nil
 }
 
-// MigrateAll runs migrations for all databases
-func (m *Manager) MigrateAll() error {
-	for name := range m.dbs {
-		if err := m.Migrate(name); err != nil {
-			return fmt.Errorf("failed to migrate database %s: %w", name, err)
-		}
-	}
-	return nil
-}
+// MigrateDown rolls back N migrations
+func (m *Manager) MigrateDown(steps int) error {
+	migrationPath := "file://migrations"
 
-// MigrateDown rolls back migrations for a specific database
-func (m *Manager) MigrateDown(dbName string, steps int) error {
-	db := m.dbs[dbName]
-	if db == nil {
-		return fmt.Errorf("database %s not found", dbName)
-	}
-
-	cfg := m.config[dbName]
-	migrationPath := fmt.Sprintf("file://migrations/%s", dbName)
-
-	driver, err := postgres.WithInstance(db, &postgres.Config{})
+	driver, err := postgres.WithInstance(m.db, &postgres.Config{})
 	if err != nil {
 		return fmt.Errorf("failed to create migration driver: %w", err)
 	}
 
+	dbName := env.Get("DB_NAME", "money")
+
 	migrator, err := migrate.NewWithDatabaseInstance(
 		migrationPath,
-		cfg.Name,
+		dbName,
 		driver,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create migrator: %w", err)
 	}
-	defer migrator.Close()
 
-	if steps > 0 {
-		if err := migrator.Steps(-steps); err != nil && err != migrate.ErrNoChange {
+	if steps == 0 {
+		// Rollback all migrations
+		if err := migrator.Down(); err != nil && err != migrate.ErrNoChange {
 			return fmt.Errorf("failed to rollback migrations: %w", err)
 		}
 	} else {
-		if err := migrator.Down(); err != nil && err != migrate.ErrNoChange {
-			return fmt.Errorf("failed to rollback all migrations: %w", err)
+		// Rollback N steps
+		if err := migrator.Steps(-steps); err != nil && err != migrate.ErrNoChange {
+			return fmt.Errorf("failed to rollback %d steps: %w", steps, err)
 		}
 	}
 
-	logger.Info("Migrations rolled back", "database", dbName, "steps", steps)
+	logger.Info("Rollback completed", "steps", steps)
 	return nil
 }
