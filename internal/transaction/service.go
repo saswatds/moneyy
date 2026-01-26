@@ -78,7 +78,21 @@ type UpdateRecurringExpenseRequest struct {
 
 // ListRecurringExpensesResponse is the response for listing recurring expenses
 type ListRecurringExpensesResponse struct {
-	Expenses []RecurringExpense `json:"expenses"`
+	Expenses         []RecurringExpense  `json:"expenses"`
+	InferredExpenses []InferredExpense   `json:"inferred_expenses"`
+}
+
+// InferredExpense represents an expense inferred from account details
+type InferredExpense struct {
+	AccountID      string  `json:"account_id"`
+	AccountName    string  `json:"account_name"`
+	Type           string  `json:"type"`           // "mortgage" or "loan"
+	Amount         float64 `json:"amount"`
+	Currency       string  `json:"currency"`
+	Frequency      string  `json:"frequency"`
+	InterestRate   float64 `json:"interest_rate"`
+	RemainingTerm  *int    `json:"remaining_term,omitempty"`  // months remaining
+	OriginalAmount float64 `json:"original_amount"`
 }
 
 // CreateRecurringExpense creates a new recurring expense
@@ -154,7 +168,139 @@ func (s *Service) ListRecurringExpenses(ctx context.Context) (*ListRecurringExpe
 		expenses = []RecurringExpense{}
 	}
 
-	return &ListRecurringExpensesResponse{Expenses: expenses}, nil
+	// Fetch inferred expenses from mortgage and loan accounts
+	inferredExpenses, err := s.getInferredExpenses(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get inferred expenses: %w", err)
+	}
+
+	return &ListRecurringExpensesResponse{
+		Expenses:         expenses,
+		InferredExpenses: inferredExpenses,
+	}, nil
+}
+
+// getInferredExpenses fetches payment information from mortgage and loan accounts
+func (s *Service) getInferredExpenses(ctx context.Context, userID string) ([]InferredExpense, error) {
+	var inferredExpenses []InferredExpense
+
+	// Get mortgage payments
+	mortgageRows, err := s.db.QueryContext(ctx, `
+		SELECT
+			a.id,
+			a.name,
+			a.currency,
+			md.payment_amount,
+			md.payment_frequency,
+			md.interest_rate,
+			md.original_amount,
+			md.term_months,
+			md.start_date
+		FROM accounts a
+		JOIN mortgage_details md ON a.id = md.account_id
+		WHERE a.user_id = $1 AND a.is_active = true
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer mortgageRows.Close()
+
+	for mortgageRows.Next() {
+		var accountID, accountName, currency, frequency string
+		var amount, interestRate, originalAmount float64
+		var termMonths int
+		var startDate time.Time
+
+		err := mortgageRows.Scan(
+			&accountID, &accountName, &currency,
+			&amount, &frequency, &interestRate, &originalAmount,
+			&termMonths, &startDate,
+		)
+		if err != nil {
+			continue
+		}
+
+		// Calculate remaining term
+		monthsElapsed := int(time.Since(startDate).Hours() / 24 / 30)
+		remainingTerm := termMonths - monthsElapsed
+		if remainingTerm < 0 {
+			remainingTerm = 0
+		}
+
+		inferredExpenses = append(inferredExpenses, InferredExpense{
+			AccountID:      accountID,
+			AccountName:    accountName,
+			Type:           "mortgage",
+			Amount:         amount,
+			Currency:       currency,
+			Frequency:      frequency,
+			InterestRate:   interestRate,
+			RemainingTerm:  &remainingTerm,
+			OriginalAmount: originalAmount,
+		})
+	}
+
+	// Get loan payments
+	loanRows, err := s.db.QueryContext(ctx, `
+		SELECT
+			a.id,
+			a.name,
+			a.currency,
+			ld.payment_amount,
+			ld.payment_frequency,
+			ld.interest_rate,
+			ld.original_amount,
+			ld.term_months,
+			ld.start_date
+		FROM accounts a
+		JOIN loan_details ld ON a.id = ld.account_id
+		WHERE a.user_id = $1 AND a.is_active = true
+	`, userID)
+	if err != nil {
+		return inferredExpenses, nil // Return mortgages even if loans fail
+	}
+	defer loanRows.Close()
+
+	for loanRows.Next() {
+		var accountID, accountName, currency, frequency string
+		var amount, interestRate, originalAmount float64
+		var termMonths int
+		var startDate time.Time
+
+		err := loanRows.Scan(
+			&accountID, &accountName, &currency,
+			&amount, &frequency, &interestRate, &originalAmount,
+			&termMonths, &startDate,
+		)
+		if err != nil {
+			continue
+		}
+
+		// Calculate remaining term
+		monthsElapsed := int(time.Since(startDate).Hours() / 24 / 30)
+		remainingTerm := termMonths - monthsElapsed
+		if remainingTerm < 0 {
+			remainingTerm = 0
+		}
+
+		inferredExpenses = append(inferredExpenses, InferredExpense{
+			AccountID:      accountID,
+			AccountName:    accountName,
+			Type:           "loan",
+			Amount:         amount,
+			Currency:       currency,
+			Frequency:      frequency,
+			InterestRate:   interestRate,
+			RemainingTerm:  &remainingTerm,
+			OriginalAmount: originalAmount,
+		})
+	}
+
+	if inferredExpenses == nil {
+		inferredExpenses = []InferredExpense{}
+	}
+
+	return inferredExpenses, nil
 }
 
 // GetRecurringExpense gets a single recurring expense by ID

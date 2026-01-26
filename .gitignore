@@ -47,6 +47,9 @@ backups
 # Database data
 data/postgres/
 
+# Demo data
+internal/data/demo_temp
+
 # Docker
 *.bak
 docker-compose.override.yml

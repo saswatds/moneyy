@@ -503,6 +503,18 @@ export interface UpdateRecurringExpenseRequest {
   is_active?: boolean;
 }
 
+export interface InferredExpense {
+  account_id: string;
+  account_name: string;
+  type: 'mortgage' | 'loan';
+  amount: number;
+  currency: 'CAD' | 'USD' | 'INR';
+  frequency: string;
+  interest_rate: number;
+  remaining_term?: number;
+  original_amount: number;
+}
+
 class ApiClient {
   private baseUrl: string;
   private getToken: () => string | null = () => localStorage.getItem('auth_token');
@@ -793,7 +805,7 @@ class ApiClient {
   }
 
   // Recurring Expenses
-  async getRecurringExpenses(): Promise<{ expenses: RecurringExpense[] }> {
+  async getRecurringExpenses(): Promise<{ expenses: RecurringExpense[]; inferred_expenses: InferredExpense[] }> {
     return this.request('/recurring-expenses');
   }
 
