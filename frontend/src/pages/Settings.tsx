@@ -37,6 +37,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { WealthsimpleConnectDialog } from '@/components/sync/WealthsimpleConnectDialog';
@@ -111,7 +119,6 @@ export function Settings() {
   const [selectedConnection, setSelectedConnection] = useState<Connection | null>(null);
   const [editFrequency, setEditFrequency] = useState<string>('');
   const [selectedProvider, setSelectedProvider] = useState<string>('');
-  const [wealthsimpleCredentials, setWealthsimpleCredentials] = useState({ hasCredentials: false, email: '' });
   const [updating, setUpdating] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -129,7 +136,6 @@ export function Settings() {
 
   useEffect(() => {
     fetchConnections();
-    checkWealthsimpleCredentials();
   }, []);
 
   const fetchConnections = async () => {
@@ -143,29 +149,6 @@ export function Settings() {
       setLoading(false);
     }
   };
-
-  const checkWealthsimpleCredentials = async () => {
-    try {
-      const data = await apiClient.checkWealthsimpleCredentials();
-      setWealthsimpleCredentials({
-        hasCredentials: data.has_credentials,
-        email: data.email || '',
-      });
-    } catch (error) {
-      console.error('Failed to check credentials:', error);
-    }
-  };
-
-  const handleConnectProvider = (providerId: string) => {
-    const provider = AVAILABLE_PROVIDERS.find(p => p.id === providerId);
-    if (!provider || provider.status !== 'available') return;
-
-    setSelectedProvider(providerId);
-    if (providerId === 'wealthsimple') {
-      setShowConnectDialog(true);
-    }
-  };
-
 
   const handleViewHistory = async (connection: Connection) => {
     setHistoryConnection(connection);
@@ -411,214 +394,245 @@ export function Settings() {
         </p>
       </div>
 
-      {/* Available Providers Section */}
-      <div className="space-y-4">
-        <div>
-          <h2 className="text-xl font-semibold">Available Providers</h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            Connect your accounts from these financial providers
-          </p>
-        </div>
-
-        <Separator />
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {AVAILABLE_PROVIDERS.map((provider) => {
-            const Icon = provider.icon;
-            const isConnected = connections.some(c => c.provider === provider.id);
-            const isAvailable = provider.status === 'available';
-
-            return (
-              <Card key={provider.id} className={!isAvailable ? 'opacity-60' : ''}>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className={`p-2 rounded-lg ${provider.color}`}>
-                      <Icon className="h-6 w-6" />
-                    </div>
-                    {provider.status === 'coming_soon' && (
-                      <Badge variant="outline" className="text-xs">
-                        Coming Soon
-                      </Badge>
-                    )}
-                    {provider.status === 'beta' && (
-                      <Badge variant="secondary" className="text-xs">
-                        Beta
-                      </Badge>
-                    )}
-                    {isConnected && (
-                      <Badge variant="default" className="text-xs">
-                        Connected
-                      </Badge>
-                    )}
-                  </div>
-                  <CardTitle className="text-lg">{provider.name}</CardTitle>
-                  <CardDescription className="text-xs">
-                    {provider.description}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Button
-                    variant={isAvailable ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => handleConnectProvider(provider.id)}
-                    disabled={!isAvailable}
-                    className="w-full"
-                  >
-                    <IconPlus className="mr-2 h-4 w-4" />
-                    Connect
-                  </Button>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-      </div>
-
       {/* Connected Accounts Section */}
-      {connections.length > 0 && (
-        <div className="space-y-4">
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
           <div>
             <h2 className="text-xl font-semibold">Connected Accounts</h2>
             <p className="text-sm text-muted-foreground mt-1">
               Manage your active connections and sync settings
             </p>
           </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button>
+                <IconPlus className="mr-2 h-4 w-4" />
+                Add Account
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>Select Provider</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {AVAILABLE_PROVIDERS.map((provider) => {
+                const Icon = provider.icon;
+                const isAvailable = provider.status === 'available';
 
-          <Separator />
+                return (
+                  <DropdownMenuItem
+                    key={provider.id}
+                    disabled={!isAvailable}
+                    onClick={() => {
+                      if (isAvailable) {
+                        setSelectedProvider(provider.id);
+                        if (provider.id === 'wealthsimple') {
+                          setShowConnectDialog(true);
+                        }
+                      }
+                    }}
+                    className="flex items-center gap-3 cursor-pointer"
+                  >
+                    <div className={`p-1.5 rounded ${provider.color}`}>
+                      <Icon className="h-4 w-4" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="font-medium">{provider.name}</div>
+                      {provider.status === 'coming_soon' && (
+                        <div className="text-xs text-muted-foreground">Coming Soon</div>
+                      )}
+                    </div>
+                  </DropdownMenuItem>
+                );
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
 
-          <Card>
-            <CardContent className="pt-6">
-              {loading ? (
-                <div className="text-center py-8 text-muted-foreground">Loading connections...</div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Provider</TableHead>
-                      <TableHead>Connection Name</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Accounts</TableHead>
-                      <TableHead>Last Sync</TableHead>
-                      <TableHead>Frequency</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {connections.map((connection) => {
-                      const providerInfo = getProviderInfo(connection.provider);
-                      const ProviderIcon = providerInfo.icon;
+        <Separator />
+
+        <Card>
+          <CardContent className="pt-6">
+            {loading ? (
+              <div className="text-center py-8 text-muted-foreground">Loading connections...</div>
+            ) : connections.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="p-4 rounded-full bg-muted mb-4">
+                  <IconBuilding className="h-8 w-8 text-muted-foreground" />
+                </div>
+                <h3 className="text-lg font-semibold mb-2">No Connected Accounts</h3>
+                <p className="text-sm text-muted-foreground mb-6 max-w-sm">
+                  Connect your first financial account to start tracking your finances
+                </p>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button>
+                      <IconPlus className="mr-2 h-4 w-4" />
+                      Connect an Account
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="center" className="w-56">
+                    <DropdownMenuLabel>Select Provider</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {AVAILABLE_PROVIDERS.map((provider) => {
+                      const Icon = provider.icon;
+                      const isAvailable = provider.status === 'available';
 
                       return (
-                        <TableRow key={connection.id}>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <div className={`p-1.5 rounded-lg ${providerInfo.color}`}>
-                                <ProviderIcon className="h-4 w-4" />
-                              </div>
-                              <span className="font-medium">{providerInfo.name}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div>
-                              <div className="font-medium">{connection.name}</div>
-                              {connection.last_sync_error && (
-                                <div className={`text-xs mt-0.5 ${connection.status === 'disconnected' ? 'text-orange-600 dark:text-orange-400' : 'text-destructive'}`}>
-                                  {connection.last_sync_error}
-                                </div>
-                              )}
-                              {connection.token_expires_at && (
-                                <div className="text-xs mt-0.5 text-muted-foreground">
-                                  {formatTokenExpiry(connection.token_expires_at)}
-                                </div>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            {getStatusBadge(connection.status)}
-                          </TableCell>
-                          <TableCell>
-                            {connection.account_count} account{connection.account_count !== 1 ? 's' : ''}
-                          </TableCell>
-                          <TableCell>
-                            <div className="text-sm">{formatDate(connection.last_sync_at)}</div>
-                          </TableCell>
-                          <TableCell>
-                            <span className="capitalize">{connection.sync_frequency}</span>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex gap-1 justify-end">
-                              {connection.provider === 'wealthsimple' && connection.status === 'disconnected' ? (
-                                <Button
-                                  variant="default"
-                                  size="sm"
-                                  onClick={() => {
-                                    setSelectedProvider('wealthsimple');
-                                    setShowConnectDialog(true);
-                                  }}
-                                  className="bg-orange-600 hover:bg-orange-700 text-white"
-                                >
-                                  <IconLink className="h-4 w-4 mr-1" />
-                                  Login Again
-                                </Button>
-                              ) : null}
-                              {connection.status !== 'disconnected' && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleSync(connection.id)}
-                                  disabled={connection.status === 'syncing' || syncingConnectionId === connection.id}
-                                  className="h-8 w-8 p-0"
-                                  title="Sync now"
-                                >
-                                  {syncingConnectionId === connection.id ? (
-                                    <IconLoader2 className="h-4 w-4 animate-spin" />
-                                  ) : (
-                                    <IconRefresh className="h-4 w-4" />
-                                  )}
-                                </Button>
-                              )}
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleViewHistory(connection)}
-                                className="h-8 w-8 p-0"
-                                title="View sync history"
-                              >
-                                <IconHistory className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleEdit(connection)}
-                                className="h-8 w-8 p-0"
-                                title="Edit settings"
-                              >
-                                <IconEdit className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  setSelectedConnection(connection);
-                                  setDeleteDialogOpen(true);
-                                }}
-                                className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                                title="Disconnect"
-                              >
-                                <IconTrash className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
+                        <DropdownMenuItem
+                          key={provider.id}
+                          disabled={!isAvailable}
+                          onClick={() => {
+                            if (isAvailable) {
+                              setSelectedProvider(provider.id);
+                              if (provider.id === 'wealthsimple') {
+                                setShowConnectDialog(true);
+                              }
+                            }
+                          }}
+                          className="flex items-center gap-3 cursor-pointer"
+                        >
+                          <div className={`p-1.5 rounded ${provider.color}`}>
+                            <Icon className="h-4 w-4" />
+                          </div>
+                          <div className="flex-1">
+                            <div className="font-medium">{provider.name}</div>
+                            {provider.status === 'coming_soon' && (
+                              <div className="text-xs text-muted-foreground">Coming Soon</div>
+                            )}
+                          </div>
+                        </DropdownMenuItem>
                       );
                     })}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Provider</TableHead>
+                    <TableHead>Connection Name</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Accounts</TableHead>
+                    <TableHead>Last Sync</TableHead>
+                    <TableHead>Frequency</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {connections.map((connection) => {
+                    const providerInfo = getProviderInfo(connection.provider);
+                    const ProviderIcon = providerInfo.icon;
+
+                    return (
+                      <TableRow key={connection.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <div className={`p-1.5 rounded-lg ${providerInfo.color}`}>
+                              <ProviderIcon className="h-4 w-4" />
+                            </div>
+                            <span className="font-medium">{providerInfo.name}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            <div className="font-medium">{connection.name}</div>
+                            {connection.last_sync_error && (
+                              <div className={`text-xs mt-0.5 ${connection.status === 'disconnected' ? 'text-orange-600 dark:text-orange-400' : 'text-destructive'}`}>
+                                {connection.last_sync_error}
+                              </div>
+                            )}
+                            {connection.token_expires_at && (
+                              <div className="text-xs mt-0.5 text-muted-foreground">
+                                {formatTokenExpiry(connection.token_expires_at)}
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {getStatusBadge(connection.status)}
+                        </TableCell>
+                        <TableCell>
+                          {connection.account_count} account{connection.account_count !== 1 ? 's' : ''}
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm">{formatDate(connection.last_sync_at)}</div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="capitalize">{connection.sync_frequency}</span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex gap-1 justify-end">
+                            {connection.provider === 'wealthsimple' && connection.status === 'disconnected' ? (
+                              <Button
+                                variant="default"
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedProvider('wealthsimple');
+                                  setShowConnectDialog(true);
+                                }}
+                                className="bg-orange-600 hover:bg-orange-700 text-white"
+                              >
+                                <IconLink className="h-4 w-4 mr-1" />
+                                Login Again
+                              </Button>
+                            ) : null}
+                            {connection.status !== 'disconnected' && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleSync(connection.id)}
+                                disabled={connection.status === 'syncing' || syncingConnectionId === connection.id}
+                                className="h-8 w-8 p-0"
+                                title="Sync now"
+                              >
+                                {syncingConnectionId === connection.id ? (
+                                  <IconLoader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <IconRefresh className="h-4 w-4" />
+                                )}
+                              </Button>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleViewHistory(connection)}
+                              className="h-8 w-8 p-0"
+                              title="View sync history"
+                            >
+                              <IconHistory className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEdit(connection)}
+                              className="h-8 w-8 p-0"
+                              title="Edit settings"
+                            >
+                              <IconEdit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedConnection(connection);
+                                setDeleteDialogOpen(true);
+                              }}
+                              className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                              title="Disconnect"
+                            >
+                              <IconTrash className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Data Management Section */}
       <div className="space-y-4">

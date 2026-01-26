@@ -54,7 +54,7 @@ export function LoanDetailsForm({ accountId, onSuccess }: LoanDetailsFormProps) 
     }
   };
 
-  const updateField = (field: string, value: any) => {
+  const updateField = <K extends keyof typeof formData>(field: K, value: typeof formData[K]) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 

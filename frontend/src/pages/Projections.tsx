@@ -133,57 +133,6 @@ export function Projections() {
   // Load exchange rates for currency conversion
   const { data: exchangeRates } = useExchangeRates();
 
-  // Auto-load first scenario on mount if scenarios exist
-  useEffect(() => {
-    if (scenariosData?.scenarios && scenariosData.scenarios.length > 0 && !currentScenarioId && !projectionData) {
-      // Find default scenario or use first one
-      const defaultScenario = scenariosData.scenarios.find(s => s.is_default) || scenariosData.scenarios[0];
-      setConfig(defaultScenario.config);
-      setCurrentScenarioId(defaultScenario.id);
-      // Trigger calculation after a brief delay to ensure config is set
-      setTimeout(() => {
-        calculateMutation.mutate();
-      }, 100);
-    }
-  }, [scenariosData, currentScenarioId, projectionData]);
-
-  // Helper to convert currency to CAD
-  const convertToCAD = (amount: number, fromCurrency: string): number => {
-    if (!exchangeRates?.rates || fromCurrency === 'CAD') {
-      return amount;
-    }
-    const rate = exchangeRates.rates[fromCurrency]?.['CAD'];
-    if (!rate) return amount; // Fallback to original amount if rate not found
-    return amount * rate;
-  };
-
-  // Calculate monthly total from recurring expenses (converted to CAD)
-  const computedRecurringExpenses = recurringExpensesData?.expenses
-    .filter(e => e.is_active)
-    .reduce((total, expense) => {
-      let monthlyAmount = 0;
-      switch (expense.frequency) {
-        case 'weekly':
-          monthlyAmount = expense.amount * 4.33;
-          break;
-        case 'bi-weekly':
-          monthlyAmount = expense.amount * 2.17;
-          break;
-        case 'monthly':
-          monthlyAmount = expense.amount;
-          break;
-        case 'quarterly':
-          monthlyAmount = expense.amount / 3;
-          break;
-        case 'annually':
-          monthlyAmount = expense.amount / 12;
-          break;
-      }
-      // Convert to CAD before adding to total
-      const monthlyAmountInCAD = convertToCAD(monthlyAmount, expense.currency);
-      return total + monthlyAmountInCAD;
-    }, 0) || 0;
-
   // Calculate projection
   const calculateMutation = useMutation({
     mutationFn: () => {
@@ -249,6 +198,64 @@ export function Projections() {
       refetchScenarios();
     },
   });
+
+  // Auto-load first scenario on mount if scenarios exist
+  useEffect(() => {
+    if (scenariosData?.scenarios && scenariosData.scenarios.length > 0 && !currentScenarioId && !projectionData) {
+      // Find default scenario or use first one
+      const defaultScenario = scenariosData.scenarios.find(s => s.is_default) || scenariosData.scenarios[0];
+      const newConfig = defaultScenario.config;
+      const newScenarioId = defaultScenario.id;
+
+      // Use a microtask to batch the state updates
+      Promise.resolve().then(() => {
+        setConfig(newConfig);
+        setCurrentScenarioId(newScenarioId);
+        // Trigger calculation after state is set
+        setTimeout(() => {
+          calculateMutation.mutate();
+        }, 100);
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scenariosData, currentScenarioId, projectionData]);
+
+  // Helper to convert currency to CAD
+  const convertToCAD = (amount: number, fromCurrency: string): number => {
+    if (!exchangeRates?.rates || fromCurrency === 'CAD') {
+      return amount;
+    }
+    const rate = exchangeRates.rates[fromCurrency]?.['CAD'];
+    if (!rate) return amount; // Fallback to original amount if rate not found
+    return amount * rate;
+  };
+
+  // Calculate monthly total from recurring expenses (converted to CAD)
+  const computedRecurringExpenses = recurringExpensesData?.expenses
+    .filter(e => e.is_active)
+    .reduce((total, expense) => {
+      let monthlyAmount = 0;
+      switch (expense.frequency) {
+        case 'weekly':
+          monthlyAmount = expense.amount * 4.33;
+          break;
+        case 'bi-weekly':
+          monthlyAmount = expense.amount * 2.17;
+          break;
+        case 'monthly':
+          monthlyAmount = expense.amount;
+          break;
+        case 'quarterly':
+          monthlyAmount = expense.amount / 3;
+          break;
+        case 'annually':
+          monthlyAmount = expense.amount / 12;
+          break;
+      }
+      // Convert to CAD before adding to total
+      const monthlyAmountInCAD = convertToCAD(monthlyAmount, expense.currency);
+      return total + monthlyAmountInCAD;
+    }, 0) || 0;
 
   const handleCalculate = () => {
     setIsCalculating(true);

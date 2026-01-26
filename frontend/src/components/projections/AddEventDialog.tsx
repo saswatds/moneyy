@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import type { Event, EventType, EventParameters } from '@/lib/api-client';
 import {
   Dialog,
@@ -28,37 +28,15 @@ interface AddEventDialogProps {
   editingEvent: Event | null;
 }
 
-export function AddEventDialog({ open, onOpenChange, onSave, editingEvent }: AddEventDialogProps) {
+function AddEventDialogContent({ open, onOpenChange, onSave, editingEvent }: AddEventDialogProps) {
   const { data: accountsData } = useAccounts();
-  const [eventType, setEventType] = useState<EventType>('one_time_expense');
-  const [date, setDate] = useState('');
-  const [description, setDescription] = useState('');
-  const [parameters, setParameters] = useState<EventParameters>({});
-  const [isRecurring, setIsRecurring] = useState(false);
-  const [recurrenceFrequency, setRecurrenceFrequency] = useState<'monthly' | 'quarterly' | 'annually'>('monthly');
-  const [recurrenceEndDate, setRecurrenceEndDate] = useState('');
-
-  // Initialize form when editing
-  useEffect(() => {
-    if (editingEvent) {
-      setEventType(editingEvent.type);
-      setDate(editingEvent.date.split('T')[0]);
-      setDescription(editingEvent.description);
-      setParameters(editingEvent.parameters);
-      setIsRecurring(editingEvent.is_recurring || false);
-      setRecurrenceFrequency(editingEvent.recurrence_frequency || 'monthly');
-      setRecurrenceEndDate(editingEvent.recurrence_end_date ? editingEvent.recurrence_end_date.split('T')[0] : '');
-    } else {
-      // Reset for new event
-      setEventType('one_time_expense');
-      setDate(new Date().toISOString().split('T')[0]);
-      setDescription('');
-      setParameters({});
-      setIsRecurring(false);
-      setRecurrenceFrequency('monthly');
-      setRecurrenceEndDate('');
-    }
-  }, [editingEvent, open]);
+  const [eventType, setEventType] = useState<EventType>(editingEvent?.type || 'one_time_expense');
+  const [date, setDate] = useState(editingEvent?.date.split('T')[0] || new Date().toISOString().split('T')[0]);
+  const [description, setDescription] = useState(editingEvent?.description || '');
+  const [parameters, setParameters] = useState<EventParameters>(editingEvent?.parameters || {});
+  const [isRecurring, setIsRecurring] = useState(editingEvent?.is_recurring || false);
+  const [recurrenceFrequency, setRecurrenceFrequency] = useState<'monthly' | 'quarterly' | 'annually'>(editingEvent?.recurrence_frequency || 'monthly');
+  const [recurrenceEndDate, setRecurrenceEndDate] = useState(editingEvent?.recurrence_end_date ? editingEvent.recurrence_end_date.split('T')[0] : '');
 
   const handleSave = () => {
     const event: Event = {
@@ -108,7 +86,7 @@ export function AddEventDialog({ open, onOpenChange, onSave, editingEvent }: Add
           </>
         );
 
-      case 'extra_debt_payment':
+      case 'extra_debt_payment': {
         const debtAccounts = accountsData?.accounts.filter(acc => !acc.is_asset) || [];
         return (
           <>
@@ -144,6 +122,7 @@ export function AddEventDialog({ open, onOpenChange, onSave, editingEvent }: Add
             </div>
           </>
         );
+      }
 
       case 'salary_change':
         return (
@@ -437,4 +416,12 @@ export function AddEventDialog({ open, onOpenChange, onSave, editingEvent }: Add
       </DialogContent>
     </Dialog>
   );
+}
+
+export function AddEventDialog(props: AddEventDialogProps) {
+  // Use editingEvent.id as key to remount the component when editing a different event
+  // Use 'new' when creating a new event to reset the form
+  const key = props.editingEvent?.id || 'new';
+
+  return <AddEventDialogContent key={key} {...props} />;
 }

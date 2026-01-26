@@ -142,7 +142,7 @@ export function AssetDetailsForm({ accountId, onSuccess, onCancel }: AssetDetail
   const onSubmit = async (data: FormValues) => {
     try {
       // Build type_specific_data based on asset type
-      const typeSpecificData: Record<string, any> = {};
+      const typeSpecificData: Record<string, string | number | undefined> = {};
 
       if (data.asset_type === 'real_estate') {
         if (data.address) typeSpecificData.address = data.address;
