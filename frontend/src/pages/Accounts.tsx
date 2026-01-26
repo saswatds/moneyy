@@ -220,7 +220,7 @@ export function Accounts() {
     return { totalAssets, totalLiabilities, netWorth };
   };
 
-  const formatBalance = (account: any) => {
+  const formatBalance = (account: Account) => {
     if (account.current_balance === undefined || account.current_balance === null) {
       return '-';
     }

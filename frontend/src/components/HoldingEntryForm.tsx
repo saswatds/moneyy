@@ -3,6 +3,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useState } from 'react';
 import { useCreateHolding } from '@/hooks/use-holdings';
+import type { CreateHoldingRequest } from '@/lib/api-client';
 import {
   Form,
   FormControl,
@@ -100,7 +101,7 @@ export function HoldingEntryForm({ accountId, onSuccess, onCancel }: HoldingEntr
 
   const onSubmit = async (data: FormValues) => {
     try {
-      const payload: any = {
+      const payload: Partial<CreateHoldingRequest> = {
         account_id: accountId,
         type: data.type,
         notes: data.notes || '',
@@ -116,7 +117,7 @@ export function HoldingEntryForm({ accountId, onSuccess, onCancel }: HoldingEntr
         payload.cost_basis = data.cost_basis;
       }
 
-      await createHolding.mutateAsync(payload);
+      await createHolding.mutateAsync(payload as CreateHoldingRequest);
       form.reset();
       onSuccess?.();
     } catch (error) {

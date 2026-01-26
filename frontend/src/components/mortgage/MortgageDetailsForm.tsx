@@ -55,7 +55,7 @@ export function MortgageDetailsForm({ accountId, onSuccess }: MortgageDetailsFor
     }
   };
 
-  const updateField = (field: string, value: any) => {
+  const updateField = <K extends keyof typeof formData>(field: K, value: typeof formData[K]) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 

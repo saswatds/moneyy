@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient, type RecurringExpense } from '@/lib/api-client';
 import {
@@ -55,33 +55,19 @@ const CURRENCIES = [
   { value: 'INR', label: 'INR' },
 ];
 
-export function EditRecurringExpenseDialog({
-  open,
+function EditRecurringExpenseDialogContent({
   onOpenChange,
   expense,
-}: EditRecurringExpenseDialogProps) {
+}: Omit<EditRecurringExpenseDialogProps, 'open'>) {
   const queryClient = useQueryClient();
   const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-    amount: '',
-    currency: 'CAD' as 'CAD' | 'USD' | 'INR',
-    category: '',
-    frequency: '',
+    name: expense?.name || '',
+    description: expense?.description || '',
+    amount: expense?.amount.toString() || '',
+    currency: (expense?.currency || 'CAD') as 'CAD' | 'USD' | 'INR',
+    category: expense?.category || '',
+    frequency: expense?.frequency || '',
   });
-
-  useEffect(() => {
-    if (expense) {
-      setFormData({
-        name: expense.name,
-        description: expense.description || '',
-        amount: expense.amount.toString(),
-        currency: expense.currency,
-        category: expense.category,
-        frequency: expense.frequency,
-      });
-    }
-  }, [expense]);
 
   const updateMutation = useMutation({
     mutationFn: (data: typeof formData) =>
@@ -91,7 +77,7 @@ export function EditRecurringExpenseDialog({
         amount: parseFloat(data.amount),
         currency: data.currency,
         category: data.category,
-        frequency: data.frequency as any,
+        frequency: data.frequency as 'weekly' | 'bi-weekly' | 'monthly' | 'quarterly' | 'annually',
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['recurring-expenses'] });
@@ -244,5 +230,16 @@ export function EditRecurringExpenseDialog({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+export function EditRecurringExpenseDialog(props: EditRecurringExpenseDialogProps) {
+  if (!props.expense) return null;
+
+  return (
+    <EditRecurringExpenseDialogContent
+      key={props.expense.id}
+      {...props}
+    />
   );
 }
