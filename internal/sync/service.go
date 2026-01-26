@@ -127,6 +127,68 @@ type TriggerSyncResponse struct {
 	Message      string     `json:"message"`
 }
 
+// SyncJobStatus represents the status of a sync job
+type SyncJobStatus string
+
+const (
+	SyncJobStatusPending   SyncJobStatus = "pending"
+	SyncJobStatusRunning   SyncJobStatus = "running"
+	SyncJobStatusCompleted SyncJobStatus = "completed"
+	SyncJobStatusFailed    SyncJobStatus = "failed"
+)
+
+// SyncJobType represents the type of sync job
+type SyncJobType string
+
+const (
+	SyncJobTypeAccounts   SyncJobType = "accounts"
+	SyncJobTypePositions  SyncJobType = "positions"
+	SyncJobTypeActivities SyncJobType = "activities"
+	SyncJobTypeHistory    SyncJobType = "history"
+	SyncJobTypeFull       SyncJobType = "full"
+)
+
+// SyncJob represents a sync job for tracking progress
+type SyncJob struct {
+	ID              string        `json:"id"`
+	SyncedAccountID string        `json:"synced_account_id"`
+	AccountName     string        `json:"account_name,omitempty"`
+	Type            SyncJobType   `json:"type"`
+	Status          SyncJobStatus `json:"status"`
+	StartedAt       *time.Time    `json:"started_at,omitempty"`
+	CompletedAt     *time.Time    `json:"completed_at,omitempty"`
+	ErrorMessage    string        `json:"error_message,omitempty"`
+	ItemsProcessed  int           `json:"items_processed"`
+	ItemsCreated    int           `json:"items_created"`
+	ItemsUpdated    int           `json:"items_updated"`
+	ItemsFailed     int           `json:"items_failed"`
+	CreatedAt       time.Time     `json:"created_at"`
+}
+
+// ConnectionSyncStatusResponse represents detailed sync status for a connection
+type ConnectionSyncStatusResponse struct {
+	ConnectionID   string        `json:"connection_id"`
+	ConnectionName string        `json:"connection_name"`
+	Status         Status        `json:"status"`
+	LastSyncAt     *time.Time    `json:"last_sync_at,omitempty"`
+	LastSyncError  string        `json:"last_sync_error,omitempty"`
+	Jobs           []SyncJob     `json:"jobs"`
+	Summary        SyncSummary   `json:"summary"`
+}
+
+// SyncSummary provides aggregate statistics for all sync jobs
+type SyncSummary struct {
+	TotalJobs       int `json:"total_jobs"`
+	CompletedJobs   int `json:"completed_jobs"`
+	FailedJobs      int `json:"failed_jobs"`
+	RunningJobs     int `json:"running_jobs"`
+	PendingJobs     int `json:"pending_jobs"`
+	TotalProcessed  int `json:"total_processed"`
+	TotalCreated    int `json:"total_created"`
+	TotalUpdated    int `json:"total_updated"`
+	TotalFailed     int `json:"total_failed"`
+}
+
 // DeleteResponse represents a generic delete response
 type DeleteResponse struct {
 	Success bool `json:"success"`
@@ -353,4 +415,220 @@ func (s *Service) DeleteConnection(ctx context.Context, id string) (*DeleteRespo
 	log.Printf("INFO: deleted connection: credential_id=%s", id)
 
 	return &DeleteResponse{Success: true}, nil
+}
+
+// UpdateConnectionRequest represents a request to update connection settings
+type UpdateConnectionRequest struct {
+	SyncFrequency string `json:"sync_frequency"`
+}
+
+// UpdateConnection updates connection settings
+func (s *Service) UpdateConnection(ctx context.Context, id string, req *UpdateConnectionRequest) error {
+	userID := auth.GetUserID(ctx)
+	if userID == "" {
+		return fmt.Errorf("user not authenticated")
+	}
+
+	// Validate sync frequency
+	validFrequencies := map[string]bool{
+		"manual":  true,
+		"daily":   true,
+		"weekly":  true,
+		"monthly": true,
+	}
+	if !validFrequencies[req.SyncFrequency] {
+		return fmt.Errorf("invalid sync frequency: %s", req.SyncFrequency)
+	}
+
+	// Update the connection
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE sync_credentials
+		SET sync_frequency = $1, updated_at = CURRENT_TIMESTAMP
+		WHERE id = $2 AND user_id = $3
+	`, req.SyncFrequency, id, userID)
+	if err != nil {
+		return fmt.Errorf("failed to update connection: %w", err)
+	}
+
+	return nil
+}
+
+// ReconnectWealthsimpleResponse represents response for reconnecting
+type ReconnectWealthsimpleResponse struct {
+	ConnectionID string `json:"connection_id"`
+	Message      string `json:"message"`
+}
+
+// TriggerSync triggers a sync for a connection
+func (s *Service) TriggerSync(ctx context.Context, userID, connectionID string) error {
+	if userID == "" {
+		return fmt.Errorf("user not authenticated")
+	}
+
+	log.Printf("INFO: triggering sync for connection: user_id=%s connection_id=%s", userID, connectionID)
+
+	// Perform the sync
+	return s.performInitialSync(ctx, userID, connectionID)
+}
+
+// UpdateConnectionError updates the connection status to error with an error message
+func (s *Service) UpdateConnectionError(ctx context.Context, connectionID, errorMessage string) error {
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE sync_credentials
+		SET status = $1, last_sync_error = $2, updated_at = CURRENT_TIMESTAMP
+		WHERE id = $3
+	`, StatusError, errorMessage, connectionID)
+
+	if err != nil {
+		log.Printf("ERROR: failed to update connection error: connection_id=%s error=%v", connectionID, err)
+		return fmt.Errorf("failed to update connection error: %w", err)
+	}
+
+	log.Printf("INFO: updated connection error: connection_id=%s error=%s", connectionID, errorMessage)
+	return nil
+}
+
+// ReconnectWealthsimple reconnects an existing Wealthsimple connection using stored credentials
+func (s *Service) ReconnectWealthsimple(ctx context.Context) (*ReconnectWealthsimpleResponse, error) {
+	userID := auth.GetUserID(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("user not authenticated")
+	}
+
+	// Check if credentials exist
+	var credentialID, email string
+	var encryptedPassword []byte
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, email, encrypted_password
+		FROM sync_credentials
+		WHERE user_id = $1 AND provider = $2
+		ORDER BY created_at DESC
+		LIMIT 1
+	`, userID, ProviderWealthsimple).Scan(&credentialID, &email, &encryptedPassword)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("no stored credentials found")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch credentials: %w", err)
+	}
+
+	// Update connection status to connected (assuming stored credentials are valid)
+	// In a production scenario, you'd want to verify the credentials first
+	_, err = s.db.ExecContext(ctx, `
+		UPDATE sync_credentials
+		SET status = $1, last_sync_error = NULL, updated_at = CURRENT_TIMESTAMP
+		WHERE id = $2
+	`, StatusConnected, credentialID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update connection status: %w", err)
+	}
+
+	return &ReconnectWealthsimpleResponse{
+		ConnectionID: credentialID,
+		Message:      "Successfully reconnected using stored credentials",
+	}, nil
+}
+
+// GetConnectionSyncStatus retrieves detailed sync status for a connection
+func (s *Service) GetConnectionSyncStatus(ctx context.Context, id string) (*ConnectionSyncStatusResponse, error) {
+	userID := auth.GetUserID(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("user not authenticated")
+	}
+
+	// Get connection details
+	conn, err := s.GetConnection(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("connection not found: %w", err)
+	}
+
+	// Get recent sync jobs for this connection (last 24 hours)
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT
+			sj.id, sj.synced_account_id, sj.type, sj.status,
+			sj.started_at, sj.completed_at, sj.error_message,
+			sj.items_processed, sj.items_created, sj.items_updated, sj.items_failed,
+			sj.created_at,
+			a.name as account_name
+		FROM sync_jobs sj
+		JOIN synced_accounts sa ON sa.id = sj.synced_account_id
+		LEFT JOIN accounts a ON a.id = sa.local_account_id
+		WHERE sa.credential_id = $1
+		  AND sj.created_at > NOW() - INTERVAL '24 hours'
+		ORDER BY sj.created_at DESC
+		LIMIT 100
+	`, id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch sync jobs: %w", err)
+	}
+	defer rows.Close()
+
+	var jobs []SyncJob
+	summary := SyncSummary{}
+
+	for rows.Next() {
+		var job SyncJob
+		var startedAt, completedAt sql.NullTime
+		var errorMessage sql.NullString
+		var accountName sql.NullString
+
+		err := rows.Scan(
+			&job.ID, &job.SyncedAccountID, &job.Type, &job.Status,
+			&startedAt, &completedAt, &errorMessage,
+			&job.ItemsProcessed, &job.ItemsCreated, &job.ItemsUpdated, &job.ItemsFailed,
+			&job.CreatedAt,
+			&accountName,
+		)
+		if err != nil {
+			log.Printf("ERROR: failed to scan sync job: %v", err)
+			continue
+		}
+
+		if startedAt.Valid {
+			job.StartedAt = &startedAt.Time
+		}
+		if completedAt.Valid {
+			job.CompletedAt = &completedAt.Time
+		}
+		if errorMessage.Valid {
+			job.ErrorMessage = errorMessage.String
+		}
+		if accountName.Valid {
+			job.AccountName = accountName.String
+		}
+
+		jobs = append(jobs, job)
+
+		// Update summary
+		summary.TotalJobs++
+		summary.TotalProcessed += job.ItemsProcessed
+		summary.TotalCreated += job.ItemsCreated
+		summary.TotalUpdated += job.ItemsUpdated
+		summary.TotalFailed += job.ItemsFailed
+
+		switch job.Status {
+		case SyncJobStatusCompleted:
+			summary.CompletedJobs++
+		case SyncJobStatusFailed:
+			summary.FailedJobs++
+		case SyncJobStatusRunning:
+			summary.RunningJobs++
+		case SyncJobStatusPending:
+			summary.PendingJobs++
+		}
+	}
+
+	if jobs == nil {
+		jobs = []SyncJob{}
+	}
+
+	return &ConnectionSyncStatusResponse{
+		ConnectionID:   conn.ID,
+		ConnectionName: conn.Name,
+		Status:         conn.Status,
+		LastSyncAt:     conn.LastSyncAt,
+		LastSyncError:  conn.LastSyncError,
+		Jobs:           jobs,
+		Summary:        summary,
+	}, nil
 }

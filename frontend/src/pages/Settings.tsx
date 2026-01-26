@@ -13,7 +13,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { IconLink, IconBuilding, IconRefresh, IconTrash, IconPlus, IconBrandStripe, IconBrandPaypal, IconEdit, IconDownload, IconUpload, IconAlertCircle, IconLoader2 } from '@tabler/icons-react';
+import { IconLink, IconBuilding, IconRefresh, IconTrash, IconPlus, IconBrandStripe, IconBrandPaypal, IconEdit, IconDownload, IconUpload, IconAlertCircle, IconLoader2, IconHistory } from '@tabler/icons-react';
 import {
   Table,
   TableBody,
@@ -119,7 +119,14 @@ export function Settings() {
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importResult, setImportResult] = useState<any>(null);
   const [importError, setImportError] = useState<string | null>(null);
+  const [syncingConnectionId, setSyncingConnectionId] = useState<string | null>(null);
+  const [reconnectingConnectionId, setReconnectingConnectionId] = useState<string | null>(null);
+  const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
+  const [historyConnection, setHistoryConnection] = useState<Connection | null>(null);
+  const [syncHistory, setSyncHistory] = useState<any | null>(null);
+  const [loadingHistory, setLoadingHistory] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const syncStatusIntervalRef = useRef<number | null>(null);
 
   useEffect(() => {
     fetchConnections();
@@ -175,17 +182,105 @@ export function Settings() {
     }
   };
 
+  const handleReconnectConnection = async (connectionId: string) => {
+    try {
+      setReconnectingConnectionId(connectionId);
+      // For now, use the general reconnect which updates the existing connection
+      const data = await apiClient.reconnectWealthsimple();
+
+      if (data.connection_id) {
+        await fetchConnections();
+      }
+    } catch (error: any) {
+      console.error('Failed to reconnect:', error);
+    } finally {
+      setReconnectingConnectionId(null);
+    }
+  };
+
+  const handleViewHistory = async (connection: Connection) => {
+    setHistoryConnection(connection);
+    setHistoryDialogOpen(true);
+    setLoadingHistory(true);
+
+    try {
+      const status = await apiClient.getSyncStatus(connection.id);
+      setSyncHistory(status);
+    } catch (error) {
+      console.error('Failed to load sync history:', error);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  // Cleanup polling when modal closes
+  const handleCloseHistoryModal = () => {
+    setHistoryDialogOpen(false);
+    if (syncStatusIntervalRef.current) {
+      clearInterval(syncStatusIntervalRef.current);
+      syncStatusIntervalRef.current = null;
+    }
+  };
+
+  const pollSyncStatus = async (connectionId: string) => {
+    try {
+      const status = await apiClient.getSyncStatus(connectionId);
+      setSyncHistory(status);
+
+      // Stop polling if sync is complete
+      if (status.status !== 'syncing' && status.summary.running_jobs === 0 && status.summary.pending_jobs === 0) {
+        if (syncStatusIntervalRef.current) {
+          clearInterval(syncStatusIntervalRef.current);
+          syncStatusIntervalRef.current = null;
+        }
+        setSyncingConnectionId(null);
+        // Refresh connections to update last sync time
+        fetchConnections();
+      }
+    } catch (error: any) {
+      console.error('Failed to fetch sync status:', error);
+    }
+  };
+
   const handleSync = async (connectionId: string) => {
+    const connection = connections.find(c => c.id === connectionId);
+    if (!connection) return;
+
+    // Open the history modal and set the connection
+    setHistoryConnection(connection);
+    setHistoryDialogOpen(true);
+    setLoadingHistory(true);
+    setSyncingConnectionId(connectionId);
+    setSyncHistory(null);
+
     try {
       await apiClient.syncConnection(connectionId);
 
-      setTimeout(() => {
-        fetchConnections();
-      }, 1000);
-    } catch (error) {
+      // Initial status load
+      const status = await apiClient.getSyncStatus(connectionId);
+      setSyncHistory(status);
+      setLoadingHistory(false);
+
+      // Start polling for status updates
+      pollSyncStatus(connectionId);
+      syncStatusIntervalRef.current = setInterval(() => {
+        pollSyncStatus(connectionId);
+      }, 2000); // Poll every 2 seconds
+    } catch (error: any) {
       console.error('Failed to sync:', error);
+      setSyncingConnectionId(null);
+      setLoadingHistory(false);
     }
   };
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (syncStatusIntervalRef.current) {
+        clearInterval(syncStatusIntervalRef.current);
+      }
+    };
+  }, []);
 
   const handleEdit = (connection: Connection) => {
     setSelectedConnection(connection);
@@ -466,15 +561,44 @@ export function Settings() {
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex gap-1 justify-end">
+                              {connection.provider === 'wealthsimple' && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleReconnectConnection(connection.id)}
+                                  disabled={reconnectingConnectionId === connection.id}
+                                  className="h-8 w-8 p-0 text-orange-600 hover:text-orange-700"
+                                  title="Reconnect account"
+                                >
+                                  {reconnectingConnectionId === connection.id ? (
+                                    <IconLoader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <IconLink className="h-4 w-4" />
+                                  )}
+                                </Button>
+                              )}
                               <Button
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => handleSync(connection.id)}
-                                disabled={connection.status === 'syncing'}
+                                disabled={connection.status === 'syncing' || syncingConnectionId === connection.id}
                                 className="h-8 w-8 p-0"
                                 title="Sync now"
                               >
-                                <IconRefresh className="h-4 w-4" />
+                                {syncingConnectionId === connection.id ? (
+                                  <IconLoader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <IconRefresh className="h-4 w-4" />
+                                )}
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleViewHistory(connection)}
+                                className="h-8 w-8 p-0"
+                                title="View sync history"
+                              >
+                                <IconHistory className="h-4 w-4" />
                               </Button>
                               <Button
                                 variant="ghost"
@@ -817,6 +941,160 @@ export function Settings() {
                 {importing ? 'Importing...' : importError ? 'Retry Import' : 'Import Data'}
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={historyDialogOpen} onOpenChange={handleCloseHistoryModal}>
+        <DialogContent className="!max-w-5xl sm:!max-w-5xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              Sync History
+              {syncingConnectionId && (
+                <Badge variant="secondary" className="ml-2">
+                  <IconLoader2 className="h-3 w-3 mr-1 animate-spin" />
+                  Syncing...
+                </Badge>
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              Recent sync activity for {historyConnection?.name}
+            </DialogDescription>
+          </DialogHeader>
+
+          {loadingHistory ? (
+            <div className="flex items-center justify-center py-8">
+              <IconLoader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : syncHistory ? (
+            <div className="space-y-4">
+              {/* Completion Alert */}
+              {!syncingConnectionId && syncHistory.summary.total_jobs > 0 && (
+                <Alert variant={syncHistory.summary.failed_jobs > 0 ? "destructive" : "default"}>
+                  <IconAlertCircle className="h-4 w-4" />
+                  <AlertTitle>
+                    {syncHistory.summary.failed_jobs > 0 ? 'Sync Completed with Errors' : 'Sync Completed Successfully'}
+                  </AlertTitle>
+                  <AlertDescription>
+                    {syncHistory.summary.failed_jobs > 0
+                      ? `${syncHistory.summary.failed_jobs} job(s) failed. ${syncHistory.summary.completed_jobs} completed successfully.`
+                      : `All ${syncHistory.summary.completed_jobs} sync job(s) completed. ${syncHistory.summary.total_created} items created, ${syncHistory.summary.total_updated} updated.`
+                    }
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* Summary Stats */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="text-2xl font-bold">{syncHistory.summary.total_jobs}</div>
+                    <div className="text-xs text-muted-foreground">Total Syncs</div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="text-2xl font-bold text-green-600">{syncHistory.summary.completed_jobs}</div>
+                    <div className="text-xs text-muted-foreground">Completed</div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="text-2xl font-bold text-blue-600">{syncHistory.summary.running_jobs}</div>
+                    <div className="text-xs text-muted-foreground">Running</div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="text-2xl font-bold text-red-600">{syncHistory.summary.failed_jobs}</div>
+                    <div className="text-xs text-muted-foreground">Failed</div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Sync Jobs List */}
+              {syncHistory.jobs && syncHistory.jobs.length > 0 ? (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Sync Jobs (Last 24 Hours)</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="max-h-96 overflow-y-auto">
+                      <Table>
+                        <TableHeader className="sticky top-0 bg-background">
+                          <TableRow>
+                            <TableHead>Account</TableHead>
+                            <TableHead>Type</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>Started</TableHead>
+                            <TableHead>Completed</TableHead>
+                            <TableHead className="text-right">Processed</TableHead>
+                            <TableHead className="text-right">Created</TableHead>
+                            <TableHead className="text-right">Updated</TableHead>
+                            <TableHead className="text-right">Failed</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {syncHistory.jobs.map((job: any) => (
+                            <TableRow key={job.id}>
+                              <TableCell className="font-medium">{job.account_name || 'Unknown'}</TableCell>
+                              <TableCell>
+                                <span className="capitalize text-xs bg-muted px-2 py-1 rounded">{job.type}</span>
+                              </TableCell>
+                              <TableCell>
+                                {job.status === 'completed' && (
+                                  <Badge variant="default" className="bg-green-600">Completed</Badge>
+                                )}
+                                {job.status === 'running' && (
+                                  <Badge variant="secondary">Running</Badge>
+                                )}
+                                {job.status === 'failed' && (
+                                  <Badge variant="destructive">Failed</Badge>
+                                )}
+                                {job.status === 'pending' && (
+                                  <Badge variant="outline">Pending</Badge>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-xs">
+                                {job.started_at ? new Date(job.started_at).toLocaleString() : '-'}
+                              </TableCell>
+                              <TableCell className="text-xs">
+                                {job.completed_at ? new Date(job.completed_at).toLocaleString() : '-'}
+                              </TableCell>
+                              <TableCell className="text-right">{job.items_processed}</TableCell>
+                              <TableCell className="text-right text-green-600">{job.items_created}</TableCell>
+                              <TableCell className="text-right text-blue-600">{job.items_updated}</TableCell>
+                              <TableCell className="text-right text-red-600">{job.items_failed}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  No sync history available
+                </div>
+              )}
+
+              {/* Last Sync Info */}
+              {syncHistory.last_sync_at && (
+                <div className="text-sm text-muted-foreground">
+                  Last synced: {new Date(syncHistory.last_sync_at).toLocaleString()}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              No sync history available
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={handleCloseHistoryModal}>
+              Close
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
