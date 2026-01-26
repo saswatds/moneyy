@@ -1,369 +1,89 @@
-# Money App - Docker-Based Development
+# 💰 Moneyy - Take Control of Your Finances
 
-A complete personal finance management application running entirely in Docker containers.
+**Your financial data belongs to you. Host it yourself.**
 
-## 🚀 Quick Start
+Money is a modern, self-hosted personal finance management platform that gives you complete control over your financial data. No third-party services, no data selling, no privacy concerns—just you and your money.
 
-### Prerequisites
-- **Docker Desktop** (includes Docker Compose V2)
-- That's it! No need for Go, Node, or PostgreSQL locally
+## Why Moneyy?
 
-> **Note**: This project uses Docker Compose V2 (`docker compose` command, not `docker-compose`). Make sure you have Docker Desktop or Docker CLI with Compose plugin installed.
+**Privacy First** - Your financial data never leaves your server. No third parties, no tracking, no compromises.
 
-### First Time Setup
+**Complete Control** - Own your data, customize everything, and keep your financial information secure on your own terms.
 
-```bash
-# 1. Clone the repository
-git clone <your-repo>
-cd money
+**Free Forever** - No subscriptions, no premium tiers, no hidden costs. Deploy once and use forever.
 
-# 2. Run setup (creates .env file)
-make setup
+**Open Source** - Transparent codebase you can audit, modify, and trust.
 
-# 3. Edit .env with your credentials
-# - Set DB_PASSWORD
-# - Set ENC_MASTER_KEY (32 character string)
+## Features
 
-# 4. Start the entire stack
-make dev
-```
+- **Account Management** - Create and track all your financial accounts with balance history charts and multi-currency support (CAD, USD, INR)
+- **Mortgage Tracking** - Setup mortgages, record payments, view amortization schedules, and track extra payments
+- **Loan Management** - Track personal loans with payment schedules and interest calculations
+- **Asset Tracking** - Monitor real estate, vehicles, collectibles, and equipment with automatic or manual depreciation
+- **Recurring Expenses** - Manage weekly to annual recurring expenses with categorization (housing, utilities, transportation, and more)
+- **Financial Projections** - Advanced forecasting with tax brackets, inflation rates, salary growth, and investment returns across TFSA, RRSP, and brokerage accounts
+- **Data Integrations** - Connect your Wealthsimple account for automatic syncing (Plaid, Stripe, PayPal coming soon)
+- **Multi-Currency** - Automatic exchange rate conversion across all accounts
+- **Passkey Authentication** - Passwordless, secure login using WebAuthn technology
 
-That's it! The application will be available at:
-- **Frontend**: http://localhost:5173
-- **API**: http://localhost:4000
-- **Database**: localhost:5432
+## Deployment
 
-## 📋 Available Commands
+**Prerequisites:** Docker with Compose plugin installed
 
-Run `make` or `make help` to see all available commands.
-
-### Essential Commands
+**1. Clone the repository**
 
 ```bash
-make dev              # Start entire stack (database + API + frontend)
-make stop             # Stop all services
-make logs             # View logs from all services
-make status           # Check status of all containers
-make health           # Health check for all services
+git clone https://github.com/saswatds/moneyy.git
+cd moneyy
 ```
 
-### Development Commands
+**2. Create environment file**
+
+Copy the example and configure:
 
 ```bash
-make api-logs         # View API logs only
-make frontend-logs    # View frontend logs only
-make db-logs          # View database logs
-make shell            # Open shell in API container
-make restart          # Restart all services
+cp .env.prod.example .env.prod
 ```
 
-### Database Commands
+Edit `.env.prod` with your values:
 
 ```bash
-make migrate          # Run database migrations
-make db-shell DB=account  # Connect to specific database
-make backup           # Backup all databases
-make restore FILE=<backup-file>  # Restore from backup
+# REQUIRED - Database password
+DB_PASSWORD=your_secure_production_password_here
+
+# REQUIRED - Generate secure keys
+ENC_MASTER_KEY=your_production_encryption_key_here
+JWT_SECRET=your_production_jwt_secret_min_32_chars_here
+
+# REQUIRED - WebAuthn settings
+WEBAUTHN_RP_ID=localhost
+WEBAUTHN_RP_ORIGIN=http://localhost:4000
+
+# Optional - CORS origins
+CORS_ORIGINS=http://localhost:4000
+
+# Optional - Docker image version (default: latest)
+VERSION=latest
 ```
 
-### Build Commands
-
+Generate secure keys:
 ```bash
-make build            # Build production images
-make rebuild          # Rebuild everything from scratch
-make clean            # Remove all containers and volumes
+openssl rand -base64 32  # Use for ENC_MASTER_KEY
+openssl rand -base64 32  # Use for JWT_SECRET
 ```
 
-## 🏗️ Architecture
+**3. Deploy**
 
-### Development Stack
-- **PostgreSQL 16**: 7 databases (account, balance, currency, holdings, projections, sync, transaction)
-- **Go API Server**: Runs with hot reload (Air)
-- **React Frontend**: Runs with Vite dev server and hot module replacement
-- **Docker Volumes**: Persistent data and Go module caching
-
-### Services
-
-```
-money-postgres    → PostgreSQL database container
-money-api         → Go API server with hot reload
-money-frontend    → React frontend with hot reload
-money-migrate     → One-time migration runner
-```
-
-## 🔥 Hot Reload
-
-**Both API and Frontend have hot reload enabled!**
-
-- **API**: Uses Air for hot reload
-  - Edit any Go file → API automatically rebuilds and restarts
-  - Build cache persists in Docker volumes for fast rebuilds
-
-- **Frontend**: Uses Vite's HMR
-  - Edit any React/TypeScript file → instant updates in browser
-  - No page refresh needed
-
-## 📊 Monitoring
-
-### Check Service Status
-```bash
-make status
-```
-
-### View Logs
-```bash
-# All services
-make logs
-
-# Specific service
-make api-logs
-make frontend-logs
-make db-logs
-```
-
-### Health Checks
-```bash
-make health
-```
-
-Output example:
-```
-  Database:  ✓ Healthy
-  API:       ✓ Healthy
-  Frontend:  ✓ Healthy
-```
-
-## 🗄️ Database Management
-
-### Connect to Database
-```bash
-# Open psql shell for specific database
-make db-shell DB=account
-make db-shell DB=balance
-# etc.
-```
-
-### Run Migrations
-```bash
-make migrate
-```
-
-### Backup & Restore
-```bash
-# Create backup
-make backup
-# Creates file: backups/backup_20260125_120000.sql
-
-# Restore from backup
-make restore FILE=backups/backup_20260125_120000.sql
-```
-
-## 🐛 Debugging
-
-### Access API Container
-```bash
-make shell
-# Now you're inside the container
-# Run go commands, check files, etc.
-```
-
-### Check Specific Service
-```bash
-# Start only API
-make api
-
-# Start only frontend
-make frontend
-
-# Start only database
-make db
-```
-
-### View Specific Logs
-```bash
-# API logs in real-time
-docker compose logs -f api
-
-# Check last 100 lines
-docker compose logs --tail=100 api
-```
-
-## 🏭 Production Deployment
-
-### Build Production Images
-```bash
-make build
-```
-
-### Deploy with Production Compose
-```bash
-docker compose -f docker-compose.prod.yml up -d
-```
-
-### Environment Variables for Production
-Create `.env.prod`:
-```bash
-# Database
-DB_HOST=your-production-db.example.com
-DB_PORT=5432
-DB_USER=postgres
-DB_PASSWORD=your-secure-password
-
-# Encryption
-ENC_MASTER_KEY=your-32-character-encryption-key
-
-# Server
-LOG_LEVEL=info
-LOG_FORMAT=json
-
-# URLs
-API_PORT=4000
-API_URL=https://api.yourdomain.com
-FRONTEND_PORT=80
-```
-
-Then deploy:
 ```bash
 docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
 ```
 
-## 🧹 Cleanup
+Your instance will be available at `http://localhost:4000`
 
-### Remove Containers (Keep Data)
-```bash
-make stop
-```
+---
 
-### Remove Everything (Including Data)
-```bash
-make clean
-# ⚠️ This removes all data! Backup first with: make backup
-```
+## License
 
-### Start Fresh
-```bash
-make rebuild
-# Stops everything, removes volumes, rebuilds, and starts
-```
+Copyright (c) 2026 Noob Ventures. All Rights Reserved.
 
-## 🔧 Troubleshooting
-
-### Containers Won't Start
-```bash
-# Check Docker is running
-docker ps
-
-# Check logs for errors
-make logs
-
-# Rebuild everything
-make rebuild
-```
-
-### Database Connection Issues
-```bash
-# Check database is running
-make status
-
-# Check database health
-make health
-
-# View database logs
-make db-logs
-
-# Connect to database directly
-make db-shell DB=account
-```
-
-### API Not Responding
-```bash
-# Check API logs
-make api-logs
-
-# Restart API only
-docker compose restart api
-
-# Rebuild API
-docker compose up -d --build api
-```
-
-### Port Already in Use
-Edit `.env` and change ports:
-```bash
-DB_PORT=5433  # Instead of 5432
-```
-
-Then:
-```bash
-make restart
-```
-
-## 📁 Project Structure
-
-```
-money/
-├── cmd/
-│   ├── server/         # API server entry point
-│   └── migrate/        # Migration tool
-├── internal/
-│   ├── account/        # Account service
-│   ├── balance/        # Balance service
-│   ├── currency/       # Currency service
-│   ├── holdings/       # Holdings service
-│   ├── projections/    # Projections service
-│   ├── sync/           # Sync service
-│   ├── transaction/    # Transaction service
-│   ├── database/       # Database manager
-│   ├── config/         # Configuration
-│   ├── logger/         # Logging
-│   └── server/         # HTTP server and handlers
-├── frontend/           # React frontend
-├── migrations/         # Database migrations
-├── scripts/            # Setup scripts
-├── docker-compose.yml  # Development compose
-├── docker-compose.prod.yml  # Production compose
-├── Dockerfile.dev      # Development Dockerfile
-├── Dockerfile          # Production Dockerfile
-├── Makefile            # All commands
-└── .env                # Environment variables
-```
-
-## 🎯 Development Workflow
-
-1. **Start development**:
-   ```bash
-   make dev
-   ```
-
-2. **Edit code**:
-   - API changes: Edit Go files → Auto-reloads
-   - Frontend changes: Edit React files → Instant HMR
-
-3. **View logs**:
-   ```bash
-   make logs
-   ```
-
-4. **Test changes**:
-   ```bash
-   make test
-   ```
-
-5. **Stop when done**:
-   ```bash
-   make stop
-   ```
-
-## 🆘 Getting Help
-
-Run `make` or `make help` to see all available commands.
-
-For issues:
-1. Check `make status`
-2. Check `make logs`
-3. Try `make restart`
-4. If stuck, `make rebuild`
-
-## 📝 License
-
-MIT
+This is source-available software. See [LICENSE](LICENSE) for details.
