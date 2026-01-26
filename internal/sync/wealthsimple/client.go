@@ -80,8 +80,16 @@ type TokenResponse struct {
 	Profiles            map[string]map[string]string `json:"profiles"`
 }
 
+// LoginResult represents the result of a login attempt
+type LoginResult struct {
+	OTPRequired bool
+	LoginResponse *LoginResponse
+	TokenResponse *TokenResponse
+}
+
 // Login attempts to log in with username and password
-func (c *Client) Login(ctx context.Context, username, password string) (*LoginResponse, error) {
+// Returns LoginResult with either OTP requirement or tokens
+func (c *Client) Login(ctx context.Context, username, password string) (*LoginResult, error) {
 	reqBody := LoginRequest{
 		GrantType:    "password",
 		Username:     username,
@@ -114,24 +122,35 @@ func (c *Client) Login(ctx context.Context, username, password string) (*LoginRe
 	if resp.StatusCode == http.StatusUnauthorized {
 		otpRequired := resp.Header.Get("x-wealthsimple-otp-required") == "true"
 		if otpRequired {
-			return &LoginResponse{
-				OTPRequired:           true,
-				OTPAuthenticatedClaim: resp.Header.Get("x-wealthsimple-otp-authenticated-claim"),
-				OTPOptions:            resp.Header.Get("x-wealthsimple-otp-options"),
+			return &LoginResult{
+				OTPRequired: true,
+				LoginResponse: &LoginResponse{
+					OTPRequired:           true,
+					OTPAuthenticatedClaim: resp.Header.Get("x-wealthsimple-otp-authenticated-claim"),
+					OTPOptions:            resp.Header.Get("x-wealthsimple-otp-options"),
+				},
 			}, nil
 		}
+		// Unauthorized but no OTP header - invalid credentials
+		return nil, fmt.Errorf("unauthorized: invalid credentials")
 	}
 
-	var loginResp LoginResponse
-	if err := json.NewDecoder(resp.Body).Decode(&loginResp); err != nil {
-		return nil, err
+	if resp.StatusCode == http.StatusOK {
+		// Success - decode token response
+		var tokenResp TokenResponse
+		if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+			return nil, fmt.Errorf("failed to decode token response: %w", err)
+		}
+		c.accessToken = tokenResp.AccessToken
+		return &LoginResult{
+			OTPRequired: false,
+			TokenResponse: &tokenResp,
+		}, nil
 	}
 
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusUnauthorized {
-		return nil, fmt.Errorf("login failed: %s - %s", loginResp.Error, loginResp.ErrorDescription)
-	}
-
-	return &loginResp, nil
+	// Other error status codes
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	return nil, fmt.Errorf("login failed with status %d: %s", resp.StatusCode, string(bodyBytes))
 }
 
 // VerifyOTP completes authentication with OTP code
@@ -180,25 +199,27 @@ func (c *Client) VerifyOTP(ctx context.Context, username, password, otpCode, otp
 	return &tokenResp, nil
 }
 
-// RefreshAccessToken refreshes the access token using refresh token
-func (c *Client) RefreshAccessToken(ctx context.Context, refreshToken string) (*TokenResponse, error) {
-	reqBody := map[string]string{
-		"grant_type":    "refresh_token",
-		"refresh_token": refreshToken,
-		"client_id":     clientID,
-	}
+// TokenInfoResponse represents the response from token/info endpoint
+type TokenInfoResponse struct {
+	ResourceOwnerID      string                       `json:"resource_owner_id"`
+	Scope                []string                     `json:"scope"`
+	ExpiresIn            int                          `json:"expires_in"`
+	UserCanonicalID      string                       `json:"user_canonical_id"`
+	IdentityCanonicalID  string                       `json:"identity_canonical_id"`
+	Email                string                       `json:"email"`
+	Profiles             map[string]map[string]string `json:"profiles"`
+	CreatedAt            int64                        `json:"created_at"`
+}
 
-	body, err := json.Marshal(reqBody)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", apiBaseURL+"/v1/oauth/v2/token", bytes.NewBuffer(body))
+// CheckTokenInfo validates if an access token is still valid and returns token info
+func (c *Client) CheckTokenInfo(ctx context.Context, accessToken string) (*TokenInfoResponse, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", apiBaseURL+"/v1/oauth/v2/token/info", nil)
 	if err != nil {
 		return nil, err
 	}
 
 	c.setCommonHeaders(req)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -208,16 +229,20 @@ func (c *Client) RefreshAccessToken(ctx context.Context, refreshToken string) (*
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("token refresh failed: %s", string(bodyBytes))
+		return nil, fmt.Errorf("token info check failed (status %d): %s", resp.StatusCode, string(bodyBytes))
 	}
 
-	var tokenResp TokenResponse
-	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+	var tokenInfo TokenInfoResponse
+	if err := json.NewDecoder(resp.Body).Decode(&tokenInfo); err != nil {
 		return nil, err
 	}
 
-	c.accessToken = tokenResp.AccessToken
-	return &tokenResp, nil
+	// Check if token has expired or is about to expire (less than 60 seconds remaining)
+	if tokenInfo.ExpiresIn < 60 {
+		return nil, fmt.Errorf("token expired or expiring soon (expires_in: %d seconds)", tokenInfo.ExpiresIn)
+	}
+
+	return &tokenInfo, nil
 }
 
 // GraphQLRequest represents a GraphQL request
