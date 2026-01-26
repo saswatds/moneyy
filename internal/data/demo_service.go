@@ -112,19 +112,33 @@ func (s *DemoService) ResetDemoData(ctx context.Context, userID string) error {
 
 	for _, table := range tables {
 		query := fmt.Sprintf("DELETE FROM %s WHERE user_id = $1", table)
-		if table == "asset_depreciation_entries" || table == "loan_payments" || table == "mortgage_payments" || table == "balances" || table == "holding_transactions" || table == "synced_accounts" {
-			// These tables don't have user_id, need to join with parent tables
+
+		// Tables that don't have user_id directly - need to join with parent tables
+		if table == "asset_depreciation_entries" || table == "asset_details" ||
+		   table == "loan_payments" || table == "loan_details" ||
+		   table == "mortgage_payments" || table == "mortgage_details" ||
+		   table == "holdings" || table == "holding_transactions" ||
+		   table == "balances" || table == "synced_accounts" {
+
 			switch table {
 			case "asset_depreciation_entries":
 				query = "DELETE FROM asset_depreciation_entries WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1)"
+			case "asset_details":
+				query = "DELETE FROM asset_details WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1)"
 			case "loan_payments":
 				query = "DELETE FROM loan_payments WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1)"
+			case "loan_details":
+				query = "DELETE FROM loan_details WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1)"
 			case "mortgage_payments":
 				query = "DELETE FROM mortgage_payments WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1)"
-			case "balances":
-				query = "DELETE FROM balances WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1)"
+			case "mortgage_details":
+				query = "DELETE FROM mortgage_details WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1)"
+			case "holdings":
+				query = "DELETE FROM holdings WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1)"
 			case "holding_transactions":
 				query = "DELETE FROM holding_transactions WHERE holding_id IN (SELECT id FROM holdings WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1))"
+			case "balances":
+				query = "DELETE FROM balances WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1)"
 			case "synced_accounts":
 				query = "DELETE FROM synced_accounts WHERE credential_id IN (SELECT id FROM sync_credentials WHERE user_id = $1)"
 			}
