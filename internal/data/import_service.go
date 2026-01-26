@@ -176,7 +176,7 @@ func (s *ImportService) extractArchiveData(archive []byte) (map[string][]byte, e
 		"accounts", "balances", "holdings", "holding_transactions",
 		"mortgage_details", "mortgage_payments", "loan_details", "loan_payments",
 		"asset_details", "asset_depreciation_entries", "recurring_expenses",
-		"projection_scenarios", "exchange_rates", "connections", "synced_accounts",
+		"projection_scenarios", "exchange_rates", "synced_accounts",
 	}
 
 	for _, tableName := range tables {
@@ -223,9 +223,8 @@ func (s *ImportService) importInTransaction(ctx context.Context, userID string, 
 		name       string
 		importFunc func(context.Context, *sql.Tx, string, []byte, string) (ImportTableSummary, error)
 	}{
-		{"connections", s.importConnections},        // First: no dependencies
-		{"accounts", s.importAccounts},              // Second: may reference synced_accounts
-		{"synced_accounts", s.importSyncedAccounts}, // Third: needs connections and accounts
+		{"accounts", s.importAccounts},              // First: no dependencies
+		{"synced_accounts", s.importSyncedAccounts}, // Second: needs accounts and sync_credentials
 		{"balances", s.importBalances},
 		{"holdings", s.importHoldings},
 		{"holding_transactions", s.importHoldingTransactions},
@@ -272,8 +271,8 @@ func (s *ImportService) importAccounts(ctx context.Context, tx *sql.Tx, userID s
 		acc.UserID = userID
 
 		query := `
-			INSERT INTO accounts (id, user_id, name, type, currency, institution, is_asset, is_active, synced_account_id, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+			INSERT INTO accounts (id, user_id, name, type, currency, institution, is_asset, is_active, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 			ON CONFLICT (id) DO UPDATE SET
 				name = EXCLUDED.name,
 				type = EXCLUDED.type,
@@ -286,7 +285,7 @@ func (s *ImportService) importAccounts(ctx context.Context, tx *sql.Tx, userID s
 
 		result, err := tx.ExecContext(ctx, query,
 			acc.ID, acc.UserID, acc.Name, acc.Type, acc.Currency,
-			acc.Institution, acc.IsAsset, acc.IsActive, acc.SyncedAccountID,
+			acc.Institution, acc.IsAsset, acc.IsActive,
 			acc.CreatedAt, acc.UpdatedAt,
 		)
 		if err != nil {
@@ -442,25 +441,29 @@ func (s *ImportService) importMortgageDetails(ctx context.Context, tx *sql.Tx, u
 
 	for _, md := range details {
 		query := `
-			INSERT INTO mortgage_details (id, account_id, principal_amount, interest_rate, payment_frequency, amortization_years, start_date, first_payment_date, property_value, down_payment_percentage, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+			INSERT INTO mortgage_details (id, account_id, original_amount, interest_rate, rate_type,
+				start_date, term_months, amortization_months, payment_amount, payment_frequency,
+				payment_day, property_address, property_city, property_province, property_postal_code,
+				property_value, renewal_date, maturity_date, lender, mortgage_number,
+				notes, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
 			ON CONFLICT (id) DO UPDATE SET
-				principal_amount = EXCLUDED.principal_amount,
+				original_amount = EXCLUDED.original_amount,
 				interest_rate = EXCLUDED.interest_rate,
-				payment_frequency = EXCLUDED.payment_frequency,
-				amortization_years = EXCLUDED.amortization_years,
-				start_date = EXCLUDED.start_date,
-				first_payment_date = EXCLUDED.first_payment_date,
-				property_value = EXCLUDED.property_value,
-				down_payment_percentage = EXCLUDED.down_payment_percentage,
+				rate_type = EXCLUDED.rate_type,
+				term_months = EXCLUDED.term_months,
+				amortization_months = EXCLUDED.amortization_months,
+				payment_amount = EXCLUDED.payment_amount,
+				maturity_date = EXCLUDED.maturity_date,
 				updated_at = EXCLUDED.updated_at
 		`
 
 		result, err := tx.ExecContext(ctx, query,
-			md.ID, md.AccountID, md.PrincipalAmount, md.InterestRate,
-			md.PaymentFrequency, md.AmortizationYears, md.StartDate,
-			md.FirstPaymentDate, md.PropertyValue, md.DownPaymentPercentage,
-			md.CreatedAt, md.UpdatedAt,
+			md.ID, md.AccountID, md.OriginalAmount, md.InterestRate, md.RateType,
+			md.StartDate, md.TermMonths, md.AmortizationMonths, md.PaymentAmount, md.PaymentFrequency,
+			md.PaymentDay, md.PropertyAddress, md.PropertyCity, md.PropertyProvince, md.PropertyPostalCode,
+			md.PropertyValue, md.RenewalDate, md.MaturityDate, md.Lender, md.MortgageNumber,
+			md.Notes, md.CreatedAt, md.UpdatedAt,
 		)
 		if err != nil {
 			summary.Errors++
@@ -489,20 +492,20 @@ func (s *ImportService) importMortgagePayments(ctx context.Context, tx *sql.Tx, 
 
 	for _, mp := range payments {
 		query := `
-			INSERT INTO mortgage_payments (id, account_id, payment_date, amount, principal_paid, interest_paid, remaining_balance, notes, created_at)
+			INSERT INTO mortgage_payments (id, account_id, payment_date, payment_amount, principal_amount, interest_amount, extra_payment, balance_after, notes, created_at)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 			ON CONFLICT (id) DO UPDATE SET
 				payment_date = EXCLUDED.payment_date,
-				amount = EXCLUDED.amount,
-				principal_paid = EXCLUDED.principal_paid,
-				interest_paid = EXCLUDED.interest_paid,
-				remaining_balance = EXCLUDED.remaining_balance,
+				payment_amount = EXCLUDED.payment_amount,
+				principal_amount = EXCLUDED.principal_amount,
+				interest_amount = EXCLUDED.interest_amount,
+				balance_after = EXCLUDED.balance_after,
 				notes = EXCLUDED.notes
 		`
 
 		result, err := tx.ExecContext(ctx, query,
-			mp.ID, mp.AccountID, mp.PaymentDate, mp.Amount,
-			mp.PrincipalPaid, mp.InterestPaid, mp.RemainingBalance,
+			mp.ID, mp.AccountID, mp.PaymentDate, mp.PaymentAmount,
+			mp.PrincipalAmount, mp.InterestAmount, mp.BalanceAfter,
 			mp.Notes, mp.CreatedAt,
 		)
 		if err != nil {
@@ -532,24 +535,24 @@ func (s *ImportService) importLoanDetails(ctx context.Context, tx *sql.Tx, userI
 
 	for _, ld := range details {
 		query := `
-			INSERT INTO loan_details (id, account_id, principal_amount, interest_rate, payment_frequency, term_years, start_date, first_payment_date, loan_type, lender, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+			INSERT INTO loan_details (id, account_id, original_amount, interest_rate, rate_type,
+				start_date, term_months, payment_amount, payment_frequency, payment_day,
+				loan_type, lender, loan_number, purpose, maturity_date, notes, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
 			ON CONFLICT (id) DO UPDATE SET
-				principal_amount = EXCLUDED.principal_amount,
+				original_amount = EXCLUDED.original_amount,
 				interest_rate = EXCLUDED.interest_rate,
-				payment_frequency = EXCLUDED.payment_frequency,
-				term_years = EXCLUDED.term_years,
-				start_date = EXCLUDED.start_date,
-				first_payment_date = EXCLUDED.first_payment_date,
-				loan_type = EXCLUDED.loan_type,
-				lender = EXCLUDED.lender,
+				rate_type = EXCLUDED.rate_type,
+				term_months = EXCLUDED.term_months,
+				payment_amount = EXCLUDED.payment_amount,
+				maturity_date = EXCLUDED.maturity_date,
 				updated_at = EXCLUDED.updated_at
 		`
 
 		result, err := tx.ExecContext(ctx, query,
-			ld.ID, ld.AccountID, ld.PrincipalAmount, ld.InterestRate,
-			ld.PaymentFrequency, ld.TermYears, ld.StartDate,
-			ld.FirstPaymentDate, ld.LoanType, ld.Lender,
+			ld.ID, ld.AccountID, ld.OriginalAmount, ld.InterestRate, ld.RateType,
+			ld.StartDate, ld.TermMonths, ld.PaymentAmount, ld.PaymentFrequency, ld.PaymentDay,
+			ld.LoanType, ld.Lender, ld.LoanNumber, ld.Purpose, ld.MaturityDate, ld.Notes,
 			ld.CreatedAt, ld.UpdatedAt,
 		)
 		if err != nil {
@@ -579,20 +582,21 @@ func (s *ImportService) importLoanPayments(ctx context.Context, tx *sql.Tx, user
 
 	for _, lp := range payments {
 		query := `
-			INSERT INTO loan_payments (id, account_id, payment_date, amount, principal_paid, interest_paid, remaining_balance, notes, created_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			INSERT INTO loan_payments (id, account_id, payment_date, payment_amount, principal_amount, interest_amount, extra_payment, balance_after, notes, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 			ON CONFLICT (id) DO UPDATE SET
 				payment_date = EXCLUDED.payment_date,
-				amount = EXCLUDED.amount,
-				principal_paid = EXCLUDED.principal_paid,
-				interest_paid = EXCLUDED.interest_paid,
-				remaining_balance = EXCLUDED.remaining_balance,
+				payment_amount = EXCLUDED.payment_amount,
+				principal_amount = EXCLUDED.principal_amount,
+				interest_amount = EXCLUDED.interest_amount,
+				extra_payment = EXCLUDED.extra_payment,
+				balance_after = EXCLUDED.balance_after,
 				notes = EXCLUDED.notes
 		`
 
 		result, err := tx.ExecContext(ctx, query,
-			lp.ID, lp.AccountID, lp.PaymentDate, lp.Amount,
-			lp.PrincipalPaid, lp.InterestPaid, lp.RemainingBalance,
+			lp.ID, lp.AccountID, lp.PaymentDate, lp.PaymentAmount,
+			lp.PrincipalAmount, lp.InterestAmount, lp.ExtraPayment, lp.BalanceAfter,
 			lp.Notes, lp.CreatedAt,
 		)
 		if err != nil {
@@ -622,26 +626,28 @@ func (s *ImportService) importAssetDetails(ctx context.Context, tx *sql.Tx, user
 
 	for _, ad := range details {
 		query := `
-			INSERT INTO asset_details (id, account_id, asset_type, purchase_price, purchase_date, current_value, depreciation_method, useful_life_years, salvage_value, description, last_valuation_date, created_at, updated_at)
+			INSERT INTO asset_details (id, account_id, asset_type, purchase_price, purchase_date,
+				depreciation_method, useful_life_years, salvage_value, depreciation_rate,
+				type_specific_data, notes, created_at, updated_at)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 			ON CONFLICT (id) DO UPDATE SET
 				asset_type = EXCLUDED.asset_type,
 				purchase_price = EXCLUDED.purchase_price,
 				purchase_date = EXCLUDED.purchase_date,
-				current_value = EXCLUDED.current_value,
 				depreciation_method = EXCLUDED.depreciation_method,
 				useful_life_years = EXCLUDED.useful_life_years,
 				salvage_value = EXCLUDED.salvage_value,
-				description = EXCLUDED.description,
-				last_valuation_date = EXCLUDED.last_valuation_date,
+				depreciation_rate = EXCLUDED.depreciation_rate,
+				type_specific_data = EXCLUDED.type_specific_data,
+				notes = EXCLUDED.notes,
 				updated_at = EXCLUDED.updated_at
 		`
 
 		result, err := tx.ExecContext(ctx, query,
 			ad.ID, ad.AccountID, ad.AssetType, ad.PurchasePrice,
-			ad.PurchaseDate, ad.CurrentValue, ad.DepreciationMethod,
-			ad.UsefulLifeYears, ad.SalvageValue, ad.Description,
-			ad.LastValuationDate, ad.CreatedAt, ad.UpdatedAt,
+			ad.PurchaseDate, ad.DepreciationMethod, ad.UsefulLifeYears,
+			ad.SalvageValue, ad.DepreciationRate, ad.TypeSpecificData,
+			ad.Notes, ad.CreatedAt, ad.UpdatedAt,
 		)
 		if err != nil {
 			summary.Errors++
@@ -670,19 +676,18 @@ func (s *ImportService) importAssetDepreciation(ctx context.Context, tx *sql.Tx,
 
 	for _, ade := range entries {
 		query := `
-			INSERT INTO asset_depreciation_entries (id, account_id, entry_date, depreciation_amount, book_value, method, notes, created_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			INSERT INTO asset_depreciation_entries (id, account_id, entry_date, current_value, accumulated_depreciation, notes, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
 			ON CONFLICT (id) DO UPDATE SET
 				entry_date = EXCLUDED.entry_date,
-				depreciation_amount = EXCLUDED.depreciation_amount,
-				book_value = EXCLUDED.book_value,
-				method = EXCLUDED.method,
+				current_value = EXCLUDED.current_value,
+				accumulated_depreciation = EXCLUDED.accumulated_depreciation,
 				notes = EXCLUDED.notes
 		`
 
 		result, err := tx.ExecContext(ctx, query,
-			ade.ID, ade.AccountID, ade.EntryDate, ade.DepreciationAmount,
-			ade.BookValue, ade.Method, ade.Notes, ade.CreatedAt,
+			ade.ID, ade.AccountID, ade.EntryDate, ade.CurrentValue,
+			ade.AccumulatedDepreciation, ade.Notes, ade.CreatedAt,
 		)
 		if err != nil {
 			summary.Errors++
@@ -762,17 +767,17 @@ func (s *ImportService) importProjections(ctx context.Context, tx *sql.Tx, userI
 		ps.UserID = userID
 
 		query := `
-			INSERT INTO projection_scenarios (id, user_id, name, description, config, created_at, updated_at)
+			INSERT INTO projection_scenarios (id, user_id, name, is_default, config, created_at, updated_at)
 			VALUES ($1, $2, $3, $4, $5, $6, $7)
 			ON CONFLICT (id) DO UPDATE SET
 				name = EXCLUDED.name,
-				description = EXCLUDED.description,
+				is_default = EXCLUDED.is_default,
 				config = EXCLUDED.config,
 				updated_at = EXCLUDED.updated_at
 		`
 
 		result, err := tx.ExecContext(ctx, query,
-			ps.ID, ps.UserID, ps.Name, ps.Description,
+			ps.ID, ps.UserID, ps.Name, ps.IsDefault,
 			ps.Config, ps.CreatedAt, ps.UpdatedAt,
 		)
 		if err != nil {
@@ -922,11 +927,14 @@ func (s *ImportService) importSyncedAccounts(ctx context.Context, tx *sql.Tx, us
 	summary := ImportTableSummary{}
 
 	for _, sa := range syncedAccounts {
-		// Verify connection exists (should have been imported already)
-		var connExists bool
-		checkQuery := `SELECT EXISTS(SELECT 1 FROM connections WHERE id = $1 AND user_id = $2)`
-		err := tx.QueryRowContext(ctx, checkQuery, sa.ConnectionID, userID).Scan(&connExists)
-		if err != nil || !connExists {
+		// Verify sync_credentials exists (credential_id references sync_credentials.id)
+		// Note: We don't export sync_credentials, so this will only match if user has already connected
+		var credExists bool
+		checkQuery := `SELECT EXISTS(SELECT 1 FROM sync_credentials WHERE id = $1 AND user_id = $2)`
+		err := tx.QueryRowContext(ctx, checkQuery, sa.CredentialID, userID).Scan(&credExists)
+		if err != nil || !credExists {
+			// Skip this synced_account if no credentials exist
+			// User will need to reconnect to recreate the mapping
 			summary.Skipped++
 			continue
 		}
@@ -941,11 +949,11 @@ func (s *ImportService) importSyncedAccounts(ctx context.Context, tx *sql.Tx, us
 		}
 
 		query := `
-			INSERT INTO synced_accounts (id, connection_id, local_account_id, provider_account_id,
+			INSERT INTO synced_accounts (id, credential_id, local_account_id, provider_account_id,
 			                             last_sync_at, created_at, updated_at)
 			VALUES ($1, $2, $3, $4, $5, $6, $7)
 			ON CONFLICT (id) DO UPDATE SET
-				connection_id = EXCLUDED.connection_id,
+				credential_id = EXCLUDED.credential_id,
 				local_account_id = EXCLUDED.local_account_id,
 				provider_account_id = EXCLUDED.provider_account_id,
 				last_sync_at = EXCLUDED.last_sync_at,
@@ -954,7 +962,7 @@ func (s *ImportService) importSyncedAccounts(ctx context.Context, tx *sql.Tx, us
 
 		result, err := tx.ExecContext(ctx, query,
 			sa.ID,
-			sa.ConnectionID,
+			sa.CredentialID,
 			sa.LocalAccountID,
 			sa.ProviderAccountID,
 			sa.LastSyncAt,

@@ -16,7 +16,7 @@ const (
 	// MaxUploadSize is 100MB
 	MaxUploadSize = 100 << 20
 	// Default user ID (single-user application)
-	DefaultUserID = "default-user"
+	DefaultUserID = "temp-user-id"
 )
 
 // DataHandler handles data export/import HTTP requests

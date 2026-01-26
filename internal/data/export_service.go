@@ -95,11 +95,8 @@ func (s *ExportService) ExportData(ctx context.Context, userID string) ([]byte, 
 		return nil, fmt.Errorf("failed to export exchange rates: %w", err)
 	}
 
-	connections, err := s.exportConnections(ctx, userID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to export connections: %w", err)
-	}
-
+	// Note: We don't export sync_credentials (contains encrypted credentials - security risk)
+	// We only export synced_accounts mapping so after import, user can reconnect and reuse existing accounts
 	syncedAccounts, err := s.exportSyncedAccounts(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to export synced accounts: %w", err)
@@ -120,7 +117,6 @@ func (s *ExportService) ExportData(ctx context.Context, userID string) ([]byte, 
 		"recurring_expenses":         recurringExpenses,
 		"projection_scenarios":       projections,
 		"exchange_rates":             exchangeRates,
-		"connections":                connections,
 		"synced_accounts":            syncedAccounts,
 	}
 
@@ -138,7 +134,7 @@ func (s *ExportService) ExportData(ctx context.Context, userID string) ([]byte, 
 func (s *ExportService) exportAccounts(ctx context.Context, userID string) ([]byte, error) {
 	query := `
 		SELECT id, user_id, name, type, currency, institution, is_asset, is_active,
-		       synced_account_id, created_at, updated_at
+		       created_at, updated_at
 		FROM accounts
 		WHERE user_id = $1
 		ORDER BY created_at
@@ -155,7 +151,7 @@ func (s *ExportService) exportAccounts(ctx context.Context, userID string) ([]by
 		var acc Account
 		err := rows.Scan(
 			&acc.ID, &acc.UserID, &acc.Name, &acc.Type, &acc.Currency,
-			&acc.Institution, &acc.IsAsset, &acc.IsActive, &acc.SyncedAccountID,
+			&acc.Institution, &acc.IsAsset, &acc.IsActive,
 			&acc.CreatedAt, &acc.UpdatedAt,
 		)
 		if err != nil {
@@ -270,10 +266,12 @@ func (s *ExportService) exportHoldingTransactions(ctx context.Context, userID st
 // exportMortgageDetails exports all mortgage details for user's accounts
 func (s *ExportService) exportMortgageDetails(ctx context.Context, userID string) ([]byte, error) {
 	query := `
-		SELECT md.id, md.account_id, md.principal_amount, md.interest_rate,
-		       md.payment_frequency, md.amortization_years, md.start_date,
-		       md.first_payment_date, md.property_value, md.down_payment_percentage,
-		       md.created_at, md.updated_at
+		SELECT md.id, md.account_id, md.original_amount, md.interest_rate, md.rate_type,
+		       md.start_date, md.term_months, md.amortization_months, md.payment_amount,
+		       md.payment_frequency, md.payment_day, md.property_address, md.property_city,
+		       md.property_province, md.property_postal_code, md.property_value,
+		       md.renewal_date, md.maturity_date, md.lender, md.mortgage_number,
+		       md.notes, md.created_at, md.updated_at
 		FROM mortgage_details md
 		JOIN accounts a ON md.account_id = a.id
 		WHERE a.user_id = $1
@@ -290,10 +288,12 @@ func (s *ExportService) exportMortgageDetails(ctx context.Context, userID string
 	for rows.Next() {
 		var md MortgageDetails
 		err := rows.Scan(
-			&md.ID, &md.AccountID, &md.PrincipalAmount, &md.InterestRate,
-			&md.PaymentFrequency, &md.AmortizationYears, &md.StartDate,
-			&md.FirstPaymentDate, &md.PropertyValue, &md.DownPaymentPercentage,
-			&md.CreatedAt, &md.UpdatedAt,
+			&md.ID, &md.AccountID, &md.OriginalAmount, &md.InterestRate, &md.RateType,
+			&md.StartDate, &md.TermMonths, &md.AmortizationMonths, &md.PaymentAmount,
+			&md.PaymentFrequency, &md.PaymentDay, &md.PropertyAddress, &md.PropertyCity,
+			&md.PropertyProvince, &md.PropertyPostalCode, &md.PropertyValue,
+			&md.RenewalDate, &md.MaturityDate, &md.Lender, &md.MortgageNumber,
+			&md.Notes, &md.CreatedAt, &md.UpdatedAt,
 		)
 		if err != nil {
 			return nil, err
@@ -307,8 +307,8 @@ func (s *ExportService) exportMortgageDetails(ctx context.Context, userID string
 // exportMortgagePayments exports all mortgage payments for user's accounts
 func (s *ExportService) exportMortgagePayments(ctx context.Context, userID string) ([]byte, error) {
 	query := `
-		SELECT mp.id, mp.account_id, mp.payment_date, mp.amount,
-		       mp.principal_paid, mp.interest_paid, mp.remaining_balance,
+		SELECT mp.id, mp.account_id, mp.payment_date, mp.payment_amount,
+		       mp.principal_amount, mp.interest_amount, mp.extra_payment, mp.balance_after,
 		       mp.notes, mp.created_at
 		FROM mortgage_payments mp
 		JOIN accounts a ON mp.account_id = a.id
@@ -326,8 +326,8 @@ func (s *ExportService) exportMortgagePayments(ctx context.Context, userID strin
 	for rows.Next() {
 		var mp MortgagePayment
 		err := rows.Scan(
-			&mp.ID, &mp.AccountID, &mp.PaymentDate, &mp.Amount,
-			&mp.PrincipalPaid, &mp.InterestPaid, &mp.RemainingBalance,
+			&mp.ID, &mp.AccountID, &mp.PaymentDate, &mp.PaymentAmount,
+			&mp.PrincipalAmount, &mp.InterestAmount, &mp.ExtraPayment, &mp.BalanceAfter,
 			&mp.Notes, &mp.CreatedAt,
 		)
 		if err != nil {
@@ -342,9 +342,9 @@ func (s *ExportService) exportMortgagePayments(ctx context.Context, userID strin
 // exportLoanDetails exports all loan details for user's accounts
 func (s *ExportService) exportLoanDetails(ctx context.Context, userID string) ([]byte, error) {
 	query := `
-		SELECT ld.id, ld.account_id, ld.principal_amount, ld.interest_rate,
-		       ld.payment_frequency, ld.term_years, ld.start_date,
-		       ld.first_payment_date, ld.loan_type, ld.lender,
+		SELECT ld.id, ld.account_id, ld.original_amount, ld.interest_rate, ld.rate_type,
+		       ld.start_date, ld.term_months, ld.payment_amount, ld.payment_frequency,
+		       ld.payment_day, ld.loan_type, ld.lender, ld.loan_number, ld.purpose, ld.maturity_date, ld.notes,
 		       ld.created_at, ld.updated_at
 		FROM loan_details ld
 		JOIN accounts a ON ld.account_id = a.id
@@ -362,9 +362,9 @@ func (s *ExportService) exportLoanDetails(ctx context.Context, userID string) ([
 	for rows.Next() {
 		var ld LoanDetails
 		err := rows.Scan(
-			&ld.ID, &ld.AccountID, &ld.PrincipalAmount, &ld.InterestRate,
-			&ld.PaymentFrequency, &ld.TermYears, &ld.StartDate,
-			&ld.FirstPaymentDate, &ld.LoanType, &ld.Lender,
+			&ld.ID, &ld.AccountID, &ld.OriginalAmount, &ld.InterestRate, &ld.RateType,
+			&ld.StartDate, &ld.TermMonths, &ld.PaymentAmount, &ld.PaymentFrequency,
+			&ld.PaymentDay, &ld.LoanType, &ld.Lender, &ld.LoanNumber, &ld.Purpose, &ld.MaturityDate, &ld.Notes,
 			&ld.CreatedAt, &ld.UpdatedAt,
 		)
 		if err != nil {
@@ -379,8 +379,8 @@ func (s *ExportService) exportLoanDetails(ctx context.Context, userID string) ([
 // exportLoanPayments exports all loan payments for user's accounts
 func (s *ExportService) exportLoanPayments(ctx context.Context, userID string) ([]byte, error) {
 	query := `
-		SELECT lp.id, lp.account_id, lp.payment_date, lp.amount,
-		       lp.principal_paid, lp.interest_paid, lp.remaining_balance,
+		SELECT lp.id, lp.account_id, lp.payment_date, lp.payment_amount,
+		       lp.principal_amount, lp.interest_amount, lp.extra_payment, lp.balance_after,
 		       lp.notes, lp.created_at
 		FROM loan_payments lp
 		JOIN accounts a ON lp.account_id = a.id
@@ -398,8 +398,8 @@ func (s *ExportService) exportLoanPayments(ctx context.Context, userID string) (
 	for rows.Next() {
 		var lp LoanPayment
 		err := rows.Scan(
-			&lp.ID, &lp.AccountID, &lp.PaymentDate, &lp.Amount,
-			&lp.PrincipalPaid, &lp.InterestPaid, &lp.RemainingBalance,
+			&lp.ID, &lp.AccountID, &lp.PaymentDate, &lp.PaymentAmount,
+			&lp.PrincipalAmount, &lp.InterestAmount, &lp.ExtraPayment, &lp.BalanceAfter,
 			&lp.Notes, &lp.CreatedAt,
 		)
 		if err != nil {
@@ -415,9 +415,9 @@ func (s *ExportService) exportLoanPayments(ctx context.Context, userID string) (
 func (s *ExportService) exportAssetDetails(ctx context.Context, userID string) ([]byte, error) {
 	query := `
 		SELECT ad.id, ad.account_id, ad.asset_type, ad.purchase_price,
-		       ad.purchase_date, ad.current_value, ad.depreciation_method,
-		       ad.useful_life_years, ad.salvage_value, ad.description,
-		       ad.last_valuation_date, ad.created_at, ad.updated_at
+		       ad.purchase_date, ad.depreciation_method, ad.useful_life_years,
+		       ad.salvage_value, ad.depreciation_rate, ad.type_specific_data,
+		       ad.notes, ad.created_at, ad.updated_at
 		FROM asset_details ad
 		JOIN accounts a ON ad.account_id = a.id
 		WHERE a.user_id = $1
@@ -435,9 +435,9 @@ func (s *ExportService) exportAssetDetails(ctx context.Context, userID string) (
 		var ad AssetDetails
 		err := rows.Scan(
 			&ad.ID, &ad.AccountID, &ad.AssetType, &ad.PurchasePrice,
-			&ad.PurchaseDate, &ad.CurrentValue, &ad.DepreciationMethod,
-			&ad.UsefulLifeYears, &ad.SalvageValue, &ad.Description,
-			&ad.LastValuationDate, &ad.CreatedAt, &ad.UpdatedAt,
+			&ad.PurchaseDate, &ad.DepreciationMethod, &ad.UsefulLifeYears,
+			&ad.SalvageValue, &ad.DepreciationRate, &ad.TypeSpecificData,
+			&ad.Notes, &ad.CreatedAt, &ad.UpdatedAt,
 		)
 		if err != nil {
 			return nil, err
@@ -451,8 +451,8 @@ func (s *ExportService) exportAssetDetails(ctx context.Context, userID string) (
 // exportAssetDepreciation exports all asset depreciation entries for user's accounts
 func (s *ExportService) exportAssetDepreciation(ctx context.Context, userID string) ([]byte, error) {
 	query := `
-		SELECT ade.id, ade.account_id, ade.entry_date, ade.depreciation_amount,
-		       ade.book_value, ade.method, ade.notes, ade.created_at
+		SELECT ade.id, ade.account_id, ade.entry_date, ade.current_value,
+		       ade.accumulated_depreciation, ade.notes, ade.created_at
 		FROM asset_depreciation_entries ade
 		JOIN accounts a ON ade.account_id = a.id
 		WHERE a.user_id = $1
@@ -469,8 +469,8 @@ func (s *ExportService) exportAssetDepreciation(ctx context.Context, userID stri
 	for rows.Next() {
 		var ade AssetDepreciationEntry
 		err := rows.Scan(
-			&ade.ID, &ade.AccountID, &ade.EntryDate, &ade.DepreciationAmount,
-			&ade.BookValue, &ade.Method, &ade.Notes, &ade.CreatedAt,
+			&ade.ID, &ade.AccountID, &ade.EntryDate, &ade.CurrentValue,
+			&ade.AccumulatedDepreciation, &ade.Notes, &ade.CreatedAt,
 		)
 		if err != nil {
 			return nil, err
@@ -517,7 +517,7 @@ func (s *ExportService) exportRecurringExpenses(ctx context.Context, userID stri
 // exportProjections exports all projection scenarios for a user
 func (s *ExportService) exportProjections(ctx context.Context, userID string) ([]byte, error) {
 	query := `
-		SELECT id, user_id, name, description, config, created_at, updated_at
+		SELECT id, user_id, name, is_default, config, created_at, updated_at
 		FROM projection_scenarios
 		WHERE user_id = $1
 		ORDER BY created_at
@@ -533,7 +533,7 @@ func (s *ExportService) exportProjections(ctx context.Context, userID string) ([
 	for rows.Next() {
 		var ps ProjectionScenario
 		err := rows.Scan(
-			&ps.ID, &ps.UserID, &ps.Name, &ps.Description,
+			&ps.ID, &ps.UserID, &ps.Name, &ps.IsDefault,
 			&ps.Config, &ps.CreatedAt, &ps.UpdatedAt,
 		)
 		if err != nil {
@@ -689,11 +689,11 @@ func (s *ExportService) exportConnections(ctx context.Context, userID string) ([
 // exportSyncedAccounts exports all synced accounts for a user
 func (s *ExportService) exportSyncedAccounts(ctx context.Context, userID string) ([]byte, error) {
 	query := `
-		SELECT sa.id, sa.connection_id, sa.local_account_id, sa.provider_account_id,
+		SELECT sa.id, sa.credential_id, sa.local_account_id, sa.provider_account_id,
 		       sa.last_sync_at, sa.created_at, sa.updated_at
 		FROM synced_accounts sa
-		JOIN connections c ON sa.connection_id = c.id
-		WHERE c.user_id = $1
+		JOIN sync_credentials sc ON sa.credential_id = sc.id
+		WHERE sc.user_id = $1
 		ORDER BY sa.created_at
 	`
 
@@ -708,7 +708,7 @@ func (s *ExportService) exportSyncedAccounts(ctx context.Context, userID string)
 		var sa SyncedAccount
 		err := rows.Scan(
 			&sa.ID,
-			&sa.ConnectionID,
+			&sa.CredentialID,
 			&sa.LocalAccountID,
 			&sa.ProviderAccountID,
 			&sa.LastSyncAt,

@@ -26,6 +26,7 @@ func NewSyncHandler(service *sync.Service) *SyncHandler {
 func (h *SyncHandler) RegisterRoutes(r chi.Router) {
 	r.Route("/sync", func(r chi.Router) {
 		// Connection management
+		r.Get("/wealthsimple/check-credentials", h.CheckWealthsimpleCredentials)
 		r.Post("/wealthsimple/initiate", h.InitiateWealthsimpleConnection)
 		r.Post("/wealthsimple/verify-otp", h.VerifyOTP)
 		r.Get("/connections", h.ListConnections)
@@ -33,6 +34,17 @@ func (h *SyncHandler) RegisterRoutes(r chi.Router) {
 		r.Post("/connections/{id}/sync", h.TriggerConnectionSync)
 		r.Delete("/connections/{id}", h.DeleteConnection)
 	})
+}
+
+// CheckWealthsimpleCredentials checks if Wealthsimple credentials exist
+func (h *SyncHandler) CheckWealthsimpleCredentials(w http.ResponseWriter, r *http.Request) {
+	resp, err := h.service.CheckWealthsimpleCredentials(r.Context())
+	if err != nil {
+		server.RespondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	server.RespondJSON(w, http.StatusOK, resp)
 }
 
 // InitiateWealthsimpleConnection initiates a Wealthsimple connection
