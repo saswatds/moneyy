@@ -25,10 +25,20 @@ func (s *Service) performInitialSync(ctx context.Context, userID, connectionID s
 		return fmt.Errorf("failed to update connection status: %w", err)
 	}
 
+	// Defer function to update connection status on error
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("PANIC: sync panic recovered: connection_id=%s panic=%v", connectionID, r)
+			_ = s.UpdateConnectionError(ctx, connectionID, fmt.Sprintf("sync panic: %v", r))
+		}
+	}()
+
 	// Get authenticated client
 	client, err := s.getDecryptedCredentials(ctx, userID)
 	if err != nil {
-		return fmt.Errorf("failed to get credentials: %w", err)
+		errMsg := fmt.Sprintf("failed to get credentials: %v", err)
+		_ = s.UpdateConnectionError(ctx, connectionID, errMsg)
+		return fmt.Errorf(errMsg)
 	}
 
 	// Get identity ID from credentials
@@ -40,7 +50,9 @@ func (s *Service) performInitialSync(ctx context.Context, userID, connectionID s
 	`, userID).Scan(&identityID)
 
 	if err != nil || identityID == "" {
-		return fmt.Errorf("identity ID not found in credentials: %w", err)
+		errMsg := fmt.Sprintf("identity ID not found in credentials: %v", err)
+		_ = s.UpdateConnectionError(ctx, connectionID, errMsg)
+		return fmt.Errorf(errMsg)
 	}
 
 	// Fetch accounts from Wealthsimple
@@ -52,24 +64,31 @@ func (s *Service) performInitialSync(ctx context.Context, userID, connectionID s
 	data, err := client.QueryGraphQL(ctx, wealthsimple.QueryListAccounts, variables, "trade")
 	if err != nil {
 		log.Printf("ERROR: failed to fetch accounts: %v", err)
-		return fmt.Errorf("failed to fetch accounts: %w", err)
+		errMsg := fmt.Sprintf("failed to fetch accounts: %v", err)
+		_ = s.UpdateConnectionError(ctx, connectionID, errMsg)
+		return fmt.Errorf(errMsg)
 	}
-	log.Printf("DEBUG: received account data: %v", data)
 
 	// Parse accounts from identity.accounts.edges structure
 	identity, ok := data["identity"].(map[string]interface{})
 	if !ok {
-		return fmt.Errorf("invalid response format: no identity field")
+		errMsg := "invalid response format: no identity field"
+		_ = s.UpdateConnectionError(ctx, connectionID, errMsg)
+		return fmt.Errorf(errMsg)
 	}
 
 	accountsData, ok := identity["accounts"].(map[string]interface{})
 	if !ok {
-		return fmt.Errorf("invalid response format: no accounts field")
+		errMsg := "invalid response format: no accounts field"
+		_ = s.UpdateConnectionError(ctx, connectionID, errMsg)
+		return fmt.Errorf(errMsg)
 	}
 
 	edges, ok := accountsData["edges"].([]interface{})
 	if !ok {
-		return fmt.Errorf("invalid response format: no edges field")
+		errMsg := "invalid response format: no edges field"
+		_ = s.UpdateConnectionError(ctx, connectionID, errMsg)
+		return fmt.Errorf(errMsg)
 	}
 
 	log.Printf("INFO: processing account edges: count=%d", len(edges))
@@ -95,7 +114,11 @@ func (s *Service) performInitialSync(ctx context.Context, userID, connectionID s
 		currency, _ := accountNode["currency"].(string)
 		status, _ := accountNode["status"].(string)
 
+		log.Printf("INFO: processing account: provider_id=%s nickname=%s type=%s currency=%s status=%s",
+			providerAccountID, nickname, accountType, currency, status)
+
 		if status != "open" {
+			log.Printf("INFO: skipping closed account: provider_id=%s status=%s", providerAccountID, status)
 			continue // Skip closed accounts
 		}
 
@@ -109,16 +132,17 @@ func (s *Service) performInitialSync(ctx context.Context, userID, connectionID s
 
 		// Check if this account is already synced
 		var localAccountID string
+		var syncedAccountID string
 		err = s.db.QueryRowContext(ctx, `
-			SELECT local_account_id
+			SELECT id, local_account_id
 			FROM synced_accounts
 			WHERE credential_id = $1 AND provider_account_id = $2
-		`, connectionID, providerAccountID).Scan(&localAccountID)
+		`, connectionID, providerAccountID).Scan(&syncedAccountID, &localAccountID)
 
 		if err == nil {
-			// Account already exists, skip creation
-			log.Printf("DEBUG: account already synced, skipping creation: provider_account_id=%s local_account_id=%s",
-				providerAccountID, localAccountID)
+			// Account already exists, sync details
+			log.Printf("INFO: account already synced, will update details: provider_account_id=%s local_account_id=%s synced_account_id=%s",
+				providerAccountID, localAccountID, syncedAccountID)
 		} else {
 			// Account doesn't exist, create it
 			// Determine if this is an asset or liability account
@@ -142,13 +166,14 @@ func (s *Service) performInitialSync(ctx context.Context, userID, connectionID s
 
 			localAccountID = createdAccount.ID
 
-			// Create synced account record
-			_, err = s.db.ExecContext(ctx, `
+			// Create synced account record and get its ID
+			err = s.db.QueryRowContext(ctx, `
 				INSERT INTO synced_accounts (
 					credential_id, local_account_id, provider_account_id,
 					created_at, updated_at
 				) VALUES ($1, $2, $3, $4, $5)
-			`, connectionID, localAccountID, providerAccountID, time.Now(), time.Now())
+				RETURNING id
+			`, connectionID, localAccountID, providerAccountID, time.Now(), time.Now()).Scan(&syncedAccountID)
 
 			if err != nil {
 				log.Printf("ERROR: failed to create synced account: provider_account_id=%s error=%v",
@@ -156,20 +181,52 @@ func (s *Service) performInitialSync(ctx context.Context, userID, connectionID s
 				continue
 			}
 
-			log.Printf("INFO: created new synced account: provider_account_id=%s local_account_id=%s",
-				providerAccountID, localAccountID)
+			log.Printf("INFO: created new synced account: provider_account_id=%s local_account_id=%s synced_account_id=%s",
+				providerAccountID, localAccountID, syncedAccountID)
 		}
+
+		// Create a sync job for this account
+		log.Printf("INFO: creating sync job: synced_account_id=%s", syncedAccountID)
+		jobID, err := s.createSyncJob(ctx, syncedAccountID, SyncJobTypeFull)
+		if err != nil {
+			log.Printf("ERROR: failed to create sync job: synced_account_id=%s error=%v",
+				syncedAccountID, err)
+			continue
+		}
+		log.Printf("INFO: created sync job: job_id=%s synced_account_id=%s", jobID, syncedAccountID)
 
 		// Fetch account details (balances, positions)
 		isAssetAcc := isAssetAccount(localAccountType)
 		isCreditCard := localAccountType == "credit_card"
-		if err := s.syncAccountDetails(ctx, client, providerAccountID, localAccountID, identityID, isAssetAcc, isCreditCard); err != nil {
-			log.Printf("ERROR: failed to sync account details: provider_account_id=%s error=%v",
-				providerAccountID, err)
+		log.Printf("INFO: syncing account details: provider_account_id=%s local_account_id=%s is_asset=%v is_credit_card=%v",
+			providerAccountID, localAccountID, isAssetAcc, isCreditCard)
+
+		if err := s.syncAccountDetails(ctx, client, providerAccountID, localAccountID, identityID, isAssetAcc, isCreditCard, jobID); err != nil {
+			log.Printf("ERROR: failed to sync account details: provider_account_id=%s local_account_id=%s error=%v",
+				providerAccountID, localAccountID, err)
+			_ = s.completeSyncJob(ctx, jobID, SyncJobStatusFailed, err.Error())
+		} else {
+			log.Printf("INFO: successfully synced account details: provider_account_id=%s local_account_id=%s",
+				providerAccountID, localAccountID)
+			_ = s.completeSyncJob(ctx, jobID, SyncJobStatusCompleted, "")
+
+			// Update synced_account timestamps
+			_, err = s.db.ExecContext(ctx, `
+				UPDATE synced_accounts
+				SET last_sync_at = CURRENT_TIMESTAMP,
+				    updated_at = CURRENT_TIMESTAMP
+				WHERE id = $1
+			`, syncedAccountID)
+			if err != nil {
+				log.Printf("ERROR: failed to update synced_account timestamps: synced_account_id=%s error=%v",
+					syncedAccountID, err)
+			}
 		}
 
 		accountCount++
 	}
+
+	log.Printf("INFO: finished processing accounts: total_accounts=%d connection_id=%s", accountCount, connectionID)
 
 	// Update connection with success
 	_, err = s.db.ExecContext(ctx, `
@@ -186,10 +243,10 @@ func (s *Service) performInitialSync(ctx context.Context, userID, connectionID s
 }
 
 // syncAccountDetails fetches and stores account balances and positions
-func (s *Service) syncAccountDetails(ctx context.Context, client *wealthsimple.Client, providerAccountID, localAccountID, identityID string, isAsset, isCreditCard bool) error {
+func (s *Service) syncAccountDetails(ctx context.Context, client *wealthsimple.Client, providerAccountID, localAccountID, identityID string, isAsset, isCreditCard bool, jobID string) error {
 	// Credit cards use a different GraphQL endpoint
 	if isCreditCard {
-		return s.syncCreditCardDetails(ctx, client, providerAccountID, localAccountID, isAsset)
+		return s.syncCreditCardDetails(ctx, client, providerAccountID, localAccountID, isAsset, jobID)
 	}
 
 	variables := map[string]interface{}{
@@ -206,9 +263,6 @@ func (s *Service) syncAccountDetails(ctx context.Context, client *wealthsimple.C
 		return fmt.Errorf("failed to fetch account details: %w", err)
 	}
 
-	log.Printf("DEBUG: received account details response: provider_account_id=%s data_keys=%v",
-		providerAccountID, getMapKeys(data))
-
 	accounts, ok := data["accounts"].([]interface{})
 	if !ok || len(accounts) == 0 {
 		log.Printf("ERROR: invalid response format - no accounts field or empty: provider_account_id=%s data=%v",
@@ -222,17 +276,11 @@ func (s *Service) syncAccountDetails(ctx context.Context, client *wealthsimple.C
 		return fmt.Errorf("invalid account format")
 	}
 
-	log.Printf("DEBUG: account data structure: provider_account_id=%s account_keys=%v",
-		providerAccountID, getMapKeys(accountData))
-
 	// Extract balance from financials
 	var amount float64
 	var foundBalance bool
 
 	if financials, ok := accountData["financials"].(map[string]interface{}); ok {
-		log.Printf("DEBUG: found financials field: provider_account_id=%s financials_keys=%v",
-			providerAccountID, getMapKeys(financials))
-
 		// For credit cards and other accounts, try currentBalance first
 		if !isAsset {
 			// Try currentBalance for liability accounts
@@ -308,11 +356,8 @@ func (s *Service) syncAccountDetails(ctx context.Context, client *wealthsimple.C
 		now := time.Now()
 		today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 
-		log.Printf("INFO: creating balance entry: account_id=%s amount=%f date=%v is_asset=%v",
-			localAccountID, amount, today, isAsset)
-
-		// Create balance via balance service
-		_, err = s.balanceSvc.Create(ctx, &balance.CreateBalanceRequest{
+		// Create or update balance via balance service
+		balanceResp, err := s.balanceSvc.Create(ctx, &balance.CreateBalanceRequest{
 			AccountID: localAccountID,
 			Amount:    amount,
 			Date:      today,
@@ -322,10 +367,22 @@ func (s *Service) syncAccountDetails(ctx context.Context, client *wealthsimple.C
 		if err != nil {
 			log.Printf("ERROR: failed to create balance: account_id=%s amount=%f error=%v",
 				localAccountID, amount, err)
+			_ = s.updateSyncJobProgress(ctx, jobID, 1, 0, 0, 1)
 		} else {
-			log.Printf("INFO: successfully created balance: account_id=%s amount=%f",
-				localAccountID, amount)
+			// Track created vs updated
+			if balanceResp.WasUpdate {
+				log.Printf("INFO: updated balance: balance_id=%s account_id=%s amount=%f",
+					balanceResp.Balance.ID, localAccountID, amount)
+				_ = s.updateSyncJobProgress(ctx, jobID, 1, 0, 1, 0)
+			} else {
+				log.Printf("INFO: created balance: balance_id=%s account_id=%s amount=%f",
+					balanceResp.Balance.ID, localAccountID, amount)
+				_ = s.updateSyncJobProgress(ctx, jobID, 1, 1, 0, 0)
+			}
 		}
+	} else {
+		log.Printf("WARN: no balance found for account: provider_account_id=%s local_account_id=%s",
+			providerAccountID, localAccountID)
 	}
 
 	// Fetch positions using identity-based query
@@ -347,10 +404,14 @@ func (s *Service) syncAccountDetails(ctx context.Context, client *wealthsimple.C
 		return nil
 	}
 
+	log.Printf("DEBUG: positions response keys: provider_account_id=%s keys=%v",
+		providerAccountID, getMapKeys(positionsData))
+
 	// Parse positions response: identity.financials.current.positions.edges
 	identity, ok := positionsData["identity"].(map[string]interface{})
 	if !ok {
-		log.Printf("DEBUG: no identity in positions response: provider_account_id=%s", providerAccountID)
+		log.Printf("WARN: no identity in positions response: provider_account_id=%s data=%v",
+			providerAccountID, positionsData)
 		return nil
 	}
 
@@ -374,7 +435,14 @@ func (s *Service) syncAccountDetails(ctx context.Context, client *wealthsimple.C
 
 	edges, ok := positions["edges"].([]interface{})
 	if !ok {
-		log.Printf("DEBUG: no edges in positions: provider_account_id=%s", providerAccountID)
+		log.Printf("WARN: no edges in positions: provider_account_id=%s positions=%v",
+			providerAccountID, positions)
+		return nil
+	}
+
+	if len(edges) == 0 {
+		log.Printf("INFO: no positions found for account: provider_account_id=%s local_account_id=%s",
+			providerAccountID, localAccountID)
 		return nil
 	}
 
@@ -455,11 +523,8 @@ func (s *Service) syncAccountDetails(ctx context.Context, client *wealthsimple.C
 			holdingType = holdings.HoldingTypeMutualFund
 		}
 
-		log.Printf("INFO: creating holding entry: account_id=%s symbol=%s quantity=%f cost_basis=%f type=%s",
-			localAccountID, symbol, quantity, costBasis, holdingType)
-
-		// Create holding via holdings service
-		_, err = s.holdingsSvc.Create(ctx, &holdings.CreateHoldingRequest{
+		// Create or update holding via holdings service
+		holdingResp, err := s.holdingsSvc.Create(ctx, &holdings.CreateHoldingRequest{
 			AccountID: localAccountID,
 			Type:      holdingType,
 			Symbol:    &symbol,
@@ -471,17 +536,29 @@ func (s *Service) syncAccountDetails(ctx context.Context, client *wealthsimple.C
 		if err != nil {
 			log.Printf("ERROR: failed to create holding: symbol=%s account_id=%s error=%v",
 				symbol, localAccountID, err)
+			_ = s.updateSyncJobProgress(ctx, jobID, 1, 0, 0, 1)
 		} else {
-			log.Printf("INFO: successfully created holding: symbol=%s quantity=%f cost_basis=%f",
-				symbol, quantity, costBasis)
+			// Track created vs updated
+			if holdingResp.WasUpdate {
+				log.Printf("INFO: updated holding: holding_id=%s symbol=%s quantity=%f cost_basis=%f",
+					holdingResp.Holding.ID, symbol, quantity, costBasis)
+				_ = s.updateSyncJobProgress(ctx, jobID, 1, 0, 1, 0)
+			} else {
+				log.Printf("INFO: created holding: holding_id=%s symbol=%s quantity=%f cost_basis=%f",
+					holdingResp.Holding.ID, symbol, quantity, costBasis)
+				_ = s.updateSyncJobProgress(ctx, jobID, 1, 1, 0, 0)
+			}
 		}
 	}
+
+	log.Printf("INFO: finished syncing positions for account: provider_account_id=%s local_account_id=%s position_count=%d",
+		providerAccountID, localAccountID, len(edges))
 
 	return nil
 }
 
 // syncCreditCardDetails fetches and stores credit card balance
-func (s *Service) syncCreditCardDetails(ctx context.Context, client *wealthsimple.Client, providerAccountID, localAccountID string, isAsset bool) error {
+func (s *Service) syncCreditCardDetails(ctx context.Context, client *wealthsimple.Client, providerAccountID, localAccountID string, isAsset bool, jobID string) error {
 	variables := map[string]interface{}{
 		"id": providerAccountID,
 	}
@@ -538,11 +615,8 @@ func (s *Service) syncCreditCardDetails(ctx context.Context, client *wealthsimpl
 	now := time.Now()
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 
-	log.Printf("INFO: creating credit card balance entry: account_id=%s amount=%f outstanding=%s date=%v is_asset=%v",
-		localAccountID, amount, outstandingStr, today, isAsset)
-
-	// Create balance via balance service
-	_, err = s.balanceSvc.Create(ctx, &balance.CreateBalanceRequest{
+	// Create or update credit card balance via balance service
+	balanceResp, err := s.balanceSvc.Create(ctx, &balance.CreateBalanceRequest{
 		AccountID: localAccountID,
 		Amount:    amount,
 		Date:      today,
@@ -552,11 +626,20 @@ func (s *Service) syncCreditCardDetails(ctx context.Context, client *wealthsimpl
 	if err != nil {
 		log.Printf("ERROR: failed to create credit card balance: account_id=%s amount=%f error=%v",
 			localAccountID, amount, err)
+		_ = s.updateSyncJobProgress(ctx, jobID, 1, 0, 0, 1)
 		return fmt.Errorf("failed to create credit card balance: %w", err)
 	}
 
-	log.Printf("INFO: successfully created credit card balance: account_id=%s amount=%f outstanding=%s",
-		localAccountID, amount, outstandingStr)
+	// Track created vs updated
+	if balanceResp.WasUpdate {
+		log.Printf("INFO: updated credit card balance: account_id=%s amount=%f outstanding=%s",
+			localAccountID, amount, outstandingStr)
+		_ = s.updateSyncJobProgress(ctx, jobID, 1, 0, 1, 0)
+	} else {
+		log.Printf("INFO: created credit card balance: account_id=%s amount=%f outstanding=%s",
+			localAccountID, amount, outstandingStr)
+		_ = s.updateSyncJobProgress(ctx, jobID, 1, 1, 0, 0)
+	}
 
 	return nil
 }
@@ -639,4 +722,69 @@ func getMapKeys(m map[string]interface{}) []string {
 		keys = append(keys, k)
 	}
 	return keys
+}
+
+// createSyncJob creates a new sync job and marks it as running
+func (s *Service) createSyncJob(ctx context.Context, syncedAccountID string, jobType SyncJobType) (string, error) {
+	var jobID string
+	now := time.Now()
+
+	err := s.db.QueryRowContext(ctx, `
+		INSERT INTO sync_jobs (
+			synced_account_id, type, status, started_at, created_at
+		) VALUES ($1, $2, $3, $4, $5)
+		RETURNING id
+	`, syncedAccountID, jobType, SyncJobStatusRunning, now, now).Scan(&jobID)
+
+	if err != nil {
+		return "", fmt.Errorf("failed to create sync job: %w", err)
+	}
+
+	log.Printf("INFO: created sync job: job_id=%s synced_account_id=%s type=%s",
+		jobID, syncedAccountID, jobType)
+
+	return jobID, nil
+}
+
+// updateSyncJobProgress updates the progress counters for a sync job
+func (s *Service) updateSyncJobProgress(ctx context.Context, jobID string, processed, created, updated, failed int) error {
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE sync_jobs
+		SET items_processed = items_processed + $2,
+		    items_created = items_created + $3,
+		    items_updated = items_updated + $4,
+		    items_failed = items_failed + $5
+		WHERE id = $1
+	`, jobID, processed, created, updated, failed)
+
+	return err
+}
+
+// completeSyncJob marks a sync job as completed or failed
+func (s *Service) completeSyncJob(ctx context.Context, jobID string, status SyncJobStatus, errorMsg string) error {
+	now := time.Now()
+
+	var err error
+	if errorMsg != "" {
+		_, err = s.db.ExecContext(ctx, `
+			UPDATE sync_jobs
+			SET status = $2, completed_at = $3, error_message = $4
+			WHERE id = $1
+		`, jobID, status, now, errorMsg)
+	} else {
+		_, err = s.db.ExecContext(ctx, `
+			UPDATE sync_jobs
+			SET status = $2, completed_at = $3
+			WHERE id = $1
+		`, jobID, status, now)
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to complete sync job: %w", err)
+	}
+
+	log.Printf("INFO: completed sync job: job_id=%s status=%s error=%s",
+		jobID, status, errorMsg)
+
+	return nil
 }

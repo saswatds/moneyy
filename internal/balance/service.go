@@ -4,6 +4,7 @@ package balance
 import (
 	"context"
 	"database/sql"
+	"log"
 	"time"
 )
 
@@ -33,6 +34,12 @@ type CreateBalanceRequest struct {
 	Amount    float64   `json:"amount"`
 	Date      time.Time `json:"date"`
 	Notes     string    `json:"notes,omitempty"`
+}
+
+// CreateBalanceResponse represents the response from creating a balance
+type CreateBalanceResponse struct {
+	Balance   *Balance `json:"balance"`
+	WasUpdate bool     `json:"was_update"` // true if existing record was updated, false if new record created
 }
 
 // UpdateBalanceRequest represents the request to update a balance entry
@@ -135,7 +142,7 @@ func (s *Service) GetAccountBalances(ctx context.Context, accountID string) (*Li
 }
 
 // Create creates a new balance entry
-func (s *Service) Create(ctx context.Context, req *CreateBalanceRequest) (*Balance, error) {
+func (s *Service) Create(ctx context.Context, req *CreateBalanceRequest) (*CreateBalanceResponse, error) {
 	// TODO: Verify user owns the account
 
 	balance := &Balance{
@@ -146,20 +153,37 @@ func (s *Service) Create(ctx context.Context, req *CreateBalanceRequest) (*Balan
 		CreatedAt: time.Now(),
 	}
 
+	// Check if balance already exists for this date
+	var existingID string
+	var existingAmount float64
+	wasUpdate := false
+	existingErr := s.db.QueryRowContext(ctx, `
+		SELECT id, amount FROM balances WHERE account_id = $1 AND date = $2
+	`, req.AccountID, req.Date).Scan(&existingID, &existingAmount)
+
+	if existingErr == nil {
+		wasUpdate = true
+	}
+
 	err := s.db.QueryRowContext(ctx, `
 		INSERT INTO balances (account_id, amount, date, notes, created_at)
 		VALUES ($1, $2, $3, $4, $5)
 		ON CONFLICT (account_id, date) DO UPDATE SET
 			amount = EXCLUDED.amount,
 			notes = EXCLUDED.notes
-		RETURNING id
-	`, req.AccountID, req.Amount, req.Date, req.Notes, balance.CreatedAt).Scan(&balance.ID)
+		RETURNING id, amount
+	`, req.AccountID, req.Amount, req.Date, req.Notes, balance.CreatedAt).Scan(&balance.ID, &balance.Amount)
 
 	if err != nil {
+		log.Printf("ERROR: failed to insert/update balance: account_id=%s date=%v amount=%f error=%v",
+			req.AccountID, req.Date, req.Amount, err)
 		return nil, err
 	}
 
-	return balance, nil
+	return &CreateBalanceResponse{
+		Balance:   balance,
+		WasUpdate: wasUpdate,
+	}, nil
 }
 
 // Get retrieves a single balance entry by ID

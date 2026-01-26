@@ -33,6 +33,18 @@ import { format } from 'date-fns';
 import { BalanceEntryForm } from '@/components/BalanceEntryForm';
 import { HoldingEntryForm } from '@/components/HoldingEntryForm';
 
+// Helper function to format date in UTC to avoid timezone conversion issues
+const formatDateUTC = (dateString: string, formatStr: string) => {
+  const date = new Date(dateString);
+  // Extract year, month, day from UTC
+  const year = date.getUTCFullYear();
+  const month = date.getUTCMonth();
+  const day = date.getUTCDate();
+  // Create new date with UTC values in local timezone for formatting
+  const utcDate = new Date(year, month, day);
+  return format(utcDate, formatStr);
+};
+
 const chartConfig = {
   amount: {
     label: 'Balance',
@@ -124,7 +136,7 @@ export function AccountDetail() {
   const chartData = [...balances]
     .reverse()
     .map((balance) => ({
-      date: format(new Date(balance.date), 'MMM dd'),
+      date: formatDateUTC(balance.date, 'MMM dd'),
       amount: balance.amount,
     }));
 
@@ -334,7 +346,7 @@ export function AccountDetail() {
                               })}
                             </div>
                             <div className="text-xs text-muted-foreground">
-                              {format(new Date(balance.date), 'MMM dd, yyyy')}
+                              {formatDateUTC(balance.date, 'MMM dd, yyyy')}
                             </div>
                             {balance.notes && (
                               <div className="text-xs text-muted-foreground/80 truncate max-w-[300px]">
@@ -368,7 +380,7 @@ export function AccountDetail() {
                               })}
                             </div>
                             <div className="text-xs text-muted-foreground">
-                              {format(new Date(balance.date), 'MMM dd, yyyy')}
+                              {formatDateUTC(balance.date, 'MMM dd, yyyy')}
                             </div>
                             {balance.notes && (
                               <div className="text-xs text-muted-foreground/80 truncate max-w-[300px]">

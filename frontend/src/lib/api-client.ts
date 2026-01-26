@@ -42,6 +42,44 @@ export interface Holding {
   updated_at: string;
 }
 
+export interface SyncJob {
+  id: string;
+  synced_account_id: string;
+  account_name?: string;
+  type: 'accounts' | 'positions' | 'activities' | 'history' | 'full';
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  started_at?: string;
+  completed_at?: string;
+  error_message?: string;
+  items_processed: number;
+  items_created: number;
+  items_updated: number;
+  items_failed: number;
+  created_at: string;
+}
+
+export interface SyncSummary {
+  total_jobs: number;
+  completed_jobs: number;
+  failed_jobs: number;
+  running_jobs: number;
+  pending_jobs: number;
+  total_processed: number;
+  total_created: number;
+  total_updated: number;
+  total_failed: number;
+}
+
+export interface SyncStatusResponse {
+  connection_id: string;
+  connection_name: string;
+  status: 'connected' | 'disconnected' | 'error' | 'syncing';
+  last_sync_at?: string;
+  last_sync_error?: string;
+  jobs: SyncJob[];
+  summary: SyncSummary;
+}
+
 export interface CreateAccountRequest {
   name: string;
   type: string;
@@ -788,16 +826,14 @@ class ApiClient {
     });
   }
 
-  async reconnectWealthsimple(): Promise<{ connection_id: string }> {
-    return this.request('/sync/wealthsimple/reconnect', {
-      method: 'POST',
-    });
-  }
-
   async syncConnection(connectionId: string): Promise<void> {
     return this.request(`/sync/connections/${connectionId}/sync`, {
       method: 'POST',
     });
+  }
+
+  async getSyncStatus(connectionId: string): Promise<SyncStatusResponse> {
+    return this.request(`/sync/connections/${connectionId}/status`);
   }
 
   async updateConnection(connectionId: string, data: { sync_frequency: string }): Promise<void> {

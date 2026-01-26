@@ -81,6 +81,12 @@ type CreateHoldingRequest struct {
 	Notes        string  `json:"notes,omitempty"`
 }
 
+// CreateHoldingResponse represents the response from creating a holding
+type CreateHoldingResponse struct {
+	Holding   *Holding `json:"holding"`
+	WasUpdate bool     `json:"was_update"` // true if existing record was updated, false if new record created
+}
+
 // UpdateHoldingRequest represents the request to update a holding
 type UpdateHoldingRequest struct {
 	Quantity  *float64 `json:"quantity,omitempty"`
@@ -100,7 +106,7 @@ type DeleteHoldingResponse struct {
 }
 
 // Create creates a new holding
-func (s *Service) Create(ctx context.Context, req *CreateHoldingRequest) (*Holding, error) {
+func (s *Service) Create(ctx context.Context, req *CreateHoldingRequest) (*CreateHoldingResponse, error) {
 	// TODO: Verify user owns the account
 
 	holding := &Holding{
@@ -131,6 +137,18 @@ func (s *Service) Create(ctx context.Context, req *CreateHoldingRequest) (*Holdi
 	}
 	holding.PurchaseDate = purchaseDate
 
+	// Check if holding already exists
+	var existingID string
+	wasUpdate := false
+	if req.Symbol != nil {
+		existingErr := s.db.QueryRowContext(ctx, `
+			SELECT id FROM holdings WHERE account_id = $1 AND symbol = $2
+		`, req.AccountID, req.Symbol).Scan(&existingID)
+		if existingErr == nil {
+			wasUpdate = true
+		}
+	}
+
 	err := s.db.QueryRowContext(ctx, `
 		INSERT INTO holdings (
 			account_id, type, symbol, quantity, cost_basis,
@@ -151,7 +169,10 @@ func (s *Service) Create(ctx context.Context, req *CreateHoldingRequest) (*Holdi
 		return nil, err
 	}
 
-	return holding, nil
+	return &CreateHoldingResponse{
+		Holding:   holding,
+		WasUpdate: wasUpdate,
+	}, nil
 }
 
 // GetAccountHoldings retrieves all holdings for a specific account
