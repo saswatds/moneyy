@@ -39,7 +39,7 @@ services:
       - DB_USER=${DB_USER:-postgres}
       - DB_PASSWORD=${DB_PASSWORD:-postgres}
       # Encryption
-      - ENC_MASTER_KEY=${ENC_MASTER_KEY}
+      - ENC_MASTER_KEY=${ENC_MASTER_KEY:-dev-encryption-key-change-in-production}
       # Server
       - SERVER_PORT=4000
       - LOG_LEVEL=info
@@ -84,7 +84,7 @@ services:
       - DB_USER=${DB_USER:-postgres}
       - DB_PASSWORD=${DB_PASSWORD:-postgres}
       # Encryption
-      - ENC_MASTER_KEY=${ENC_MASTER_KEY}
+      - ENC_MASTER_KEY=${ENC_MASTER_KEY:-dev-encryption-key-change-in-production}
       # Server (needed by some env loading)
       - SERVER_PORT=4000
       - LOG_LEVEL=info
