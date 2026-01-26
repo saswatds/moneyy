@@ -13,7 +13,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: saswatds/moneyy
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   build-amd64:
@@ -27,6 +27,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set image name to lowercase
+        id: image
+        run: echo "name=$(echo ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -34,7 +38,7 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
+          username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push amd64 image
@@ -43,7 +47,7 @@ jobs:
           context: .
           file: ./Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:amd64
+          tags: ${{ steps.image.outputs.name }}:amd64
           cache-from: type=gha,scope=amd64
           cache-to: type=gha,mode=max,scope=amd64
           platforms: linux/amd64
@@ -61,6 +65,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set image name to lowercase
+        id: image
+        run: echo "name=$(echo ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -71,7 +79,7 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
+          username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push arm64 image
@@ -80,7 +88,7 @@ jobs:
           context: .
           file: ./Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:arm64
+          tags: ${{ steps.image.outputs.name }}:arm64
           cache-from: type=gha,scope=arm64
           cache-to: type=gha,mode=max,scope=arm64
           platforms: linux/arm64
@@ -97,21 +105,25 @@ jobs:
     if: github.event_name != 'pull_request'
 
     steps:
+      - name: Set image name to lowercase
+        id: image
+        run: echo "name=$(echo ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
       - name: Log in to Container Registry
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
+          username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create and push manifest
         run: |
           # Create manifest for latest tag
-          docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:amd64 \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:arm64
+          docker buildx imagetools create -t ${{ steps.image.outputs.name }}:latest \
+            ${{ steps.image.outputs.name }}:amd64 \
+            ${{ steps.image.outputs.name }}:arm64
 
           # Create manifest for main tag
-          docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:amd64 \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:arm64
+          docker buildx imagetools create -t ${{ steps.image.outputs.name }}:main \
+            ${{ steps.image.outputs.name }}:amd64 \
+            ${{ steps.image.outputs.name }}:arm64
