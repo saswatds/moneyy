@@ -749,6 +749,82 @@ class ApiClient {
       method: 'DELETE',
     });
   }
+
+  // Sync endpoints
+  async getSyncConnections(): Promise<{ connections: any[] }> {
+    return this.request('/sync/connections');
+  }
+
+  async checkWealthsimpleCredentials(): Promise<{ has_credentials: boolean; email: string }> {
+    return this.request('/sync/wealthsimple/check-credentials');
+  }
+
+  async initiateWealthsimpleConnection(username: string, password: string): Promise<any> {
+    return this.request('/sync/wealthsimple/initiate', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    });
+  }
+
+  async verifyWealthsimpleOTP(credentialId: string, otpCode: string): Promise<any> {
+    return this.request('/sync/wealthsimple/verify-otp', {
+      method: 'POST',
+      body: JSON.stringify({ credential_id: credentialId, otp_code: otpCode }),
+    });
+  }
+
+  async reconnectWealthsimple(): Promise<{ connection_id: string }> {
+    return this.request('/sync/wealthsimple/reconnect', {
+      method: 'POST',
+    });
+  }
+
+  async syncConnection(connectionId: string): Promise<void> {
+    return this.request(`/sync/connections/${connectionId}/sync`, {
+      method: 'POST',
+    });
+  }
+
+  async updateConnection(connectionId: string, data: { sync_frequency: string }): Promise<void> {
+    return this.request(`/sync/connections/${connectionId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteConnection(connectionId: string): Promise<void> {
+    return this.request(`/sync/connections/${connectionId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Data export/import endpoints
+  async exportData(): Promise<Blob> {
+    const response = await fetch(`${this.baseUrl}/data/export`, {
+      method: 'POST',
+    });
+    if (!response.ok) {
+      throw new Error(`Export failed: ${response.statusText}`);
+    }
+    return response.blob();
+  }
+
+  async importData(file: File, mode: string = 'merge'): Promise<any> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('mode', mode);
+
+    const response = await fetch(`${this.baseUrl}/data/import`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Import failed: ${response.statusText}`);
+    }
+
+    return response.json();
+  }
 }
 
 export const apiClient = new ApiClient(API_BASE_URL);

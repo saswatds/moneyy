@@ -12,6 +12,7 @@ import (
 	"money/internal/account"
 	"money/internal/balance"
 	"money/internal/currency"
+	"money/internal/data"
 	"money/internal/database"
 	"money/internal/env"
 	"money/internal/holdings"
@@ -85,6 +86,10 @@ func main() {
 		encryptionKey,
 	)
 
+	// Data export/import services (no dependencies)
+	exportSvc := data.NewExportService(db)
+	importSvc := data.NewImportService(db)
+
 	logger.Info("All services initialized successfully")
 
 	// Setup HTTP router
@@ -117,6 +122,7 @@ func main() {
 		handlers.NewProjectionsHandler(projectionsSvc).RegisterRoutes(r)
 		handlers.NewSyncHandler(syncSvc).RegisterRoutes(r)
 		handlers.NewTransactionHandler(transactionSvc).RegisterRoutes(r)
+		handlers.NewDataHandler(exportSvc, importSvc).RegisterRoutes(r)
 
 		// Health check endpoint
 		r.Get("/health", func(w http.ResponseWriter, r *http.Request) {

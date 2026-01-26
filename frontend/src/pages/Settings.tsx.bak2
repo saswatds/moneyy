@@ -140,6 +140,7 @@ export function Settings() {
   const checkWealthsimpleCredentials = async () => {
     try {
       const data = await apiClient.checkWealthsimpleCredentials();
+      const data = await apiClient.checkWealthsimpleCredentials();
       setWealthsimpleCredentials({
         hasCredentials: data.has_credentials,
         email: data.email || '',

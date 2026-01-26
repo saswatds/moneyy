@@ -667,16 +667,6 @@ export function Projections() {
         </Card>
       )}
 
-      {!isCalculating && !projectionData && !error && (
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-center text-muted-foreground">
-              <p>Configure your parameters and save to see your financial projections.</p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {/* Two Pane Layout */}
       <div className="grid grid-cols-5 gap-6 h-[calc(100vh-16rem)]">
         {/* Left Pane - Charts (3/5 width) */}
