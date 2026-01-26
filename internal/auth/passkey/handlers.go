@@ -127,11 +127,13 @@ func (p *PasskeyAuthProvider) handleRegistrationFinish(w http.ResponseWriter, r 
 
 	// Store credential in database
 	dbCred := &Credential{
-		UserID:       SingleUserID,
-		CredentialID: credential.ID,
-		PublicKey:    credential.PublicKey,
-		AAGUID:       credential.Authenticator.AAGUID,
-		SignCount:    credential.Authenticator.SignCount,
+		UserID:         SingleUserID,
+		CredentialID:   credential.ID,
+		PublicKey:      credential.PublicKey,
+		AAGUID:         credential.Authenticator.AAGUID,
+		SignCount:      credential.Authenticator.SignCount,
+		BackupEligible: credential.Flags.BackupEligible,
+		BackupState:    credential.Flags.BackupState,
 	}
 
 	err = p.credRepo.Create(ctx, dbCred)
