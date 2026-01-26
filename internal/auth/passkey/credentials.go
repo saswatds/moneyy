@@ -12,15 +12,17 @@ import (
 
 // Credential represents a WebAuthn credential in the database
 type Credential struct {
-	ID           string
-	UserID       string
-	CredentialID []byte
-	PublicKey    []byte
-	AAGUID       []byte
-	SignCount    uint32
-	CloneWarning bool
-	CreatedAt    time.Time
-	LastUsedAt   *time.Time
+	ID             string
+	UserID         string
+	CredentialID   []byte
+	PublicKey      []byte
+	AAGUID         []byte
+	SignCount      uint32
+	CloneWarning   bool
+	BackupEligible bool
+	BackupState    bool
+	CreatedAt      time.Time
+	LastUsedAt     *time.Time
 }
 
 // CredentialRepository handles credential database operations
@@ -36,8 +38,8 @@ func NewCredentialRepository(db *sql.DB) *CredentialRepository {
 // Create creates a new credential
 func (r *CredentialRepository) Create(ctx context.Context, cred *Credential) error {
 	query := `
-		INSERT INTO webauthn_credentials (user_id, credential_id, public_key, aaguid, sign_count, created_at)
-		VALUES ($1, $2, $3, $4, $5, NOW())
+		INSERT INTO webauthn_credentials (user_id, credential_id, public_key, aaguid, sign_count, backup_eligible, backup_state, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
 		RETURNING id, created_at
 	`
 
@@ -49,6 +51,8 @@ func (r *CredentialRepository) Create(ctx context.Context, cred *Credential) err
 		cred.PublicKey,
 		cred.AAGUID,
 		cred.SignCount,
+		cred.BackupEligible,
+		cred.BackupState,
 	).Scan(&cred.ID, &cred.CreatedAt)
 
 	if err != nil {
@@ -61,7 +65,7 @@ func (r *CredentialRepository) Create(ctx context.Context, cred *Credential) err
 // GetByCredentialID retrieves a credential by its credential ID
 func (r *CredentialRepository) GetByCredentialID(ctx context.Context, credentialID []byte) (*Credential, error) {
 	query := `
-		SELECT id, user_id, credential_id, public_key, aaguid, sign_count, clone_warning, created_at, last_used_at
+		SELECT id, user_id, credential_id, public_key, aaguid, sign_count, clone_warning, backup_eligible, backup_state, created_at, last_used_at
 		FROM webauthn_credentials
 		WHERE credential_id = $1
 	`
@@ -77,6 +81,8 @@ func (r *CredentialRepository) GetByCredentialID(ctx context.Context, credential
 		&cred.AAGUID,
 		&cred.SignCount,
 		&cred.CloneWarning,
+		&cred.BackupEligible,
+		&cred.BackupState,
 		&cred.CreatedAt,
 		&lastUsedAt,
 	)
@@ -98,7 +104,7 @@ func (r *CredentialRepository) GetByCredentialID(ctx context.Context, credential
 // GetByUserID retrieves all credentials for a user
 func (r *CredentialRepository) GetByUserID(ctx context.Context, userID string) ([]*Credential, error) {
 	query := `
-		SELECT id, user_id, credential_id, public_key, aaguid, sign_count, clone_warning, created_at, last_used_at
+		SELECT id, user_id, credential_id, public_key, aaguid, sign_count, clone_warning, backup_eligible, backup_state, created_at, last_used_at
 		FROM webauthn_credentials
 		WHERE user_id = $1
 		ORDER BY created_at DESC
@@ -123,6 +129,8 @@ func (r *CredentialRepository) GetByUserID(ctx context.Context, userID string) (
 			&cred.AAGUID,
 			&cred.SignCount,
 			&cred.CloneWarning,
+			&cred.BackupEligible,
+			&cred.BackupState,
 			&cred.CreatedAt,
 			&lastUsedAt,
 		)
@@ -182,8 +190,8 @@ func (c *Credential) ToWebAuthnCredential() webauthn.Credential {
 		Flags: webauthn.CredentialFlags{
 			UserPresent:    true,
 			UserVerified:   true,
-			BackupEligible: false,
-			BackupState:    false,
+			BackupEligible: c.BackupEligible,
+			BackupState:    c.BackupState,
 		},
 		Authenticator: webauthn.Authenticator{
 			AAGUID:       c.AAGUID,
