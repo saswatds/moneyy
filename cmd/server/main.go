@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"money/internal/account"
+	"money/internal/auth"
 	"money/internal/balance"
 	"money/internal/currency"
 	"money/internal/data"
@@ -18,6 +19,7 @@ import (
 	"money/internal/holdings"
 	"money/internal/logger"
 	"money/internal/projections"
+	"money/internal/server"
 	"money/internal/server/handlers"
 	"money/internal/sync"
 	"money/internal/transaction"
@@ -92,6 +94,20 @@ func main() {
 
 	logger.Info("All services initialized successfully")
 
+	// Initialize authentication provider
+	logger.Info("Initializing authentication provider")
+	authProvider, err := initializeAuthProvider(db)
+	if err != nil {
+		log.Fatalf("Failed to initialize auth provider: %v", err)
+	}
+
+	err = authProvider.Initialize(context.Background())
+	if err != nil {
+		log.Fatalf("Failed to initialize auth: %v", err)
+	}
+
+	logger.Info("Authentication initialized", "mode", authProvider.GetAuthMode())
+
 	// Setup HTTP router
 	logger.Info("Registering HTTP handlers")
 	r := chi.NewRouter()
@@ -115,20 +131,38 @@ func main() {
 
 	// API routes under /api prefix
 	r.Route("/api", func(r chi.Router) {
-		handlers.NewAccountHandler(accountSvc).RegisterRoutes(r)
-		handlers.NewBalanceHandler(balanceSvc).RegisterRoutes(r)
-		handlers.NewCurrencyHandler(currencySvc).RegisterRoutes(r)
-		handlers.NewHoldingsHandler(holdingsSvc).RegisterRoutes(r)
-		handlers.NewProjectionsHandler(projectionsSvc).RegisterRoutes(r)
-		handlers.NewSyncHandler(syncSvc).RegisterRoutes(r)
-		handlers.NewTransactionHandler(transactionSvc).RegisterRoutes(r)
-		handlers.NewDataHandler(exportSvc, importSvc).RegisterRoutes(r)
-
-		// Health check endpoint
+		// Health check - must be public for Docker healthcheck
 		r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte(`{"status":"ok"}`))
+		})
+
+		// Auth routes (public)
+		r.Route("/auth", func(r chi.Router) {
+			authProvider.RegisterRoutes(r)
+
+			// Auth mode endpoint
+			r.Get("/mode", func(w http.ResponseWriter, r *http.Request) {
+				server.RespondJSON(w, http.StatusOK, map[string]string{
+					"mode": authProvider.GetAuthMode(),
+				})
+			})
+		})
+
+		// Protected routes group
+		r.Group(func(r chi.Router) {
+			// Apply auth middleware to protected routes only
+			r.Use(auth.AuthMiddleware(authProvider))
+
+			handlers.NewAccountHandler(accountSvc).RegisterRoutes(r)
+			handlers.NewBalanceHandler(balanceSvc).RegisterRoutes(r)
+			handlers.NewCurrencyHandler(currencySvc).RegisterRoutes(r)
+			handlers.NewHoldingsHandler(holdingsSvc).RegisterRoutes(r)
+			handlers.NewProjectionsHandler(projectionsSvc).RegisterRoutes(r)
+			handlers.NewSyncHandler(syncSvc).RegisterRoutes(r)
+			handlers.NewTransactionHandler(transactionSvc).RegisterRoutes(r)
+			handlers.NewDataHandler(exportSvc, importSvc).RegisterRoutes(r)
 		})
 	})
 

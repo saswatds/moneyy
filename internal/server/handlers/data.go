@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"money/internal/auth"
 	"money/internal/data"
 	"money/internal/server"
 
@@ -15,8 +16,6 @@ import (
 const (
 	// MaxUploadSize is 100MB
 	MaxUploadSize = 100 << 20
-	// Default user ID (single-user application)
-	DefaultUserID = "temp-user-id"
 )
 
 // DataHandler handles data export/import HTTP requests
@@ -47,7 +46,13 @@ func (h *DataHandler) HandleExport(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	// Export data for default user
-	archive, err := h.exportService.ExportData(ctx, DefaultUserID)
+	userID := auth.GetUserID(ctx)
+	if userID == "" {
+		server.RespondError(w, http.StatusUnauthorized, fmt.Errorf("user not authenticated"))
+		return
+	}
+
+	archive, err := h.exportService.ExportData(ctx, userID)
 	if err != nil {
 		server.RespondError(w, http.StatusInternalServerError, fmt.Errorf("export failed: %w", err))
 		return
@@ -109,7 +114,13 @@ func (h *DataHandler) HandleImport(w http.ResponseWriter, r *http.Request) {
 		ValidateOnly: false,
 	}
 
-	result, err := h.importService.ImportData(ctx, DefaultUserID, archive, opts)
+	userID := auth.GetUserID(ctx)
+	if userID == "" {
+		server.RespondError(w, http.StatusUnauthorized, fmt.Errorf("user not authenticated"))
+		return
+	}
+
+	result, err := h.importService.ImportData(ctx, userID, archive, opts)
 	if err != nil {
 		server.RespondError(w, http.StatusInternalServerError, fmt.Errorf("import failed: %w", err))
 		return

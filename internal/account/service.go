@@ -4,8 +4,10 @@ package account
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 
+	"money/internal/auth"
 	"money/internal/balance"
 )
 
@@ -127,7 +129,10 @@ type AccountSummary struct {
 // Create creates a new account
 func (s *Service) Create(ctx context.Context, req *CreateAccountRequest) (*Account, error) {
 	// TODO: Get user ID from auth context
-	userID := "temp-user-id" // Placeholder until auth is implemented
+	userID := auth.GetUserID(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("user not authenticated")
+	}
 
 	account := &Account{
 		UserID:       userID,
@@ -159,7 +164,10 @@ func (s *Service) Create(ctx context.Context, req *CreateAccountRequest) (*Accou
 // Summary returns a summary of all accounts
 func (s *Service) Summary(ctx context.Context) (*AccountSummary, error) {
 	// TODO: Get user ID from auth context
-	userID := "temp-user-id" // Placeholder until auth is implemented
+	userID := auth.GetUserID(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("user not authenticated")
+	}
 
 	summary := &AccountSummary{
 		ByCurrency: make(map[string]int),
@@ -229,7 +237,10 @@ func (s *Service) Summary(ctx context.Context) (*AccountSummary, error) {
 // List retrieves all accounts for the authenticated user
 func (s *Service) List(ctx context.Context) (*ListAccountsResponse, error) {
 	// TODO: Get user ID from auth context
-	userID := "temp-user-id" // Placeholder until auth is implemented
+	userID := auth.GetUserID(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("user not authenticated")
+	}
 
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, user_id, name, type, currency, institution, is_asset, is_active, is_synced, connection_id, created_at, updated_at
@@ -275,7 +286,10 @@ func (s *Service) List(ctx context.Context) (*ListAccountsResponse, error) {
 // ListWithBalance retrieves all accounts with their current balance for the authenticated user
 func (s *Service) ListWithBalance(ctx context.Context) (*ListAccountsWithBalanceResponse, error) {
 	// TODO: Get user ID from auth context
-	userID := "temp-user-id" // Placeholder until auth is implemented
+	userID := auth.GetUserID(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("user not authenticated")
+	}
 
 	// First, get all accounts
 	rows, err := s.db.QueryContext(ctx, `
@@ -368,7 +382,10 @@ func (s *Service) ListWithBalance(ctx context.Context) (*ListAccountsWithBalance
 // Get retrieves a single account by ID
 func (s *Service) Get(ctx context.Context, id string) (*Account, error) {
 	// TODO: Get user ID from auth context and verify ownership
-	userID := "temp-user-id" // Placeholder until auth is implemented
+	userID := auth.GetUserID(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("user not authenticated")
+	}
 
 	account := &Account{}
 	var connectionID *string
@@ -405,7 +422,10 @@ func (s *Service) Get(ctx context.Context, id string) (*Account, error) {
 // Update updates an existing account
 func (s *Service) Update(ctx context.Context, id string, req *UpdateAccountRequest) (*Account, error) {
 	// TODO: Get user ID from auth context and verify ownership
-	userID := "temp-user-id" // Placeholder until auth is implemented
+	userID := auth.GetUserID(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("user not authenticated")
+	}
 
 	// First, get the current account
 	account, err := s.Get(ctx, id)
@@ -450,7 +470,10 @@ func (s *Service) Update(ctx context.Context, id string, req *UpdateAccountReque
 // Delete deletes an account (soft delete by setting is_active to false)
 func (s *Service) Delete(ctx context.Context, id string) (*DeleteAccountResponse, error) {
 	// TODO: Get user ID from auth context and verify ownership
-	userID := "temp-user-id" // Placeholder until auth is implemented
+	userID := auth.GetUserID(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("user not authenticated")
+	}
 
 	_, err := s.db.ExecContext(ctx, `
 		DELETE FROM accounts
