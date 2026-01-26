@@ -64,7 +64,6 @@ type Account struct {
 	Institution *string   `json:"institution"`
 	IsAsset     bool      `json:"is_asset"`
 	IsActive    bool      `json:"is_active"`
-	SyncedAccountID *string `json:"synced_account_id"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
@@ -110,89 +109,107 @@ type HoldingTransaction struct {
 
 // MortgageDetails represents mortgage details record
 type MortgageDetails struct {
-	ID                    string    `json:"id"`
-	AccountID             string    `json:"account_id"`
-	PrincipalAmount       float64   `json:"principal_amount"`
-	InterestRate          float64   `json:"interest_rate"`
-	PaymentFrequency      string    `json:"payment_frequency"`
-	AmortizationYears     int       `json:"amortization_years"`
-	StartDate             time.Time `json:"start_date"`
-	FirstPaymentDate      time.Time `json:"first_payment_date"`
-	PropertyValue         *float64  `json:"property_value"`
-	DownPaymentPercentage *float64  `json:"down_payment_percentage"`
-	CreatedAt             time.Time `json:"created_at"`
-	UpdatedAt             time.Time `json:"updated_at"`
+	ID                 string     `json:"id"`
+	AccountID          string     `json:"account_id"`
+	OriginalAmount     float64    `json:"original_amount"`
+	InterestRate       float64    `json:"interest_rate"`
+	RateType           string     `json:"rate_type"`
+	StartDate          time.Time  `json:"start_date"`
+	TermMonths         int        `json:"term_months"`
+	AmortizationMonths int        `json:"amortization_months"`
+	PaymentAmount      float64    `json:"payment_amount"`
+	PaymentFrequency   string     `json:"payment_frequency"`
+	PaymentDay         *int       `json:"payment_day"`
+	PropertyAddress    *string    `json:"property_address"`
+	PropertyCity       *string    `json:"property_city"`
+	PropertyProvince   *string    `json:"property_province"`
+	PropertyPostalCode *string    `json:"property_postal_code"`
+	PropertyValue      *float64   `json:"property_value"`
+	RenewalDate        *time.Time `json:"renewal_date"`
+	MaturityDate       time.Time  `json:"maturity_date"`
+	Lender             *string    `json:"lender"`
+	MortgageNumber     *string    `json:"mortgage_number"`
+	Notes              *string    `json:"notes"`
+	CreatedAt          time.Time  `json:"created_at"`
+	UpdatedAt          time.Time  `json:"updated_at"`
 }
 
 // MortgagePayment represents a mortgage payment record
 type MortgagePayment struct {
-	ID             string    `json:"id"`
-	AccountID      string    `json:"account_id"`
-	PaymentDate    time.Time `json:"payment_date"`
-	Amount         float64   `json:"amount"`
-	PrincipalPaid  float64   `json:"principal_paid"`
-	InterestPaid   float64   `json:"interest_paid"`
-	RemainingBalance float64 `json:"remaining_balance"`
-	Notes          *string   `json:"notes"`
-	CreatedAt      time.Time `json:"created_at"`
+	ID              string    `json:"id"`
+	AccountID       string    `json:"account_id"`
+	PaymentDate     time.Time `json:"payment_date"`
+	PaymentAmount   float64   `json:"payment_amount"`
+	PrincipalAmount float64   `json:"principal_amount"`
+	InterestAmount  float64   `json:"interest_amount"`
+	ExtraPayment    *float64  `json:"extra_payment"`
+	BalanceAfter    float64   `json:"balance_after"`
+	Notes           *string   `json:"notes"`
+	CreatedAt       time.Time `json:"created_at"`
 }
 
 // LoanDetails represents loan details record
 type LoanDetails struct {
-	ID               string    `json:"id"`
-	AccountID        string    `json:"account_id"`
-	PrincipalAmount  float64   `json:"principal_amount"`
-	InterestRate     float64   `json:"interest_rate"`
-	PaymentFrequency string    `json:"payment_frequency"`
-	TermYears        int       `json:"term_years"`
-	StartDate        time.Time `json:"start_date"`
-	FirstPaymentDate time.Time `json:"first_payment_date"`
-	LoanType         *string   `json:"loan_type"`
-	Lender           *string   `json:"lender"`
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
+	ID               string     `json:"id"`
+	AccountID        string     `json:"account_id"`
+	OriginalAmount   float64    `json:"original_amount"`
+	InterestRate     float64    `json:"interest_rate"`
+	RateType         string     `json:"rate_type"`
+	StartDate        time.Time  `json:"start_date"`
+	TermMonths       int        `json:"term_months"`
+	PaymentAmount    float64    `json:"payment_amount"`
+	PaymentFrequency string     `json:"payment_frequency"`
+	PaymentDay       *int       `json:"payment_day"`
+	LoanType         *string    `json:"loan_type"`
+	Lender           *string    `json:"lender"`
+	LoanNumber       *string    `json:"loan_number"`
+	Purpose          *string    `json:"purpose"`
+	MaturityDate     time.Time  `json:"maturity_date"`
+	Notes            *string    `json:"notes"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
 }
 
 // LoanPayment represents a loan payment record
 type LoanPayment struct {
-	ID               string    `json:"id"`
-	AccountID        string    `json:"account_id"`
-	PaymentDate      time.Time `json:"payment_date"`
-	Amount           float64   `json:"amount"`
-	PrincipalPaid    float64   `json:"principal_paid"`
-	InterestPaid     float64   `json:"interest_paid"`
-	RemainingBalance float64   `json:"remaining_balance"`
-	Notes            *string   `json:"notes"`
-	CreatedAt        time.Time `json:"created_at"`
+	ID              string    `json:"id"`
+	AccountID       string    `json:"account_id"`
+	PaymentDate     time.Time `json:"payment_date"`
+	PaymentAmount   float64   `json:"payment_amount"`
+	PrincipalAmount float64   `json:"principal_amount"`
+	InterestAmount  float64   `json:"interest_amount"`
+	ExtraPayment    *float64  `json:"extra_payment"`
+	BalanceAfter    float64   `json:"balance_after"`
+	Notes           *string   `json:"notes"`
+	CreatedAt       time.Time `json:"created_at"`
 }
 
 // AssetDetails represents asset details record
 type AssetDetails struct {
-	ID                   string     `json:"id"`
-	AccountID            string     `json:"account_id"`
-	AssetType            string     `json:"asset_type"`
-	PurchasePrice        float64    `json:"purchase_price"`
-	PurchaseDate         time.Time  `json:"purchase_date"`
-	CurrentValue         *float64   `json:"current_value"`
-	DepreciationMethod   *string    `json:"depreciation_method"`
-	UsefulLifeYears      *int       `json:"useful_life_years"`
-	SalvageValue         *float64   `json:"salvage_value"`
-	Description          *string    `json:"description"`
-	LastValuationDate    *time.Time `json:"last_valuation_date"`
-	CreatedAt            time.Time  `json:"created_at"`
-	UpdatedAt            time.Time  `json:"updated_at"`
+	ID                 string    `json:"id"`
+	AccountID          string    `json:"account_id"`
+	AssetType          string    `json:"asset_type"`
+	PurchasePrice      float64   `json:"purchase_price"`
+	PurchaseDate       time.Time `json:"purchase_date"`
+	DepreciationMethod string    `json:"depreciation_method"`
+	UsefulLifeYears    *int      `json:"useful_life_years"`
+	SalvageValue       *float64  `json:"salvage_value"`
+	DepreciationRate   *float64  `json:"depreciation_rate"`
+	TypeSpecificData   *string   `json:"type_specific_data"` // JSONB stored as string
+	Notes              *string   `json:"notes"`
+	CreatedAt          time.Time `json:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at"`
 }
 
 // AssetDepreciationEntry represents an asset depreciation entry
 type AssetDepreciationEntry struct {
-	ID                string    `json:"id"`
-	AccountID         string    `json:"account_id"`
-	EntryDate         time.Time `json:"entry_date"`
-	DepreciationAmount float64  `json:"depreciation_amount"`
-	BookValue         float64   `json:"book_value"`
-	Method            string    `json:"method"`
-	Notes             *string   `json:"notes"`
-	CreatedAt         time.Time `json:"created_at"`
+	ID                      string    `json:"id"`
+	AccountID               string    `json:"account_id"`
+	EntryDate               time.Time `json:"entry_date"`
+	CurrentValue            float64   `json:"current_value"`
+	AccumulatedDepreciation float64   `json:"accumulated_depreciation"`
+	Notes                   *string   `json:"notes"`
+	CreatedAt               time.Time `json:"created_at"`
 }
 
 // RecurringExpense represents a recurring expense record
@@ -212,13 +229,13 @@ type RecurringExpense struct {
 
 // ProjectionScenario represents a projection scenario record
 type ProjectionScenario struct {
-	ID          string    `json:"id"`
-	UserID      string    `json:"user_id"`
-	Name        string    `json:"name"`
-	Description *string   `json:"description"`
-	Config      string    `json:"config"` // JSON string
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID        string    `json:"id"`
+	UserID    string    `json:"user_id"`
+	Name      string    `json:"name"`
+	IsDefault bool      `json:"is_default"`
+	Config    string    `json:"config"` // JSONB stored as string
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // ExchangeRate represents an exchange rate record
@@ -249,7 +266,7 @@ type Connection struct {
 // SyncedAccount represents the mapping between local and provider accounts
 type SyncedAccount struct {
 	ID                string     `json:"id"`
-	ConnectionID      string     `json:"connection_id"`
+	CredentialID      string     `json:"credential_id"`
 	LocalAccountID    string     `json:"local_account_id"`
 	ProviderAccountID string     `json:"provider_account_id"`
 	LastSyncAt        *time.Time `json:"last_sync_at"`

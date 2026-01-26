@@ -10,6 +10,7 @@ import (
 	"money/internal/account"
 	"money/internal/balance"
 	"money/internal/holdings"
+	"money/internal/sync/encryption"
 )
 
 // Service provides sync functionality
@@ -127,6 +128,57 @@ type TriggerSyncResponse struct {
 // DeleteResponse represents a generic delete response
 type DeleteResponse struct {
 	Success bool `json:"success"`
+}
+
+// CheckWealthsimpleCredentialsResponse represents the response for checking credentials
+type CheckWealthsimpleCredentialsResponse struct {
+	HasCredentials bool   `json:"has_credentials"`
+	Email          string `json:"email,omitempty"`
+}
+
+// CheckWealthsimpleCredentials checks if Wealthsimple credentials exist for the user
+func (s *Service) CheckWealthsimpleCredentials(ctx context.Context) (*CheckWealthsimpleCredentialsResponse, error) {
+	// TODO: Get user ID from auth context
+	userID := "temp-user-id" // Placeholder until auth is implemented
+
+	var encryptedUsername []byte
+	err := s.db.QueryRowContext(ctx, `
+		SELECT encrypted_username
+		FROM sync_credentials
+		WHERE user_id = $1 AND provider = 'wealthsimple'
+	`, userID).Scan(&encryptedUsername)
+
+	if err == sql.ErrNoRows {
+		return &CheckWealthsimpleCredentialsResponse{
+			HasCredentials: false,
+		}, nil
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Decrypt the username/email to return
+	encService, err := encryption.NewService(s.encryptionKey)
+	if err != nil {
+		// If encryption service fails, still return that credentials exist but no email
+		return &CheckWealthsimpleCredentialsResponse{
+			HasCredentials: true,
+		}, nil
+	}
+
+	decryptedEmail, err := encService.Decrypt(encryptedUsername)
+	if err != nil {
+		// If decryption fails, still return that credentials exist but no email
+		return &CheckWealthsimpleCredentialsResponse{
+			HasCredentials: true,
+		}, nil
+	}
+
+	return &CheckWealthsimpleCredentialsResponse{
+		HasCredentials: true,
+		Email:          decryptedEmail,
+	}, nil
 }
 
 // InitiateWealthsimpleConnection initiates a connection to Wealthsimple
