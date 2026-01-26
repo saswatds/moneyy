@@ -29,7 +29,11 @@ const formSchema = z.object({
   notes: z.string().max(500).optional(),
 });
 
-type FormValues = z.infer<typeof formSchema>;
+type FormValues = {
+  entry_date: Date;
+  current_value: number;
+  notes?: string;
+};
 
 interface DepreciationEntryFormProps {
   accountId: string;
@@ -47,7 +51,7 @@ export function DepreciationEntryForm({
   const recordDepreciation = useRecordDepreciation();
 
   const form = useForm<FormValues>({
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(formSchema) as any,
     defaultValues: {
       entry_date: new Date(),
       current_value: purchasePrice || 0,

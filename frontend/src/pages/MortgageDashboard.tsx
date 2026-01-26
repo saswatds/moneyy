@@ -17,7 +17,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import { IconArrowLeft, IconPlus, IconRefresh, IconChevronLeft, IconChevronRight } from '@tabler/icons-react';
 import {
@@ -265,7 +264,7 @@ export function MortgageDashboard() {
     }));
 
   // Find the index of today's payment in chart data
-  const todayChartIndex = chartData.findIndex(d => d.payment >= todayPayment);
+  const todayChartIndex = todayPayment !== null ? chartData.findIndex(d => d.payment >= todayPayment) : -1;
 
   const currentBalance = payments.length > 0
     ? payments[0].balance_after
@@ -741,7 +740,6 @@ export function MortgageDashboard() {
               <tbody>
                 {payments.length > 0 ? (
                   (() => {
-                    const totalPages = Math.ceil(payments.length / paymentsPerPage);
                     const startIndex = (currentPage - 1) * paymentsPerPage;
                     const endIndex = startIndex + paymentsPerPage;
                     const currentPayments = payments.slice(startIndex, endIndex);

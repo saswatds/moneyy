@@ -5,7 +5,6 @@ import { useAccountBalances } from '@/hooks/use-balances';
 import { useAccountHoldings } from '@/hooks/use-holdings';
 import { useMortgageDetails } from '@/hooks/use-mortgage';
 import { useLoanDetails } from '@/hooks/use-loan';
-import { useAssetDetails } from '@/hooks/use-assets';
 import { getAccountTypeConfig } from '@/lib/account-types';
 import type { Holding } from '@/lib/api-client';
 import {
@@ -47,8 +46,8 @@ export function AccountDetail() {
   const { data: account, isLoading: accountLoading } = useAccount(id!);
   const { data: balancesData, isLoading: balancesLoading } = useAccountBalances(id!);
   const { data: holdingsData, isLoading: holdingsLoading } = useAccountHoldings(id!);
-  const { data: mortgageDetails, isLoading: mortgageLoading, isError: mortgageError } = useMortgageDetails(id!);
-  const { data: loanDetails, isLoading: loanLoading, isError: loanError } = useLoanDetails(id!);
+  const { data: mortgageDetails, isLoading: mortgageLoading, isError: _mortgageError } = useMortgageDetails(id!);
+  const { data: loanDetails, isLoading: loanLoading, isError: _loanError } = useLoanDetails(id!);
 
   const deleteAccount = useDeleteAccount();
 
