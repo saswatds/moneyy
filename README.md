@@ -84,6 +84,8 @@ Your instance will be available at `http://localhost:4000`
 
 ## License
 
-Copyright (c) 2026 Noob Ventures. All Rights Reserved.
+Copyright (c) 2026 Noob Ventures
 
-This is source-available software. See [LICENSE](LICENSE) for details.
+Licensed under the [PolyForm Noncommercial License 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0).
+
+This software is free to use for personal and noncommercial purposes. Commercial use requires a separate license. See [LICENSE](LICENSE) for full terms.
