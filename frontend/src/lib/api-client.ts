@@ -858,8 +858,22 @@ class ApiClient {
         localStorage.removeItem('auth_token');
         localStorage.removeItem('auth_user');
         window.location.href = '/login';
+        throw new Error('Session expired. Please log in again.');
       }
-      throw new Error(`Import failed: ${response.statusText}`);
+      const errorText = await response.text();
+      let errorMessage = `Import failed: ${response.statusText}`;
+      try {
+        const errorJson = JSON.parse(errorText);
+        if (errorJson.message) {
+          errorMessage = errorJson.message;
+        }
+      } catch {
+        // If not JSON, use the text as is
+        if (errorText) {
+          errorMessage = errorText;
+        }
+      }
+      throw new Error(errorMessage);
     }
 
     return response.json();

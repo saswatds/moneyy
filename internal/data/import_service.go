@@ -69,12 +69,12 @@ func (s *ImportService) ValidateArchive(archive []byte) (*ValidationResult, erro
 			fmt.Sprintf("Export version mismatch: expected %s, got %s", ExportVersion, manifest.Version))
 	}
 
-	// Validate each table file
+	// Validate each table file (optional tables like exchange_rates and synced_accounts are allowed but not required)
 	expectedTables := []string{
 		"accounts", "balances", "holdings", "holding_transactions",
 		"mortgage_details", "mortgage_payments", "loan_details", "loan_payments",
 		"asset_details", "asset_depreciation_entries", "recurring_expenses",
-		"projection_scenarios", "exchange_rates",
+		"projection_scenarios",
 	}
 
 	for _, tableName := range expectedTables {
@@ -176,7 +176,8 @@ func (s *ImportService) extractArchiveData(archive []byte) (map[string][]byte, e
 		"accounts", "balances", "holdings", "holding_transactions",
 		"mortgage_details", "mortgage_payments", "loan_details", "loan_payments",
 		"asset_details", "asset_depreciation_entries", "recurring_expenses",
-		"projection_scenarios", "exchange_rates", "synced_accounts",
+		"projection_scenarios", "sync_credentials", "synced_accounts",
+		// Note: exchange_rates are not imported - they are fetched automatically from the API
 	}
 
 	for _, tableName := range tables {
@@ -228,8 +229,9 @@ func (s *ImportService) importInTransaction(ctx context.Context, userID string, 
 		name       string
 		importFunc func(context.Context, *sql.Tx, string, []byte, string) (ImportTableSummary, error)
 	}{
-		{"accounts", s.importAccounts},              // First: no dependencies
-		{"synced_accounts", s.importSyncedAccounts}, // Second: needs accounts and sync_credentials
+		{"accounts", s.importAccounts},                 // First: no dependencies
+		{"sync_credentials", s.importSyncCredentials},  // Second: needed by synced_accounts
+		{"synced_accounts", s.importSyncedAccounts},    // Third: needs accounts and sync_credentials
 		{"balances", s.importBalances},
 		{"holdings", s.importHoldings},
 		{"holding_transactions", s.importHoldingTransactions},
@@ -241,7 +243,7 @@ func (s *ImportService) importInTransaction(ctx context.Context, userID string, 
 		{"asset_depreciation_entries", s.importAssetDepreciation},
 		{"recurring_expenses", s.importRecurringExpenses},
 		{"projection_scenarios", s.importProjections},
-		{"exchange_rates", s.importExchangeRates},
+		// Note: exchange_rates are not imported - they are fetched automatically from the API
 	}
 
 	for _, table := range tables {
@@ -882,6 +884,71 @@ func readZipFile(file *zip.File) ([]byte, error) {
 	return io.ReadAll(rc)
 }
 
+// importSyncCredentials imports sync credentials (without encrypted data)
+func (s *ImportService) importSyncCredentials(ctx context.Context, tx *sql.Tx, userID string, data []byte, _ string) (ImportTableSummary, error) {
+	var credentials []SyncCredential
+	if err := json.Unmarshal(data, &credentials); err != nil {
+		return ImportTableSummary{}, err
+	}
+
+	summary := ImportTableSummary{}
+
+	for _, cred := range credentials {
+		// Override user_id with current user
+		cred.UserID = userID
+
+		// Force status to 'disconnected' since we don't have encrypted credentials
+		// User will need to reconnect to activate
+		cred.Status = "disconnected"
+
+		query := `
+			INSERT INTO sync_credentials (id, user_id, provider, email, name, status,
+			                             last_sync_at, last_sync_error, sync_frequency,
+			                             account_count, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+			ON CONFLICT (id) DO UPDATE SET
+				provider = EXCLUDED.provider,
+				email = EXCLUDED.email,
+				name = EXCLUDED.name,
+				status = EXCLUDED.status,
+				last_sync_at = EXCLUDED.last_sync_at,
+				last_sync_error = EXCLUDED.last_sync_error,
+				sync_frequency = EXCLUDED.sync_frequency,
+				account_count = EXCLUDED.account_count,
+				updated_at = EXCLUDED.updated_at
+		`
+
+		result, err := tx.ExecContext(ctx, query,
+			cred.ID,
+			cred.UserID,
+			cred.Provider,
+			cred.Email,
+			cred.Name,
+			cred.Status, // Always 'disconnected' on import
+			cred.LastSyncAt,
+			cred.LastSyncError,
+			cred.SyncFrequency,
+			cred.AccountCount,
+			cred.CreatedAt,
+			cred.UpdatedAt,
+		)
+
+		if err != nil {
+			summary.Errors++
+			continue
+		}
+
+		rowsAffected, _ := result.RowsAffected()
+		if rowsAffected == 1 {
+			summary.Created++
+		} else {
+			summary.Updated++
+		}
+	}
+
+	return summary, nil
+}
+
 // importConnections imports connection records (forced to 'disconnected' status since no credentials)
 func (s *ImportService) importConnections(ctx context.Context, tx *sql.Tx, userID string, data []byte, _ string) (ImportTableSummary, error) {
 	var connections []Connection
@@ -955,13 +1022,12 @@ func (s *ImportService) importSyncedAccounts(ctx context.Context, tx *sql.Tx, us
 
 	for _, sa := range syncedAccounts {
 		// Verify sync_credentials exists (credential_id references sync_credentials.id)
-		// Note: We don't export sync_credentials, so this will only match if user has already connected
+		// sync_credentials should have been imported in previous step
 		var credExists bool
 		checkQuery := `SELECT EXISTS(SELECT 1 FROM sync_credentials WHERE id = $1 AND user_id = $2)`
 		err := tx.QueryRowContext(ctx, checkQuery, sa.CredentialID, userID).Scan(&credExists)
 		if err != nil || !credExists {
-			// Skip this synced_account if no credentials exist
-			// User will need to reconnect to recreate the mapping
+			// Skip this synced_account if credentials don't exist (shouldn't happen in normal flow)
 			summary.Skipped++
 			continue
 		}

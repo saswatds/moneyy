@@ -263,6 +263,22 @@ type Connection struct {
 	UpdatedAt     time.Time  `json:"updated_at"`
 }
 
+// SyncCredential represents sync credentials (without encrypted data for export)
+type SyncCredential struct {
+	ID            string     `json:"id"`
+	UserID        string     `json:"user_id"`
+	Provider      string     `json:"provider"`
+	Email         string     `json:"email"`
+	Name          string     `json:"name"`
+	Status        string     `json:"status"`
+	LastSyncAt    *time.Time `json:"last_sync_at"`
+	LastSyncError *string    `json:"last_sync_error"`
+	SyncFrequency string     `json:"sync_frequency"`
+	AccountCount  int        `json:"account_count"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+}
+
 // SyncedAccount represents the mapping between local and provider accounts
 type SyncedAccount struct {
 	ID                string     `json:"id"`

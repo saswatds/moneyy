@@ -3,6 +3,7 @@ package projections
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"math"
 	"time"
@@ -563,12 +564,17 @@ func (s *Service) CalculateProjection(ctx context.Context, req *ProjectionReques
 
 // getCurrentAccounts fetches current accounts and their balances
 func (s *Service) getCurrentAccounts(ctx context.Context) ([]AccountData, error) {
+	userID := auth.GetUserID(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("user not authenticated")
+	}
+
 	// First get all active accounts
 	rows, err := s.accountDB.QueryContext(ctx, `
 		SELECT id, type, is_asset, currency
 		FROM accounts
-		WHERE is_active = true
-	`)
+		WHERE is_active = true AND user_id = $1
+	`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -683,12 +689,17 @@ func (s *Service) getLoanDetails(ctx context.Context) ([]LoanData, error) {
 
 // getRecurringExpensesTotal fetches and calculates monthly total from recurring expenses
 func (s *Service) getRecurringExpensesTotal(ctx context.Context) (float64, error) {
+	userID := auth.GetUserID(ctx)
+	if userID == "" {
+		return 0, fmt.Errorf("user not authenticated")
+	}
+
 	// Query the transaction database
 	resp, err := s.transactionDB.QueryContext(ctx, `
 		SELECT amount, frequency
 		FROM recurring_expenses
-		WHERE is_active = true
-	`)
+		WHERE is_active = true AND user_id = $1
+	`, userID)
 	if err != nil {
 		return 0, fmt.Errorf("failed to query recurring expenses: %w", err)
 	}
@@ -772,11 +783,17 @@ func (s *Service) CreateScenario(ctx context.Context, req *CreateScenarioRequest
 		UpdatedAt: time.Now(),
 	}
 
-	err := s.accountDB.QueryRowContext(ctx, `
+	// Marshal config to JSON
+	configJSON, err := json.Marshal(req.Config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	err = s.accountDB.QueryRowContext(ctx, `
 		INSERT INTO projection_scenarios (user_id, name, is_default, config, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id
-	`, userID, req.Name, req.IsDefault, req.Config, scenario.CreatedAt, scenario.UpdatedAt).Scan(&scenario.ID)
+	`, userID, req.Name, req.IsDefault, configJSON, scenario.CreatedAt, scenario.UpdatedAt).Scan(&scenario.ID)
 
 	if err != nil {
 		return nil, err
@@ -806,10 +823,21 @@ func (s *Service) ListScenarios(ctx context.Context) (*ListScenariosResponse, er
 	scenarios := make([]*ProjectionScenario, 0)
 	for rows.Next() {
 		var s ProjectionScenario
-		err := rows.Scan(&s.ID, &s.UserID, &s.Name, &s.IsDefault, &s.Config, &s.CreatedAt, &s.UpdatedAt)
+		var configJSON []byte
+		err := rows.Scan(&s.ID, &s.UserID, &s.Name, &s.IsDefault, &configJSON, &s.CreatedAt, &s.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
+
+		// Unmarshal config JSON
+		if len(configJSON) > 0 {
+			var config Config
+			if err := json.Unmarshal(configJSON, &config); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+			}
+			s.Config = &config
+		}
+
 		scenarios = append(scenarios, &s)
 	}
 
@@ -818,15 +846,30 @@ func (s *Service) ListScenarios(ctx context.Context) (*ListScenariosResponse, er
 
 // GetScenario retrieves a specific projection scenario
 func (s *Service) GetScenario(ctx context.Context, id string) (*ProjectionScenario, error) {
+	userID := auth.GetUserID(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("user not authenticated")
+	}
+
 	var scenario ProjectionScenario
+	var configJSON []byte
 	err := s.accountDB.QueryRowContext(ctx, `
 		SELECT id, user_id, name, is_default, config, created_at, updated_at
 		FROM projection_scenarios
-		WHERE id = $1
-	`, id).Scan(&scenario.ID, &scenario.UserID, &scenario.Name, &scenario.IsDefault, &scenario.Config, &scenario.CreatedAt, &scenario.UpdatedAt)
+		WHERE id = $1 AND user_id = $2
+	`, id, userID).Scan(&scenario.ID, &scenario.UserID, &scenario.Name, &scenario.IsDefault, &configJSON, &scenario.CreatedAt, &scenario.UpdatedAt)
 
 	if err != nil {
 		return nil, err
+	}
+
+	// Unmarshal config JSON
+	if len(configJSON) > 0 {
+		var config Config
+		if err := json.Unmarshal(configJSON, &config); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+		}
+		scenario.Config = &config
 	}
 
 	return &scenario, nil
@@ -867,22 +910,36 @@ func (s *Service) UpdateScenario(ctx context.Context, id string, req *UpdateScen
 		argCount++
 	}
 	if req.Config != nil {
+		configJSON, err := json.Marshal(req.Config)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal config: %w", err)
+		}
 		query += fmt.Sprintf(`, config = $%d`, argCount)
-		args = append(args, req.Config)
+		args = append(args, configJSON)
 		argCount++
 	}
 
-	query += fmt.Sprintf(` WHERE id = $%d RETURNING id, user_id, name, is_default, config, created_at, updated_at`, argCount)
-	args = append(args, id)
+	query += fmt.Sprintf(` WHERE id = $%d AND user_id = $%d RETURNING id, user_id, name, is_default, config, created_at, updated_at`, argCount, argCount+1)
+	args = append(args, id, userID)
 
 	var scenario ProjectionScenario
+	var configJSON []byte
 	err := s.accountDB.QueryRowContext(ctx, query, args...).Scan(
 		&scenario.ID, &scenario.UserID, &scenario.Name, &scenario.IsDefault,
-		&scenario.Config, &scenario.CreatedAt, &scenario.UpdatedAt,
+		&configJSON, &scenario.CreatedAt, &scenario.UpdatedAt,
 	)
 
 	if err != nil {
 		return nil, err
+	}
+
+	// Unmarshal config JSON
+	if len(configJSON) > 0 {
+		var config Config
+		if err := json.Unmarshal(configJSON, &config); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+		}
+		scenario.Config = &config
 	}
 
 	return &scenario, nil
@@ -890,7 +947,12 @@ func (s *Service) UpdateScenario(ctx context.Context, id string, req *UpdateScen
 
 // DeleteScenario deletes a projection scenario
 func (s *Service) DeleteScenario(ctx context.Context, id string) (*DeleteScenarioResponse, error) {
-	_, err := s.accountDB.ExecContext(ctx, `DELETE FROM projection_scenarios WHERE id = $1`, id)
+	userID := auth.GetUserID(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("user not authenticated")
+	}
+
+	_, err := s.accountDB.ExecContext(ctx, `DELETE FROM projection_scenarios WHERE id = $1 AND user_id = $2`, id, userID)
 	if err != nil {
 		return &DeleteScenarioResponse{Success: false}, err
 	}
