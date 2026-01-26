@@ -19,8 +19,8 @@ COPY frontend/ ./
 ARG VITE_API_URL=/api
 ENV VITE_API_URL=$VITE_API_URL
 
-# Build the frontend (skip type checking for production build)
-RUN pnpm run build --mode production || (echo "Build with warnings" && pnpm vite build)
+# Build the frontend
+RUN pnpm run build --mode production
 
 # API build stage
 FROM golang:1.24-alpine AS api-builder
