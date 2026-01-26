@@ -195,7 +195,7 @@ Services:
 
 ```bash
 # Pull latest image
-docker pull ghcr.io/saswat/moneyy:latest
+docker pull ghcr.io/saswatds/moneyy:latest
 
 # Start stack
 docker compose -f docker-compose.prod.yml up -d
