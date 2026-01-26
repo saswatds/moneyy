@@ -211,6 +211,53 @@ type TokenInfoResponse struct {
 	CreatedAt            int64                        `json:"created_at"`
 }
 
+// RefreshTokenRequest represents the OAuth refresh token request
+type RefreshTokenRequest struct {
+	GrantType    string `json:"grant_type"`
+	RefreshToken string `json:"refresh_token"`
+	ClientID     string `json:"client_id"`
+}
+
+// RefreshAccessToken uses a refresh token to get a new access token
+func (c *Client) RefreshAccessToken(ctx context.Context, refreshToken string) (*TokenResponse, error) {
+	reqBody := RefreshTokenRequest{
+		GrantType:    "refresh_token",
+		RefreshToken: refreshToken,
+		ClientID:     clientID,
+	}
+
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", apiBaseURL+"/v1/oauth/v2/token", bytes.NewBuffer(body))
+	if err != nil {
+		return nil, err
+	}
+
+	c.setCommonHeaders(req)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("refresh token failed (status %d): %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var tokenResp TokenResponse
+	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+		return nil, err
+	}
+
+	c.accessToken = tokenResp.AccessToken
+	return &tokenResp, nil
+}
+
 // CheckTokenInfo validates if an access token is still valid and returns token info
 func (c *Client) CheckTokenInfo(ctx context.Context, accessToken string) (*TokenInfoResponse, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", apiBaseURL+"/v1/oauth/v2/token/info", nil)

@@ -220,12 +220,12 @@ func (s *Service) CheckWealthsimpleCredentials(ctx context.Context) (*CheckWealt
 		return nil, fmt.Errorf("user not authenticated")
 	}
 
-	var encryptedUsername []byte
+	var email sql.NullString
 	err := s.db.QueryRowContext(ctx, `
-		SELECT encrypted_username
+		SELECT email
 		FROM sync_credentials
 		WHERE user_id = $1 AND provider = 'wealthsimple'
-	`, userID).Scan(&encryptedUsername)
+	`, userID).Scan(&email)
 
 	if err == sql.ErrNoRows {
 		return &CheckWealthsimpleCredentialsResponse{
@@ -237,26 +237,9 @@ func (s *Service) CheckWealthsimpleCredentials(ctx context.Context) (*CheckWealt
 		return nil, err
 	}
 
-	// Decrypt the username/email to return
-	encService, err := encryption.NewService(s.encryptionKey)
-	if err != nil {
-		// If encryption service fails, still return that credentials exist but no email
-		return &CheckWealthsimpleCredentialsResponse{
-			HasCredentials: true,
-		}, nil
-	}
-
-	decryptedEmail, err := encService.Decrypt(encryptedUsername)
-	if err != nil {
-		// If decryption fails, still return that credentials exist but no email
-		return &CheckWealthsimpleCredentialsResponse{
-			HasCredentials: true,
-		}, nil
-	}
-
 	return &CheckWealthsimpleCredentialsResponse{
 		HasCredentials: true,
-		Email:          decryptedEmail,
+		Email:          email.String,
 	}, nil
 }
 
@@ -346,8 +329,9 @@ func (s *Service) ListConnections(ctx context.Context) (*ListConnectionsResponse
 			conn.TokenExpiresAt = &tokenExpiresAt.Time
 		}
 
-		// Automatically validate session if connection is currently marked as connected
-		if conn.Status == StatusConnected && encService != nil && len(encryptedAccessToken) > 0 {
+		// Automatically validate session for connected or disconnected connections
+		// Even if disconnected, we try auto-refresh in case it was just a token expiry
+		if (conn.Status == StatusConnected || conn.Status == StatusDisconnected) && encService != nil && len(encryptedAccessToken) > 0 {
 			s.validateConnectionSession(ctx, conn, encryptedAccessToken, deviceID, sessionID, appInstanceID, encService)
 		}
 
@@ -359,34 +343,56 @@ func (s *Service) ListConnections(ctx context.Context) (*ListConnectionsResponse
 
 // validateConnectionSession validates a connection's session in the background
 func (s *Service) validateConnectionSession(ctx context.Context, conn *Connection, encryptedAccessToken []byte, deviceID, sessionID, appInstanceID string, encService *encryption.Service) {
-	// Decrypt access token
+	// Convert nullable time for the helper function
+	var tokenExpiresAt sql.NullTime
+	if conn.TokenExpiresAt != nil {
+		tokenExpiresAt = sql.NullTime{Time: *conn.TokenExpiresAt, Valid: true}
+	}
+
+	// Ensure token is valid, refreshing if necessary
+	if err := s.ensureTokenValid(ctx, conn.ID, tokenExpiresAt); err != nil {
+		// Token couldn't be refreshed - update connection object
+		conn.Status = StatusDisconnected
+		conn.LastSyncError = "Session expired - please login again"
+		return
+	}
+
+	// If token was refreshed, update connection status
+	if tokenExpiresAt.Valid && time.Now().After(tokenExpiresAt.Time.Add(-5*time.Minute)) {
+		conn.Status = StatusConnected
+		conn.LastSyncError = ""
+		log.Printf("INFO: successfully validated/refreshed token for connection %s", conn.ID)
+		return
+	}
+
+	// Token not near expiry - optionally validate with provider
 	accessToken, err := encService.Decrypt(encryptedAccessToken)
 	if err != nil {
 		log.Printf("WARN: failed to decrypt access token for connection %s: %v", conn.ID, err)
 		return
 	}
 
-	// Check if the access token is still valid
+	// Quick validation check with provider
 	client := wealthsimple.NewClient(deviceID, sessionID, appInstanceID)
 	tokenInfo, err := client.CheckTokenInfo(ctx, accessToken)
 	if err != nil {
-		// Session is invalid - mark connection as disconnected
-		log.Printf("INFO: session expired for connection %s, marking as disconnected: %v", conn.ID, err)
-		_, _ = s.db.ExecContext(ctx, `
-			UPDATE sync_credentials
-			SET status = $1,
-			    last_sync_error = $2,
-			    updated_at = CURRENT_TIMESTAMP
-			WHERE id = $3
-		`, StatusDisconnected, "Session expired - please login again", conn.ID)
+		// Session validation failed - try auto-refresh
+		log.Printf("INFO: session validation failed for connection %s, attempting auto-refresh: %v", conn.ID, err)
 
-		// Update the connection object so it reflects the new status
-		conn.Status = StatusDisconnected
-		conn.LastSyncError = "Session expired - please login again"
+		if refreshErr := s.autoRefreshCredentials(ctx, conn.ID); refreshErr != nil {
+			log.Printf("WARN: auto-refresh failed for connection %s: %v", conn.ID, refreshErr)
+			conn.Status = StatusDisconnected
+			conn.LastSyncError = "Session expired - please login again"
+			return
+		}
+
+		conn.Status = StatusConnected
+		conn.LastSyncError = ""
+		log.Printf("INFO: successfully auto-refreshed token for connection %s after validation failure", conn.ID)
 		return
 	}
 
-	// Session is valid - log token expiration info
+	// Session is valid
 	log.Printf("DEBUG: session valid for connection %s, expires in %d seconds", conn.ID, tokenInfo.ExpiresIn)
 }
 
