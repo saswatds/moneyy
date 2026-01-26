@@ -90,13 +90,14 @@ func (s *ExportService) ExportData(ctx context.Context, userID string) ([]byte, 
 		return nil, fmt.Errorf("failed to export projections: %w", err)
 	}
 
-	exchangeRates, err := s.exportExchangeRates(ctx)
+	// Note: We don't export exchange_rates - they are fetched automatically from the API
+	// Export sync_credentials (without encrypted data) to preserve relationships
+	syncCredentials, err := s.exportSyncCredentials(ctx, userID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to export exchange rates: %w", err)
+		return nil, fmt.Errorf("failed to export sync credentials: %w", err)
 	}
 
-	// Note: We don't export sync_credentials (contains encrypted credentials - security risk)
-	// We only export synced_accounts mapping so after import, user can reconnect and reuse existing accounts
+	// Export synced_accounts mapping so after import, user can reconnect and reuse existing accounts
 	syncedAccounts, err := s.exportSyncedAccounts(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to export synced accounts: %w", err)
@@ -116,7 +117,7 @@ func (s *ExportService) ExportData(ctx context.Context, userID string) ([]byte, 
 		"asset_depreciation_entries": assetDepreciation,
 		"recurring_expenses":         recurringExpenses,
 		"projection_scenarios":       projections,
-		"exchange_rates":             exchangeRates,
+		"sync_credentials":           syncCredentials,
 		"synced_accounts":            syncedAccounts,
 	}
 
@@ -681,6 +682,57 @@ func (s *ExportService) exportConnections(ctx context.Context, userID string) ([
 	data, err := json.MarshalIndent(connections, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal connections: %w", err)
+	}
+
+	return data, nil
+}
+
+// exportSyncCredentials exports sync credentials (without encrypted data) for a user
+func (s *ExportService) exportSyncCredentials(ctx context.Context, userID string) ([]byte, error) {
+	query := `
+		SELECT id, user_id, provider, email, name, status, last_sync_at, last_sync_error,
+		       sync_frequency, account_count, created_at, updated_at
+		FROM sync_credentials
+		WHERE user_id = $1
+		ORDER BY created_at
+	`
+
+	rows, err := s.db.QueryContext(ctx, query, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query sync credentials: %w", err)
+	}
+	defer rows.Close()
+
+	var credentials []SyncCredential
+	for rows.Next() {
+		var cred SyncCredential
+		err := rows.Scan(
+			&cred.ID,
+			&cred.UserID,
+			&cred.Provider,
+			&cred.Email,
+			&cred.Name,
+			&cred.Status,
+			&cred.LastSyncAt,
+			&cred.LastSyncError,
+			&cred.SyncFrequency,
+			&cred.AccountCount,
+			&cred.CreatedAt,
+			&cred.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan sync credential: %w", err)
+		}
+		credentials = append(credentials, cred)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating sync credentials: %w", err)
+	}
+
+	data, err := json.MarshalIndent(credentials, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal sync credentials: %w", err)
 	}
 
 	return data, nil

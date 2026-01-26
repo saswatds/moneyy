@@ -42,7 +42,7 @@ logs/
 /tmp/money-*.log
 
 # Database backups
-backups/*.sql
+backups
 
 # Database data
 data/postgres/

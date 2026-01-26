@@ -7,11 +7,10 @@ import (
 	"fmt"
 	"time"
 
+	"money/internal/auth"
+
 	"github.com/google/uuid"
 )
-
-// Default user ID for demo purposes (no auth system yet)
-const defaultUserID = "demo-user"
 
 // Common errors
 var (
@@ -84,7 +83,10 @@ type ListRecurringExpensesResponse struct {
 
 // CreateRecurringExpense creates a new recurring expense
 func (s *Service) CreateRecurringExpense(ctx context.Context, req *CreateRecurringExpenseRequest) (*RecurringExpense, error) {
-	uid := defaultUserID
+	userID := auth.GetUserID(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("user not authenticated")
+	}
 
 	id := generateID()
 
@@ -97,7 +99,7 @@ func (s *Service) CreateRecurringExpense(ctx context.Context, req *CreateRecurri
 		RETURNING id, user_id, name, description, amount, currency, category, account_id,
 		          frequency, day_of_month, day_of_week,
 		          is_active, created_at, updated_at
-	`, id, uid, req.Name, req.Description, req.Amount, req.Currency, req.Category, req.AccountID,
+	`, id, userID, req.Name, req.Description, req.Amount, req.Currency, req.Category, req.AccountID,
 		req.Frequency, req.DayOfMonth, req.DayOfWeek,
 	).Scan(
 		&expense.ID, &expense.UserID, &expense.Name, &expense.Description,
@@ -115,7 +117,10 @@ func (s *Service) CreateRecurringExpense(ctx context.Context, req *CreateRecurri
 
 // ListRecurringExpenses lists all recurring expenses for the authenticated user
 func (s *Service) ListRecurringExpenses(ctx context.Context) (*ListRecurringExpensesResponse, error) {
-	uid := defaultUserID
+	userID := auth.GetUserID(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("user not authenticated")
+	}
 
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, user_id, name, description, amount, currency, category, account_id,
@@ -124,7 +129,7 @@ func (s *Service) ListRecurringExpenses(ctx context.Context) (*ListRecurringExpe
 		FROM recurring_expenses
 		WHERE user_id = $1
 		ORDER BY name ASC
-	`, uid)
+	`, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list recurring expenses: %w", err)
 	}
@@ -154,7 +159,10 @@ func (s *Service) ListRecurringExpenses(ctx context.Context) (*ListRecurringExpe
 
 // GetRecurringExpense gets a single recurring expense by ID
 func (s *Service) GetRecurringExpense(ctx context.Context, id string) (*RecurringExpense, error) {
-	uid := defaultUserID
+	userID := auth.GetUserID(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("user not authenticated")
+	}
 
 	var expense RecurringExpense
 	err := s.db.QueryRowContext(ctx, `
@@ -163,7 +171,7 @@ func (s *Service) GetRecurringExpense(ctx context.Context, id string) (*Recurrin
 		       is_active, created_at, updated_at
 		FROM recurring_expenses
 		WHERE id = $1 AND user_id = $2
-	`, id, uid).Scan(
+	`, id, userID).Scan(
 		&expense.ID, &expense.UserID, &expense.Name, &expense.Description,
 		&expense.Amount, &expense.Currency, &expense.Category, &expense.AccountID, &expense.Frequency,
 		&expense.DayOfMonth, &expense.DayOfWeek,
@@ -182,11 +190,14 @@ func (s *Service) GetRecurringExpense(ctx context.Context, id string) (*Recurrin
 
 // UpdateRecurringExpense updates a recurring expense
 func (s *Service) UpdateRecurringExpense(ctx context.Context, id string, req *UpdateRecurringExpenseRequest) (*RecurringExpense, error) {
-	uid := defaultUserID
+	userID := auth.GetUserID(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("user not authenticated")
+	}
 
 	// Build dynamic update query
 	query := `UPDATE recurring_expenses SET updated_at = NOW()`
-	args := []any{id, uid}
+	args := []any{id, userID}
 	argIdx := 3
 
 	if req.Name != nil {
@@ -262,12 +273,15 @@ func (s *Service) UpdateRecurringExpense(ctx context.Context, id string, req *Up
 
 // DeleteRecurringExpense deletes a recurring expense
 func (s *Service) DeleteRecurringExpense(ctx context.Context, id string) error {
-	uid := defaultUserID
+	userID := auth.GetUserID(ctx)
+	if userID == "" {
+		return fmt.Errorf("user not authenticated")
+	}
 
 	result, err := s.db.ExecContext(ctx, `
 		DELETE FROM recurring_expenses
 		WHERE id = $1 AND user_id = $2
-	`, id, uid)
+	`, id, userID)
 
 	if err != nil {
 		return fmt.Errorf("failed to delete recurring expense: %w", err)
