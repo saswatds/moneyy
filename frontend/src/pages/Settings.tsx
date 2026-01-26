@@ -118,6 +118,7 @@ export function Settings() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importResult, setImportResult] = useState<any>(null);
+  const [importError, setImportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -282,6 +283,8 @@ export function Settings() {
     const file = event.target.files?.[0];
     if (file && file.name.endsWith('.zip')) {
       setSelectedFile(file);
+      setImportError(null);
+      setImportResult(null);
       setImportDialogOpen(true);
     } else {
       console.error('Please select a valid ZIP archive');
@@ -292,6 +295,7 @@ export function Settings() {
     if (!selectedFile) return;
 
     setImporting(true);
+    setImportError(null);
     try {
       const result = await apiClient.importData(selectedFile, 'merge');
 
@@ -302,8 +306,9 @@ export function Settings() {
         console.error('Import failed');
         setImportResult(result);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to import data:', error);
+      setImportError(error.message || 'Failed to import data. Please check your connection and try again.');
     } finally {
       setImporting(false);
     }
@@ -665,12 +670,13 @@ export function Settings() {
         if (!open) {
           setSelectedFile(null);
           setImportResult(null);
+          setImportError(null);
           if (fileInputRef.current) {
             fileInputRef.current.value = '';
           }
         }
       }}>
-        <DialogContent className="max-w-6xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="!max-w-4xl sm:!max-w-4xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Import Data</DialogTitle>
             <DialogDescription>
@@ -678,7 +684,15 @@ export function Settings() {
             </DialogDescription>
           </DialogHeader>
 
-          {!importResult ? (
+          {importError && (
+            <Alert variant="destructive">
+              <IconAlertCircle className="h-4 w-4" />
+              <AlertTitle>Import Error</AlertTitle>
+              <AlertDescription>{importError}</AlertDescription>
+            </Alert>
+          )}
+
+          {!importResult && !importError && (
             <>
               <Alert>
                 <IconAlertCircle className="h-4 w-4" />
@@ -697,7 +711,9 @@ export function Settings() {
                 </div>
               )}
             </>
-          ) : (
+          )}
+
+          {importResult && (
             <div className="space-y-4">
               <Alert variant={importResult.success ? "default" : "destructive"}>
                 <IconAlertCircle className="h-4 w-4" />
@@ -706,7 +722,7 @@ export function Settings() {
                 </AlertTitle>
                 <AlertDescription>
                   {importResult.success
-                    ? 'Your data has been imported successfully.'
+                    ? 'Your data has been imported successfully. Navigate to the relevant pages (Accounts, Dashboard, etc.) to view your imported data.'
                     : 'Some errors occurred during import. Check the details below.'}
                 </AlertDescription>
               </Alert>
@@ -791,14 +807,14 @@ export function Settings() {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setImportDialogOpen(false)}>
-              {importResult ? 'Close' : 'Cancel'}
+              {importResult || importError ? 'Close' : 'Cancel'}
             </Button>
             {!importResult && (
               <Button
                 onClick={handleImport}
                 disabled={importing}
               >
-                {importing ? 'Importing...' : 'Import Data'}
+                {importing ? 'Importing...' : importError ? 'Retry Import' : 'Import Data'}
               </Button>
             )}
           </DialogFooter>
