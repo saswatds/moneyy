@@ -108,21 +108,49 @@ func main() {
 		MaxAge:           300,
 	}))
 
-	// Register handlers
-	handlers.NewAccountHandler(accountSvc).RegisterRoutes(r)
-	handlers.NewBalanceHandler(balanceSvc).RegisterRoutes(r)
-	handlers.NewCurrencyHandler(currencySvc).RegisterRoutes(r)
-	handlers.NewHoldingsHandler(holdingsSvc).RegisterRoutes(r)
-	handlers.NewProjectionsHandler(projectionsSvc).RegisterRoutes(r)
-	handlers.NewSyncHandler(syncSvc).RegisterRoutes(r)
-	handlers.NewTransactionHandler(transactionSvc).RegisterRoutes(r)
+	// API routes under /api prefix
+	r.Route("/api", func(r chi.Router) {
+		handlers.NewAccountHandler(accountSvc).RegisterRoutes(r)
+		handlers.NewBalanceHandler(balanceSvc).RegisterRoutes(r)
+		handlers.NewCurrencyHandler(currencySvc).RegisterRoutes(r)
+		handlers.NewHoldingsHandler(holdingsSvc).RegisterRoutes(r)
+		handlers.NewProjectionsHandler(projectionsSvc).RegisterRoutes(r)
+		handlers.NewSyncHandler(syncSvc).RegisterRoutes(r)
+		handlers.NewTransactionHandler(transactionSvc).RegisterRoutes(r)
 
-	// Health check endpoint
-	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"ok"}`))
+		// Health check endpoint
+		r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"status":"ok"}`))
+		})
 	})
+
+	// Serve static files from ./static directory (production)
+	staticDir := "./static"
+	if _, err := os.Stat(staticDir); err == nil {
+		logger.Info("Serving static files", "path", staticDir)
+
+		// Serve static assets
+		r.Handle("/assets/*", http.StripPrefix("/", http.FileServer(http.Dir(staticDir))))
+
+		// Serve other static files (favicon, etc)
+		r.Handle("/favicon.ico", http.FileServer(http.Dir(staticDir)))
+		r.Handle("/vite.svg", http.FileServer(http.Dir(staticDir)))
+
+		// SPA fallback - serve index.html for all other routes
+		r.Get("/*", func(w http.ResponseWriter, r *http.Request) {
+			http.ServeFile(w, r, staticDir+"/index.html")
+		})
+	} else {
+		logger.Warn("Static directory not found, serving API only", "path", staticDir)
+		// Root health check for when static files aren't available
+		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"status":"ok","message":"API server running"}`))
+		})
+	}
 
 	// Start server
 	port := env.Get("SERVER_PORT", "4000")

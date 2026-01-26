@@ -2,13 +2,21 @@
 # All commands run in Docker containers - no local Go/Node installation needed
 # Uses Docker Compose V2 (docker compose) - part of Docker CLI
 
-.PHONY: help setup dev stop restart logs build migrate shell db-shell clean api-logs frontend-logs test status health
+.PHONY: help setup dev stop restart logs build migrate shell db-shell clean api-logs frontend-logs test status health push build-push registry-login
 
 # Default target
 .DEFAULT_GOAL := help
 
 # Docker Compose command (V2)
 DOCKER_COMPOSE := docker compose
+
+# Container registry
+REGISTRY := ghcr.io
+REGISTRY_USER := saswat
+IMAGE := $(REGISTRY)/$(REGISTRY_USER)/moneyy
+
+# Version (can be overridden)
+VERSION ?= latest
 
 # Colors
 BLUE := \033[0;34m
@@ -20,7 +28,7 @@ NC := \033[0m
 help:
 	@echo ""
 	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
-	@echo "$(BLUE)  Money App - Docker Development Commands$(NC)"
+	@echo "$(BLUE)  Moneyy App - Docker Development Commands$(NC)"
 	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
 	@echo ""
 	@echo "$(GREEN)🚀 Getting Started:$(NC)"
@@ -44,8 +52,11 @@ help:
 	@echo "  make shell        - Open shell in API container"
 	@echo "  make test         - Run tests in Docker"
 	@echo ""
-	@echo "$(GREEN)🏗️  Build:$(NC)"
+	@echo "$(GREEN)🏗️  Build & Publish:$(NC)"
 	@echo "  make build        - Build production Docker images"
+	@echo "  make push         - Push images to GitHub Container Registry"
+	@echo "  make build-push   - Build and push in one command"
+	@echo "  make registry-login - Login to GitHub Container Registry"
 	@echo ""
 	@echo "$(GREEN)🧹 Cleanup:$(NC)"
 	@echo "  make clean        - Stop and remove all containers + volumes"
@@ -55,7 +66,7 @@ help:
 
 # First-time setup
 setup:
-	@echo "$(BLUE)Setting up Money App development environment...$(NC)"
+	@echo "$(BLUE)Setting up Moneyy App development environment...$(NC)"
 	@echo ""
 	@echo "$(YELLOW)Checking Docker installation...$(NC)"
 	@docker --version > /dev/null 2>&1 || (echo "$(RED)✗ Docker not found. Please install Docker Desktop$(NC)" && exit 1)
@@ -82,7 +93,7 @@ setup:
 
 # Start entire development stack
 dev:
-	@echo "$(BLUE)Starting Money App development stack...$(NC)"
+	@echo "$(BLUE)Starting Moneyy App development stack...$(NC)"
 	@echo ""
 	@${DOCKER_COMPOSE} up -d --build
 	@echo ""
@@ -162,22 +173,8 @@ shell:
 
 # Connect to database shell
 db-shell:
-	@if [ -z "$(DB)" ]; then \
-		echo "$(YELLOW)Available databases:$(NC)"; \
-		echo "  - account"; \
-		echo "  - balance"; \
-		echo "  - currency"; \
-		echo "  - holdings"; \
-		echo "  - projections"; \
-		echo "  - sync"; \
-		echo "  - transaction"; \
-		echo ""; \
-		echo "Usage: make db-shell DB=<name>"; \
-		echo "Example: make db-shell DB=account"; \
-		exit 1; \
-	fi
-	@echo "$(BLUE)Connecting to $(DB) database...$(NC)"
-	@${DOCKER_COMPOSE} exec postgres psql -U postgres -d $(DB)
+	@echo "$(BLUE)Connecting to moneyy database...$(NC)"
+	@${DOCKER_COMPOSE} exec postgres psql -U postgres -d moneyy
 
 # Run tests in Docker
 test:
@@ -186,9 +183,34 @@ test:
 
 # Build production images
 build:
-	@echo "$(BLUE)Building production Docker images...$(NC)"
-	@${DOCKER_COMPOSE} -f ${DOCKER_COMPOSE}.prod.yml build
-	@echo "$(GREEN)✓ Production images built$(NC)"
+	@echo "$(BLUE)Building production Docker image...$(NC)"
+	@echo ""
+	@echo "Building image: $(IMAGE):$(VERSION)"
+	@docker build -t $(IMAGE):$(VERSION) -t $(IMAGE):latest .
+	@echo ""
+	@echo "$(GREEN)✓ Production image built$(NC)"
+	@echo "  $(IMAGE):$(VERSION)"
+	@echo "  $(IMAGE):latest"
+
+# Push images to registry
+push:
+	@echo "$(BLUE)Pushing images to $(REGISTRY)...$(NC)"
+	@echo ""
+	@docker push $(IMAGE):$(VERSION)
+	@docker push $(IMAGE):latest
+	@echo ""
+	@echo "$(GREEN)✓ Images pushed successfully$(NC)"
+
+# Build and push in one command
+build-push: build push
+
+# Login to GitHub Container Registry
+registry-login:
+	@echo "$(BLUE)Logging in to GitHub Container Registry...$(NC)"
+	@echo ""
+	@echo "$(YELLOW)Enter your GitHub Personal Access Token:$(NC)"
+	@docker login $(REGISTRY) -u $(REGISTRY_USER)
+	@echo "$(GREEN)✓ Logged in to $(REGISTRY)$(NC)"
 
 # Clean everything (stops containers and removes volumes)
 clean:
