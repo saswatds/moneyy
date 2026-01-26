@@ -31,16 +31,23 @@ services:
     ports:
       - "${PORT:-4000}:4000"
     environment:
+      # Database
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_NAME=${DB_NAME:-moneyy}
       - DB_USER=${DB_USER:-postgres}
       - DB_PASSWORD=${DB_PASSWORD}
+      # Encryption
       - ENC_MASTER_KEY=${ENC_MASTER_KEY}
+      # Server
       - SERVER_PORT=4000
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - LOG_FORMAT=json
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
+      # Authentication (Passkey/WebAuthn)
+      - JWT_SECRET=${JWT_SECRET}
+      - WEBAUTHN_RP_ID=${WEBAUTHN_RP_ID}
+      - WEBAUTHN_RP_ORIGIN=${WEBAUTHN_RP_ORIGIN}
     depends_on:
       postgres:
         condition: service_healthy
@@ -68,12 +75,15 @@ services:
     container_name: moneyy-migrate-prod
     command: ["./migrate", "--direction", "up"]
     environment:
+      # Database
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_NAME=${DB_NAME:-moneyy}
       - DB_USER=${DB_USER:-postgres}
       - DB_PASSWORD=${DB_PASSWORD}
+      # Encryption
       - ENC_MASTER_KEY=${ENC_MASTER_KEY}
+      # Server (needed by some env loading)
       - SERVER_PORT=4000
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - LOG_FORMAT=json
