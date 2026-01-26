@@ -58,8 +58,8 @@ export function AccountDetail() {
   const { data: account, isLoading: accountLoading } = useAccount(id!);
   const { data: balancesData, isLoading: balancesLoading } = useAccountBalances(id!);
   const { data: holdingsData, isLoading: holdingsLoading } = useAccountHoldings(id!);
-  const { data: mortgageDetails, isLoading: mortgageLoading, isError: _mortgageError } = useMortgageDetails(id!);
-  const { data: loanDetails, isLoading: loanLoading, isError: _loanError } = useLoanDetails(id!);
+  const { data: mortgageDetails, isLoading: mortgageLoading } = useMortgageDetails(id!);
+  const { data: loanDetails, isLoading: loanLoading } = useLoanDetails(id!);
 
   const deleteAccount = useDeleteAccount();
 

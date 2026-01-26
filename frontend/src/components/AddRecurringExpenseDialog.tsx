@@ -76,7 +76,7 @@ export function AddRecurringExpenseDialog({
         amount: parseFloat(data.amount),
         currency: data.currency as 'CAD' | 'USD' | 'INR',
         category: data.category,
-        frequency: data.frequency as any,
+        frequency: data.frequency as 'weekly' | 'bi-weekly' | 'monthly' | 'quarterly' | 'annually',
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['recurring-expenses'] });

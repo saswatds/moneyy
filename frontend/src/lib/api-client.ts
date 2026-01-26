@@ -80,6 +80,19 @@ export interface SyncStatusResponse {
   summary: SyncSummary;
 }
 
+export interface SyncConnection {
+  connection_id: string;
+  connection_name: string;
+  status: 'connected' | 'disconnected' | 'error' | 'syncing';
+  last_sync_at?: string;
+  last_sync_error?: string;
+}
+
+export interface WealthsimpleInitiateResponse {
+  require_otp: boolean;
+  credential_id?: string;
+}
+
 export interface CreateAccountRequest {
   name: string;
   type: string;
@@ -804,7 +817,7 @@ class ApiClient {
   }
 
   // Sync endpoints
-  async getSyncConnections(): Promise<{ connections: any[] }> {
+  async getSyncConnections(): Promise<{ connections: SyncConnection[] }> {
     return this.request('/sync/connections');
   }
 
@@ -812,14 +825,14 @@ class ApiClient {
     return this.request('/sync/wealthsimple/check-credentials');
   }
 
-  async initiateWealthsimpleConnection(username: string, password: string): Promise<any> {
+  async initiateWealthsimpleConnection(username: string, password: string): Promise<WealthsimpleInitiateResponse> {
     return this.request('/sync/wealthsimple/initiate', {
       method: 'POST',
       body: JSON.stringify({ username, password }),
     });
   }
 
-  async verifyWealthsimpleOTP(credentialId: string, otpCode: string): Promise<any> {
+  async verifyWealthsimpleOTP(credentialId: string, otpCode: string): Promise<void> {
     return this.request('/sync/wealthsimple/verify-otp', {
       method: 'POST',
       body: JSON.stringify({ credential_id: credentialId, otp_code: otpCode }),
