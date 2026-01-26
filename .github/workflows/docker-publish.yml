@@ -4,11 +4,6 @@ on:
   push:
     branches:
       - main
-    tags:
-      - 'v*'
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
 
 concurrency:
@@ -20,8 +15,16 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  build-amd64:
-    runs-on: ubuntu-latest
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-latest-arm64
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     permissions:
       contents: read
@@ -31,54 +34,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set image name to lowercase
-        id: image
-        run: echo "name=$(echo ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ steps.image.outputs.name }}
-          tags: |
-            type=raw,value=amd64
-
-      - name: Build and push amd64 image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./Dockerfile
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=amd64
-          cache-to: type=gha,mode=max,scope=amd64
-          platforms: linux/amd64
-          build-args: |
-            VITE_API_URL=/api
-          provenance: false
-          sbom: false
-
-  build-arm64:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Prepare
+        run: |
+          platform=${{ matrix.platform }}
+          echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV
 
       - name: Set image name to lowercase
         id: image
@@ -102,38 +61,55 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ steps.image.outputs.name }}
-          tags: |
-            type=raw,value=arm64
 
-      - name: Build and push arm64 image
-        uses: docker/build-push-action@v5
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
+          platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=arm64
-          cache-to: type=gha,mode=max,scope=arm64
-          platforms: linux/arm64
+          outputs: type=image,name=${{ steps.image.outputs.name }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ env.PLATFORM_PAIR }}
+          cache-to: type=gha,mode=max,scope=${{ env.PLATFORM_PAIR }}
           build-args: |
             VITE_API_URL=/api
-          provenance: false
-          sbom: false
 
-  create-manifest:
-    needs: [build-amd64, build-arm64]
+      - name: Export digest
+        run: |
+          mkdir -p ${{ runner.temp }}/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "${{ runner.temp }}/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ env.PLATFORM_PAIR }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
       packages: write
-    if: github.event_name != 'pull_request'
+    needs:
+      - build
 
     steps:
       - name: Set image name to lowercase
         id: image
         run: echo "name=$(echo ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-*
+          merge-multiple: true
 
       - name: Log in to Container Registry
         uses: docker/login-action@v3
@@ -142,9 +118,23 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create and push manifest
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.image.outputs.name }}
+          tags: |
+            type=raw,value=latest
+
+      - name: Create manifest list and push
+        working-directory: ${{ runner.temp }}/digests
         run: |
-          # Create multi-arch manifest for latest tag
-          docker buildx imagetools create -t ${{ steps.image.outputs.name }}:latest \
-            ${{ steps.image.outputs.name }}:amd64 \
-            ${{ steps.image.outputs.name }}:arm64
+          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ steps.image.outputs.name }}@sha256:%s ' *)
+
+      - name: Inspect image
+        run: |
+          docker buildx imagetools inspect ${{ steps.image.outputs.name }}:${{ steps.meta.outputs.version }}

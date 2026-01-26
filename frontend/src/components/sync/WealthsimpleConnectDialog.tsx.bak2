@@ -70,7 +70,8 @@ export function WealthsimpleConnectDialog({
     setLoading(true);
 
     try {
-      await apiClient.verifyWealthsimpleOTP(credentialId, otpCode);
+        throw new Error(data.error || 'Failed to verify OTP');
+      }
 
       setStep('success');
       setTimeout(() => {
