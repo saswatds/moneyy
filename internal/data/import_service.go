@@ -176,7 +176,7 @@ func (s *ImportService) extractArchiveData(archive []byte) (map[string][]byte, e
 		"accounts", "balances", "holdings", "holding_transactions",
 		"mortgage_details", "mortgage_payments", "loan_details", "loan_payments",
 		"asset_details", "asset_depreciation_entries", "recurring_expenses",
-		"projection_scenarios", "exchange_rates",
+		"projection_scenarios", "exchange_rates", "connections", "synced_accounts",
 	}
 
 	for _, tableName := range tables {
@@ -223,7 +223,9 @@ func (s *ImportService) importInTransaction(ctx context.Context, userID string, 
 		name       string
 		importFunc func(context.Context, *sql.Tx, string, []byte, string) (ImportTableSummary, error)
 	}{
-		{"accounts", s.importAccounts},
+		{"connections", s.importConnections},        // First: no dependencies
+		{"accounts", s.importAccounts},              // Second: may reference synced_accounts
+		{"synced_accounts", s.importSyncedAccounts}, // Third: needs connections and accounts
 		{"balances", s.importBalances},
 		{"holdings", s.importHoldings},
 		{"holding_transactions", s.importHoldingTransactions},
@@ -846,4 +848,132 @@ func readZipFile(file *zip.File) ([]byte, error) {
 	defer rc.Close()
 
 	return io.ReadAll(rc)
+}
+
+// importConnections imports connection records (forced to 'disconnected' status since no credentials)
+func (s *ImportService) importConnections(ctx context.Context, tx *sql.Tx, userID string, data []byte, mode string) (ImportTableSummary, error) {
+	var connections []Connection
+	if err := json.Unmarshal(data, &connections); err != nil {
+		return ImportTableSummary{}, err
+	}
+
+	summary := ImportTableSummary{}
+
+	for _, conn := range connections {
+		// Override user_id with current user
+		conn.UserID = userID
+
+		// Force status to 'disconnected' since we don't have credentials
+		// User will need to reconnect to activate
+		conn.Status = "disconnected"
+
+		query := `
+			INSERT INTO connections (id, user_id, provider, name, status, last_sync_at,
+			                         last_sync_error, sync_frequency, account_count, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+			ON CONFLICT (id) DO UPDATE SET
+				provider = EXCLUDED.provider,
+				name = EXCLUDED.name,
+				status = EXCLUDED.status,
+				last_sync_at = EXCLUDED.last_sync_at,
+				last_sync_error = EXCLUDED.last_sync_error,
+				sync_frequency = EXCLUDED.sync_frequency,
+				account_count = EXCLUDED.account_count,
+				updated_at = EXCLUDED.updated_at
+		`
+
+		result, err := tx.ExecContext(ctx, query,
+			conn.ID,
+			conn.UserID,
+			conn.Provider,
+			conn.Name,
+			conn.Status, // Always 'disconnected' on import
+			conn.LastSyncAt,
+			conn.LastSyncError,
+			conn.SyncFrequency,
+			conn.AccountCount,
+			conn.CreatedAt,
+			conn.UpdatedAt,
+		)
+
+		if err != nil {
+			summary.Errors++
+			continue
+		}
+
+		rowsAffected, _ := result.RowsAffected()
+		if rowsAffected == 1 {
+			summary.Created++
+		} else {
+			summary.Updated++
+		}
+	}
+
+	return summary, nil
+}
+
+// importSyncedAccounts imports synced account records (mapping between local and provider accounts)
+func (s *ImportService) importSyncedAccounts(ctx context.Context, tx *sql.Tx, userID string, data []byte, mode string) (ImportTableSummary, error) {
+	var syncedAccounts []SyncedAccount
+	if err := json.Unmarshal(data, &syncedAccounts); err != nil {
+		return ImportTableSummary{}, err
+	}
+
+	summary := ImportTableSummary{}
+
+	for _, sa := range syncedAccounts {
+		// Verify connection exists (should have been imported already)
+		var connExists bool
+		checkQuery := `SELECT EXISTS(SELECT 1 FROM connections WHERE id = $1 AND user_id = $2)`
+		err := tx.QueryRowContext(ctx, checkQuery, sa.ConnectionID, userID).Scan(&connExists)
+		if err != nil || !connExists {
+			summary.Skipped++
+			continue
+		}
+
+		// Verify local account exists
+		var accountExists bool
+		checkAccQuery := `SELECT EXISTS(SELECT 1 FROM accounts WHERE id = $1 AND user_id = $2)`
+		err = tx.QueryRowContext(ctx, checkAccQuery, sa.LocalAccountID, userID).Scan(&accountExists)
+		if err != nil || !accountExists {
+			summary.Skipped++
+			continue
+		}
+
+		query := `
+			INSERT INTO synced_accounts (id, connection_id, local_account_id, provider_account_id,
+			                             last_sync_at, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
+			ON CONFLICT (id) DO UPDATE SET
+				connection_id = EXCLUDED.connection_id,
+				local_account_id = EXCLUDED.local_account_id,
+				provider_account_id = EXCLUDED.provider_account_id,
+				last_sync_at = EXCLUDED.last_sync_at,
+				updated_at = EXCLUDED.updated_at
+		`
+
+		result, err := tx.ExecContext(ctx, query,
+			sa.ID,
+			sa.ConnectionID,
+			sa.LocalAccountID,
+			sa.ProviderAccountID,
+			sa.LastSyncAt,
+			sa.CreatedAt,
+			sa.UpdatedAt,
+		)
+
+		if err != nil {
+			summary.Errors++
+			continue
+		}
+
+		rowsAffected, _ := result.RowsAffected()
+		if rowsAffected == 1 {
+			summary.Created++
+		} else {
+			summary.Updated++
+		}
+	}
+
+	return summary, nil
 }
