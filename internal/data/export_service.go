@@ -95,21 +95,33 @@ func (s *ExportService) ExportData(ctx context.Context, userID string) ([]byte, 
 		return nil, fmt.Errorf("failed to export exchange rates: %w", err)
 	}
 
+	connections, err := s.exportConnections(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to export connections: %w", err)
+	}
+
+	syncedAccounts, err := s.exportSyncedAccounts(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to export synced accounts: %w", err)
+	}
+
 	// Create manifest
 	tables := map[string][]byte{
-		"accounts":                  accounts,
-		"balances":                  balances,
-		"holdings":                  holdings,
-		"holding_transactions":      holdingTransactions,
-		"mortgage_details":          mortgageDetails,
-		"mortgage_payments":         mortgagePayments,
-		"loan_details":              loanDetails,
-		"loan_payments":             loanPayments,
-		"asset_details":             assetDetails,
+		"accounts":                   accounts,
+		"balances":                   balances,
+		"holdings":                   holdings,
+		"holding_transactions":       holdingTransactions,
+		"mortgage_details":           mortgageDetails,
+		"mortgage_payments":          mortgagePayments,
+		"loan_details":               loanDetails,
+		"loan_payments":              loanPayments,
+		"asset_details":              assetDetails,
 		"asset_depreciation_entries": assetDepreciation,
-		"recurring_expenses":        recurringExpenses,
-		"projection_scenarios":      projections,
-		"exchange_rates":            exchangeRates,
+		"recurring_expenses":         recurringExpenses,
+		"projection_scenarios":       projections,
+		"exchange_rates":             exchangeRates,
+		"connections":                connections,
+		"synced_accounts":            syncedAccounts,
 	}
 
 	manifest := s.createManifest(userID, tables)
@@ -622,4 +634,101 @@ func (s *ExportService) createZipArchive(manifest []byte, tables map[string][]by
 	}
 
 	return buf.Bytes(), nil
+}
+
+// exportConnections exports all connections for a user (without credentials)
+func (s *ExportService) exportConnections(ctx context.Context, userID string) ([]byte, error) {
+	query := `
+		SELECT id, user_id, provider, name, status, last_sync_at, last_sync_error,
+		       sync_frequency, account_count, created_at, updated_at
+		FROM connections
+		WHERE user_id = $1
+		ORDER BY created_at
+	`
+
+	rows, err := s.db.QueryContext(ctx, query, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query connections: %w", err)
+	}
+	defer rows.Close()
+
+	var connections []Connection
+	for rows.Next() {
+		var c Connection
+		err := rows.Scan(
+			&c.ID,
+			&c.UserID,
+			&c.Provider,
+			&c.Name,
+			&c.Status,
+			&c.LastSyncAt,
+			&c.LastSyncError,
+			&c.SyncFrequency,
+			&c.AccountCount,
+			&c.CreatedAt,
+			&c.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan connection: %w", err)
+		}
+		connections = append(connections, c)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating connections: %w", err)
+	}
+
+	data, err := json.MarshalIndent(connections, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal connections: %w", err)
+	}
+
+	return data, nil
+}
+
+// exportSyncedAccounts exports all synced accounts for a user
+func (s *ExportService) exportSyncedAccounts(ctx context.Context, userID string) ([]byte, error) {
+	query := `
+		SELECT sa.id, sa.connection_id, sa.local_account_id, sa.provider_account_id,
+		       sa.last_sync_at, sa.created_at, sa.updated_at
+		FROM synced_accounts sa
+		JOIN connections c ON sa.connection_id = c.id
+		WHERE c.user_id = $1
+		ORDER BY sa.created_at
+	`
+
+	rows, err := s.db.QueryContext(ctx, query, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query synced accounts: %w", err)
+	}
+	defer rows.Close()
+
+	var syncedAccounts []SyncedAccount
+	for rows.Next() {
+		var sa SyncedAccount
+		err := rows.Scan(
+			&sa.ID,
+			&sa.ConnectionID,
+			&sa.LocalAccountID,
+			&sa.ProviderAccountID,
+			&sa.LastSyncAt,
+			&sa.CreatedAt,
+			&sa.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan synced account: %w", err)
+		}
+		syncedAccounts = append(syncedAccounts, sa)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating synced accounts: %w", err)
+	}
+
+	data, err := json.MarshalIndent(syncedAccounts, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal synced accounts: %w", err)
+	}
+
+	return data, nil
 }

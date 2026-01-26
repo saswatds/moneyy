@@ -230,3 +230,29 @@ type ExchangeRate struct {
 	Date         time.Time `json:"date"`
 	CreatedAt    time.Time `json:"created_at"`
 }
+
+// Connection represents a provider connection (without credentials)
+type Connection struct {
+	ID            string     `json:"id"`
+	UserID        string     `json:"user_id"`
+	Provider      string     `json:"provider"`
+	Name          string     `json:"name"`
+	Status        string     `json:"status"`
+	LastSyncAt    *time.Time `json:"last_sync_at"`
+	LastSyncError *string    `json:"last_sync_error"`
+	SyncFrequency string     `json:"sync_frequency"`
+	AccountCount  int        `json:"account_count"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+}
+
+// SyncedAccount represents the mapping between local and provider accounts
+type SyncedAccount struct {
+	ID                string     `json:"id"`
+	ConnectionID      string     `json:"connection_id"`
+	LocalAccountID    string     `json:"local_account_id"`
+	ProviderAccountID string     `json:"provider_account_id"`
+	LastSyncAt        *time.Time `json:"last_sync_at"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
+}
