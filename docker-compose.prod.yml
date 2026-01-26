@@ -1,0 +1,82 @@
+# Production Docker Compose V2 configuration
+# Optimized for deployment with multi-stage builds
+# Run with: docker compose -f docker-compose.prod.yml up -d
+
+services:
+  # API Server (Production)
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: money-api-prod
+    ports:
+      - "${API_PORT:-4000}:4000"
+    environment:
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - ENC_MASTER_KEY=${ENC_MASTER_KEY}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - LOG_FORMAT=json
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - ./migrations:/app/migrations:ro
+    depends_on:
+      - postgres
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - money-network
+
+  # PostgreSQL Database (Production)
+  postgres:
+    image: postgres:16-alpine
+    container_name: money-postgres-prod
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: postgres
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+      - ./scripts/init-databases.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      # Production backups
+      - ./backups:/backups
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - money-network
+
+  # Frontend (Production - served by nginx)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=${API_URL:-http://localhost:4000}
+    container_name: money-frontend-prod
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+    networks:
+      - money-network
+
+networks:
+  money-network:
+    driver: bridge
+
+volumes:
+  postgres_data_prod:

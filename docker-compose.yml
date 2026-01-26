@@ -1,51 +1,121 @@
-version: '3.8'
+# Docker Compose V2 configuration
+# Run with: docker compose up -d
+# (not docker-compose - that's the old V1 tool)
 
 services:
-  # API Server
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: money-postgres
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: postgres
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-databases.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - money-network
+
+  # API Server (Development with hot reload)
   api:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
+    container_name: money-api
     ports:
       - "4000:4000"
     environment:
-      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-money}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
       - ENC_MASTER_KEY=${ENC_MASTER_KEY}
+      - SERVER_PORT=4000
+      - LOG_LEVEL=info
+      - LOG_FORMAT=json
+      - CORS_ORIGINS=http://localhost:5173
     volumes:
-      - ./config.yaml:/app/config.yaml
-      - ./migrations:/app/migrations
+      # Mount source code for hot reload
+      - ./:/app
+      # Cache go modules
+      - go_modules:/go/pkg/mod
+      # Cache build artifacts
+      - go_build_cache:/root/.cache/go-build
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - money-network
     restart: unless-stopped
 
-  # PostgreSQL Database (for local development)
-  postgres:
-    image: postgres:16-alpine
+  # Migration Watcher (continuously watches migration files)
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: money-migrate
+    command: go run ./cmd/migrate --watch
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=${DB_PASSWORD:-postgres}
-    ports:
-      - "5432:5432"
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-money}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - ENC_MASTER_KEY=${ENC_MASTER_KEY}
+      - SERVER_PORT=4000
+      - LOG_LEVEL=info
+      - LOG_FORMAT=json
+      - CORS_ORIGINS=http://localhost:5173
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./scripts/init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql
+      - ./:/app
+      - go_modules:/go/pkg/mod
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - money-network
     restart: unless-stopped
 
-  # Frontend (React)
+  # Frontend (React with Vite)
   frontend:
     build:
       context: ./frontend
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
+    container_name: money-frontend
     ports:
       - "5173:5173"
     environment:
-      - VITE_API_BASE_URL=http://localhost:4000
+      - VITE_API_URL=http://localhost:4000
     volumes:
       - ./frontend:/app
       - /app/node_modules
     depends_on:
-      - api
+      api:
+        condition: service_healthy
+    networks:
+      - money-network
     restart: unless-stopped
+
+networks:
+  money-network:
+    driver: bridge
 
 volumes:
   postgres_data:
+  go_modules:
+  go_build_cache:

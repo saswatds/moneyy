@@ -24,7 +24,7 @@ func NewTransactionHandler(service *transaction.Service) *TransactionHandler {
 
 // RegisterRoutes registers all transaction routes
 func (h *TransactionHandler) RegisterRoutes(r chi.Router) {
-	r.Route("/transactions/recurring", func(r chi.Router) {
+	r.Route("/recurring-expenses", func(r chi.Router) {
 		r.Post("/", h.CreateRecurringExpense)
 		r.Get("/", h.ListRecurringExpenses)
 		r.Get("/{id}", h.GetRecurringExpense)

@@ -410,19 +410,19 @@ Test full stack with Docker Compose:
 
 ```bash
 # Start all services
-docker-compose up -d
+docker compose up -d
 
 # Check logs
-docker-compose logs api
-docker-compose logs postgres
-docker-compose logs frontend
+docker compose logs api
+docker compose logs postgres
+docker compose logs frontend
 
 # Test endpoints
 curl http://localhost:4000/health
 curl http://localhost:5173
 
 # Cleanup
-docker-compose down
+docker compose down
 ```
 
 - [ ] All services start successfully

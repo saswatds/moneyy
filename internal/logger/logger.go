@@ -5,15 +5,18 @@ import (
 	"log/slog"
 	"os"
 
-	"money/internal/config"
+	"money/internal/env"
 )
 
 var defaultLogger *slog.Logger
 
-// Init initializes the global logger with the given configuration
-func Init(cfg config.LoggingConfig) {
+// Init initializes the global logger from environment variables
+func Init() {
+	logLevel := env.Get("LOG_LEVEL", "info")
+	logFormat := env.Get("LOG_FORMAT", "json")
+
 	var level slog.Level
-	switch cfg.Level {
+	switch logLevel {
 	case "debug":
 		level = slog.LevelDebug
 	case "info":
@@ -31,7 +34,7 @@ func Init(cfg config.LoggingConfig) {
 	}
 
 	var handler slog.Handler
-	if cfg.Format == "json" {
+	if logFormat == "json" {
 		handler = slog.NewJSONHandler(os.Stdout, opts)
 	} else {
 		handler = slog.NewTextHandler(os.Stdout, opts)

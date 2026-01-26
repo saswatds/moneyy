@@ -24,11 +24,13 @@ func NewAccountHandler(service *account.Service) *AccountHandler {
 
 // RegisterRoutes registers all account routes
 func (h *AccountHandler) RegisterRoutes(r chi.Router) {
+	r.Get("/accounts-with-balance", h.ListWithBalance)
+	r.Get("/summary/accounts", h.Summary)
+	r.Get("/assets/summary", h.GetAssetsSummary)
+
 	r.Route("/accounts", func(r chi.Router) {
 		r.Post("/", h.Create)
 		r.Get("/", h.List)
-		r.Get("/with-balance", h.ListWithBalance)
-		r.Get("/summary", h.Summary)
 		r.Get("/{id}", h.Get)
 		r.Put("/{id}", h.Update)
 		r.Delete("/{id}", h.Delete)
@@ -36,14 +38,14 @@ func (h *AccountHandler) RegisterRoutes(r chi.Router) {
 		// Mortgage routes
 		r.Post("/{id}/mortgage", h.CreateMortgageDetails)
 		r.Get("/{id}/mortgage", h.GetMortgageDetails)
-		r.Get("/{id}/mortgage/schedule", h.GetAmortizationSchedule)
+		r.Get("/{id}/mortgage/amortization", h.GetAmortizationSchedule)
 		r.Post("/{id}/mortgage/payments", h.RecordMortgagePayment)
 		r.Get("/{id}/mortgage/payments", h.GetMortgagePayments)
 
 		// Loan routes
 		r.Post("/{id}/loan", h.CreateLoanDetails)
 		r.Get("/{id}/loan", h.GetLoanDetails)
-		r.Get("/{id}/loan/schedule", h.GetLoanAmortizationSchedule)
+		r.Get("/{id}/loan/amortization", h.GetLoanAmortizationSchedule)
 		r.Post("/{id}/loan/payments", h.RecordLoanPayment)
 		r.Get("/{id}/loan/payments", h.GetLoanPayments)
 
@@ -54,7 +56,7 @@ func (h *AccountHandler) RegisterRoutes(r chi.Router) {
 		r.Get("/{id}/asset/valuation", h.GetAssetValuation)
 		r.Get("/{id}/asset/depreciation", h.GetDepreciationHistory)
 		r.Post("/{id}/asset/depreciation", h.RecordDepreciation)
-		r.Get("/{id}/asset/schedule", h.GetDepreciationSchedule)
+		r.Get("/{id}/asset/depreciation-schedule", h.GetDepreciationSchedule)
 	})
 }
 
@@ -506,4 +508,15 @@ func (h *AccountHandler) GetDepreciationSchedule(w http.ResponseWriter, r *http.
 	}
 
 	server.RespondJSON(w, http.StatusOK, schedule)
+}
+
+// GetAssetsSummary retrieves all assets with calculated current values
+func (h *AccountHandler) GetAssetsSummary(w http.ResponseWriter, r *http.Request) {
+	summary, err := h.service.GetAssetsSummary(r.Context())
+	if err != nil {
+		server.RespondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	server.RespondJSON(w, http.StatusOK, summary)
 }

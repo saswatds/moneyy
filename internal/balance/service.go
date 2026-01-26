@@ -114,7 +114,7 @@ func (s *Service) GetAccountBalances(ctx context.Context, accountID string) (*Li
 	}
 	defer rows.Close()
 
-	var balances []*Balance
+	balances := make([]*Balance, 0)
 	for rows.Next() {
 		balance := &Balance{}
 		err := rows.Scan(
