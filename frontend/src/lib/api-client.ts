@@ -454,21 +454,36 @@ export interface UpdateRecurringExpenseRequest {
 
 class ApiClient {
   private baseUrl: string;
+  private getToken: () => string | null = () => localStorage.getItem('auth_token');
 
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl;
   }
 
   private async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
+    const token = this.getToken();
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+      ...options?.headers,
+    };
+
+    // Add Authorization header if token exists
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
       ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options?.headers,
-      },
+      headers,
     });
 
     if (!response.ok) {
+      // If unauthorized, clear token and redirect to login
+      if (response.status === 401) {
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('auth_user');
+        window.location.href = '/login';
+      }
       throw new Error(`API Error: ${response.statusText}`);
     }
 
@@ -800,26 +815,50 @@ class ApiClient {
 
   // Data export/import endpoints
   async exportData(): Promise<Blob> {
+    const token = this.getToken();
+    const headers: HeadersInit = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
     const response = await fetch(`${this.baseUrl}/data/export`, {
       method: 'POST',
+      headers,
     });
     if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('auth_user');
+        window.location.href = '/login';
+      }
       throw new Error(`Export failed: ${response.statusText}`);
     }
     return response.blob();
   }
 
   async importData(file: File, mode: string = 'merge'): Promise<any> {
+    const token = this.getToken();
     const formData = new FormData();
     formData.append('file', file);
     formData.append('mode', mode);
 
+    const headers: HeadersInit = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
     const response = await fetch(`${this.baseUrl}/data/import`, {
       method: 'POST',
+      headers,
       body: formData,
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('auth_user');
+        window.location.href = '/login';
+      }
       throw new Error(`Import failed: ${response.statusText}`);
     }
 

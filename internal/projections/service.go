@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"money/internal/account"
+	"money/internal/auth"
 	"money/internal/transaction"
 )
 
@@ -745,7 +746,10 @@ func (s *Service) calculateTax(income float64, brackets []TaxBracket) float64 {
 
 // CreateScenario creates a new projection scenario
 func (s *Service) CreateScenario(ctx context.Context, req *CreateScenarioRequest) (*ProjectionScenario, error) {
-	userID := "temp-user-id" // TODO: Get from auth context
+	userID := auth.GetUserID(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("user not authenticated")
+	}
 
 	// If this is set as default, unset other defaults
 	if req.IsDefault {
@@ -783,7 +787,10 @@ func (s *Service) CreateScenario(ctx context.Context, req *CreateScenarioRequest
 
 // ListScenarios lists all projection scenarios for the user
 func (s *Service) ListScenarios(ctx context.Context) (*ListScenariosResponse, error) {
-	userID := "temp-user-id" // TODO: Get from auth context
+	userID := auth.GetUserID(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("user not authenticated")
+	}
 
 	rows, err := s.accountDB.QueryContext(ctx, `
 		SELECT id, user_id, name, is_default, config, created_at, updated_at
@@ -827,7 +834,10 @@ func (s *Service) GetScenario(ctx context.Context, id string) (*ProjectionScenar
 
 // UpdateScenario updates a projection scenario
 func (s *Service) UpdateScenario(ctx context.Context, id string, req *UpdateScenarioRequest) (*ProjectionScenario, error) {
-	userID := "temp-user-id" // TODO: Get from auth context
+	userID := auth.GetUserID(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("user not authenticated")
+	}
 
 	// If setting as default, unset other defaults
 	if req.IsDefault != nil && *req.IsDefault {

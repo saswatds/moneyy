@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/query-client';
+import { AuthProvider, useAuth } from './lib/auth-context';
 import { DashboardLayout } from './components/layout/DashboardLayout';
 import { Accounts } from './pages/Accounts';
 import { AccountNew } from './pages/AccountNew';
@@ -15,30 +16,65 @@ import { AssetDashboard } from './pages/AssetDashboard';
 import { Projections } from './pages/Projections';
 import { RecurringExpenses } from './pages/RecurringExpenses';
 import { Settings } from './pages/Settings';
+import { PasskeyLogin } from './pages/auth/PasskeyLogin';
+import { PasskeyRegister } from './pages/auth/PasskeyRegister';
+
+// Protected Route wrapper
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-lg">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <>{children}</>;
+}
 
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<DashboardLayout />}>
-            <Route index element={<Navigate to="/accounts" replace />} />
-            <Route path="accounts" element={<Accounts />} />
-            <Route path="accounts/new" element={<AccountNew />} />
-            <Route path="accounts/:id" element={<AccountDetail />} />
-            <Route path="accounts/:accountId/mortgage/setup" element={<MortgageSetup />} />
-            <Route path="accounts/:accountId/mortgage" element={<MortgageDashboard />} />
-            <Route path="accounts/:accountId/loan/setup" element={<LoanSetup />} />
-            <Route path="accounts/:accountId/loan" element={<LoanDashboard />} />
-            <Route path="assets" element={<Assets />} />
-            <Route path="accounts/:accountId/asset/setup" element={<AssetSetup />} />
-            <Route path="accounts/:accountId/asset" element={<AssetDashboard />} />
-            <Route path="projections" element={<Projections />} />
-            <Route path="expenses" element={<RecurringExpenses />} />
-            <Route path="settings" element={<Settings />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
+            {/* Public routes */}
+            <Route path="/login" element={<PasskeyLogin />} />
+            <Route path="/register" element={<PasskeyRegister />} />
+
+            {/* Protected routes */}
+            <Route
+              path="/"
+              element={
+                <ProtectedRoute>
+                  <DashboardLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route index element={<Navigate to="/accounts" replace />} />
+              <Route path="accounts" element={<Accounts />} />
+              <Route path="accounts/new" element={<AccountNew />} />
+              <Route path="accounts/:id" element={<AccountDetail />} />
+              <Route path="accounts/:accountId/mortgage/setup" element={<MortgageSetup />} />
+              <Route path="accounts/:accountId/mortgage" element={<MortgageDashboard />} />
+              <Route path="accounts/:accountId/loan/setup" element={<LoanSetup />} />
+              <Route path="accounts/:accountId/loan" element={<LoanDashboard />} />
+              <Route path="assets" element={<Assets />} />
+              <Route path="accounts/:accountId/asset/setup" element={<AssetSetup />} />
+              <Route path="accounts/:accountId/asset" element={<AssetDashboard />} />
+              <Route path="projections" element={<Projections />} />
+              <Route path="expenses" element={<RecurringExpenses />} />
+              <Route path="settings" element={<Settings />} />
+            </Route>
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

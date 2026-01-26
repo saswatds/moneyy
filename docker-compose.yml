@@ -32,16 +32,23 @@ services:
     ports:
       - "4000:4000"
     environment:
+      # Database
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_NAME=${DB_NAME:-moneyy}
       - DB_USER=${DB_USER:-postgres}
       - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      # Encryption
       - ENC_MASTER_KEY=${ENC_MASTER_KEY}
+      # Server
       - SERVER_PORT=4000
       - LOG_LEVEL=info
       - LOG_FORMAT=json
       - CORS_ORIGINS=http://localhost:5173
+      # Authentication (Passkey/WebAuthn)
+      - JWT_SECRET=${JWT_SECRET:-dev-secret-min-32-characters-long-change-in-production}
+      - WEBAUTHN_RP_ID=${WEBAUTHN_RP_ID:-localhost}
+      - WEBAUTHN_RP_ORIGIN=${WEBAUTHN_RP_ORIGIN:-http://localhost:5173}
     volumes:
       # Mount source code for hot reload
       - ./:/app
@@ -70,16 +77,22 @@ services:
     container_name: moneyy-migrate
     command: go run ./cmd/migrate --watch
     environment:
+      # Database
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_NAME=${DB_NAME:-moneyy}
       - DB_USER=${DB_USER:-postgres}
       - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      # Encryption
       - ENC_MASTER_KEY=${ENC_MASTER_KEY}
+      # Server (needed by some env loading)
       - SERVER_PORT=4000
       - LOG_LEVEL=info
       - LOG_FORMAT=json
-      - CORS_ORIGINS=http://localhost:5173
+      # Authentication (not strictly needed for migrations, but keeps env consistent)
+      - JWT_SECRET=${JWT_SECRET:-dev-secret-min-32-characters-long-change-in-production}
+      - WEBAUTHN_RP_ID=${WEBAUTHN_RP_ID:-localhost}
+      - WEBAUTHN_RP_ORIGIN=${WEBAUTHN_RP_ORIGIN:-http://localhost:4000}
     volumes:
       - ./:/app
       - go_modules:/go/pkg/mod

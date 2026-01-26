@@ -78,16 +78,27 @@ setup:
 		cp .env.example .env; \
 		echo "$(GREEN)✓ Created .env$(NC)"; \
 		echo ""; \
-		echo "$(YELLOW)⚠️  IMPORTANT: Edit .env and set:$(NC)"; \
-		echo "  - DB_PASSWORD"; \
-		echo "  - ENC_MASTER_KEY"; \
+		echo "$(GREEN)✓ .env is ready for local development!$(NC)"; \
 		echo ""; \
-		echo "Press Enter after updating .env..."; \
-		read; \
+		echo "$(BLUE)ℹ️  Default settings configured:$(NC)"; \
+		echo "  - Database: postgres/postgres"; \
+		echo "  - JWT Secret: dev-only (auto-configured)"; \
+		echo "  - WebAuthn: localhost (auto-configured)"; \
+		echo "  - Encryption: dev-only (auto-configured)"; \
+		echo ""; \
+		echo "$(YELLOW)⚠️  For production, generate secure keys:$(NC)"; \
+		echo "  JWT_SECRET: openssl rand -base64 32"; \
+		echo "  ENC_MASTER_KEY: openssl rand -base64 32"; \
+		echo ""; \
 	else \
 		echo "$(GREEN)✓ .env already exists$(NC)"; \
+		echo ""; \
+		echo "$(YELLOW)⚠️  Make sure your .env has auth settings:$(NC)"; \
+		echo "  - JWT_SECRET (32+ characters)"; \
+		echo "  - WEBAUTHN_RP_ID=localhost"; \
+		echo "  - WEBAUTHN_RP_ORIGIN=http://localhost:4000"; \
+		echo ""; \
 	fi
-	@echo ""
 	@echo "$(GREEN)✓ Setup complete! Run 'make dev' to start$(NC)"
 	@echo ""
 

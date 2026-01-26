@@ -4,10 +4,12 @@ package sync
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log"
 	"time"
 
 	"money/internal/account"
+	"money/internal/auth"
 	"money/internal/balance"
 	"money/internal/holdings"
 	"money/internal/sync/encryption"
@@ -139,7 +141,10 @@ type CheckWealthsimpleCredentialsResponse struct {
 // CheckWealthsimpleCredentials checks if Wealthsimple credentials exist for the user
 func (s *Service) CheckWealthsimpleCredentials(ctx context.Context) (*CheckWealthsimpleCredentialsResponse, error) {
 	// TODO: Get user ID from auth context
-	userID := "temp-user-id" // Placeholder until auth is implemented
+	userID := auth.GetUserID(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("user not authenticated")
+	}
 
 	var encryptedUsername []byte
 	err := s.db.QueryRowContext(ctx, `
@@ -184,7 +189,10 @@ func (s *Service) CheckWealthsimpleCredentials(ctx context.Context) (*CheckWealt
 // InitiateWealthsimpleConnection initiates a connection to Wealthsimple
 func (s *Service) InitiateWealthsimpleConnection(ctx context.Context, req *InitiateConnectionRequest) (*InitiateConnectionResponse, error) {
 	// TODO: Get user ID from auth context
-	userID := "temp-user-id" // Placeholder until auth is implemented
+	userID := auth.GetUserID(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("user not authenticated")
+	}
 
 	// Use real implementation
 	return s.initiateWealthsimpleConnectionReal(ctx, userID, req.Username, req.Password)
@@ -199,7 +207,10 @@ func (s *Service) VerifyOTP(ctx context.Context, req *VerifyOTPRequest) (*Verify
 // ListConnections retrieves all connections for the authenticated user
 func (s *Service) ListConnections(ctx context.Context) (*ListConnectionsResponse, error) {
 	// TODO: Get user ID from auth context
-	userID := "temp-user-id"
+	userID := auth.GetUserID(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("user not authenticated")
+	}
 
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, user_id, provider, name, status, last_sync_at, last_sync_error,
@@ -249,7 +260,10 @@ func (s *Service) ListConnections(ctx context.Context) (*ListConnectionsResponse
 // GetConnection retrieves a single connection by ID
 func (s *Service) GetConnection(ctx context.Context, id string) (*Connection, error) {
 	// TODO: Get user ID from auth context and verify ownership
-	userID := "temp-user-id"
+	userID := auth.GetUserID(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("user not authenticated")
+	}
 
 	conn := &Connection{}
 	var lastSyncAt sql.NullTime
@@ -291,7 +305,10 @@ func (s *Service) GetConnection(ctx context.Context, id string) (*Connection, er
 // DeleteConnection disconnects and deletes a connection
 func (s *Service) DeleteConnection(ctx context.Context, id string) (*DeleteResponse, error) {
 	// TODO: Get user ID from auth context and verify ownership
-	userID := "temp-user-id"
+	userID := auth.GetUserID(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("user not authenticated")
+	}
 
 	// Get all synced account IDs before deleting
 	rows, err := s.db.QueryContext(ctx, `
