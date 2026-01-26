@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"money/internal/account"
@@ -13,7 +14,17 @@ import (
 	"money/internal/balance"
 	"money/internal/holdings"
 	"money/internal/sync/encryption"
+	"money/internal/sync/wealthsimple"
 )
+
+// AuthenticationError represents an authentication failure
+type AuthenticationError struct {
+	Message string
+}
+
+func (e *AuthenticationError) Error() string {
+	return e.Message
+}
 
 // Service provides sync functionality
 type Service struct {
@@ -267,8 +278,8 @@ func (s *Service) VerifyOTP(ctx context.Context, req *VerifyOTPRequest) (*Verify
 }
 
 // ListConnections retrieves all connections for the authenticated user
+// and automatically validates sessions
 func (s *Service) ListConnections(ctx context.Context) (*ListConnectionsResponse, error) {
-	// TODO: Get user ID from auth context
 	userID := auth.GetUserID(ctx)
 	if userID == "" {
 		return nil, fmt.Errorf("user not authenticated")
@@ -276,7 +287,8 @@ func (s *Service) ListConnections(ctx context.Context) (*ListConnectionsResponse
 
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, user_id, provider, name, status, last_sync_at, last_sync_error,
-		       sync_frequency, account_count, created_at, updated_at
+		       sync_frequency, account_count, created_at, updated_at,
+		       encrypted_access_token, device_id, session_id, app_instance_id
 		FROM sync_credentials
 		WHERE user_id = $1
 		ORDER BY created_at DESC
@@ -286,11 +298,21 @@ func (s *Service) ListConnections(ctx context.Context) (*ListConnectionsResponse
 	}
 	defer rows.Close()
 
+	// Initialize encryption service for token validation
+	encService, err := encryption.NewService(s.encryptionKey)
+	if err != nil {
+		log.Printf("WARN: failed to initialize encryption service: %v", err)
+		// Continue without validation
+		encService = nil
+	}
+
 	var connections []*Connection
 	for rows.Next() {
 		conn := &Connection{}
 		var lastSyncAt sql.NullTime
 		var lastSyncError sql.NullString
+		var encryptedAccessToken []byte
+		var deviceID, sessionID, appInstanceID string
 		err := rows.Scan(
 			&conn.ID,
 			&conn.UserID,
@@ -303,6 +325,10 @@ func (s *Service) ListConnections(ctx context.Context) (*ListConnectionsResponse
 			&conn.AccountCount,
 			&conn.CreatedAt,
 			&conn.UpdatedAt,
+			&encryptedAccessToken,
+			&deviceID,
+			&sessionID,
+			&appInstanceID,
 		)
 		if err != nil {
 			return nil, err
@@ -313,10 +339,49 @@ func (s *Service) ListConnections(ctx context.Context) (*ListConnectionsResponse
 		if lastSyncError.Valid {
 			conn.LastSyncError = lastSyncError.String
 		}
+
+		// Automatically validate session if connection is currently marked as connected
+		if conn.Status == StatusConnected && encService != nil && len(encryptedAccessToken) > 0 {
+			s.validateConnectionSession(ctx, conn, encryptedAccessToken, deviceID, sessionID, appInstanceID, encService)
+		}
+
 		connections = append(connections, conn)
 	}
 
 	return &ListConnectionsResponse{Connections: connections}, nil
+}
+
+// validateConnectionSession validates a connection's session in the background
+func (s *Service) validateConnectionSession(ctx context.Context, conn *Connection, encryptedAccessToken []byte, deviceID, sessionID, appInstanceID string, encService *encryption.Service) {
+	// Decrypt access token
+	accessToken, err := encService.Decrypt(encryptedAccessToken)
+	if err != nil {
+		log.Printf("WARN: failed to decrypt access token for connection %s: %v", conn.ID, err)
+		return
+	}
+
+	// Check if the access token is still valid
+	client := wealthsimple.NewClient(deviceID, sessionID, appInstanceID)
+	tokenInfo, err := client.CheckTokenInfo(ctx, accessToken)
+	if err != nil {
+		// Session is invalid - mark connection as disconnected
+		log.Printf("INFO: session expired for connection %s, marking as disconnected: %v", conn.ID, err)
+		_, _ = s.db.ExecContext(ctx, `
+			UPDATE sync_credentials
+			SET status = $1,
+			    last_sync_error = $2,
+			    updated_at = CURRENT_TIMESTAMP
+			WHERE id = $3
+		`, StatusDisconnected, "Session expired - please login again", conn.ID)
+
+		// Update the connection object so it reflects the new status
+		conn.Status = StatusDisconnected
+		conn.LastSyncError = "Session expired - please login again"
+		return
+	}
+
+	// Session is valid - log token expiration info
+	log.Printf("DEBUG: session valid for connection %s, expires in %d seconds", conn.ID, tokenInfo.ExpiresIn)
 }
 
 // GetConnection retrieves a single connection by ID
@@ -453,12 +518,6 @@ func (s *Service) UpdateConnection(ctx context.Context, id string, req *UpdateCo
 	return nil
 }
 
-// ReconnectWealthsimpleResponse represents response for reconnecting
-type ReconnectWealthsimpleResponse struct {
-	ConnectionID string `json:"connection_id"`
-	Message      string `json:"message"`
-}
-
 // TriggerSync triggers a sync for a connection
 func (s *Service) TriggerSync(ctx context.Context, userID, connectionID string) error {
 	if userID == "" {
@@ -473,60 +532,53 @@ func (s *Service) TriggerSync(ctx context.Context, userID, connectionID string) 
 
 // UpdateConnectionError updates the connection status to error with an error message
 func (s *Service) UpdateConnectionError(ctx context.Context, connectionID, errorMessage string) error {
+	// Check if this is an authentication error
+	isAuthError := isAuthenticationError(errorMessage)
+
+	var status Status
+	if isAuthError {
+		status = StatusDisconnected
+		errorMessage = "Authentication failed - please login again"
+		log.Printf("WARN: authentication error detected for connection %s - marking as disconnected", connectionID)
+	} else {
+		status = StatusError
+	}
+
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE sync_credentials
 		SET status = $1, last_sync_error = $2, updated_at = CURRENT_TIMESTAMP
 		WHERE id = $3
-	`, StatusError, errorMessage, connectionID)
+	`, string(status), errorMessage, connectionID)
 
 	if err != nil {
 		log.Printf("ERROR: failed to update connection error: connection_id=%s error=%v", connectionID, err)
 		return fmt.Errorf("failed to update connection error: %w", err)
 	}
 
-	log.Printf("INFO: updated connection error: connection_id=%s error=%s", connectionID, errorMessage)
+	log.Printf("INFO: updated connection error: connection_id=%s status=%s error=%s", connectionID, status, errorMessage)
 	return nil
 }
 
-// ReconnectWealthsimple reconnects an existing Wealthsimple connection using stored credentials
-func (s *Service) ReconnectWealthsimple(ctx context.Context) (*ReconnectWealthsimpleResponse, error) {
-	userID := auth.GetUserID(ctx)
-	if userID == "" {
-		return nil, fmt.Errorf("user not authenticated")
+// isAuthenticationError checks if an error message indicates authentication failure
+func isAuthenticationError(errMsg string) bool {
+	authErrorIndicators := []string{
+		"401",
+		"status 401",
+		"unauthorized",
+		"authentication failed",
+		"invalid credentials",
+		"credentials are invalid",
+		"access denied",
+		"not authenticated",
 	}
 
-	// Check if credentials exist
-	var credentialID, email string
-	var encryptedPassword []byte
-	err := s.db.QueryRowContext(ctx, `
-		SELECT id, email, encrypted_password
-		FROM sync_credentials
-		WHERE user_id = $1 AND provider = $2
-		ORDER BY created_at DESC
-		LIMIT 1
-	`, userID, ProviderWealthsimple).Scan(&credentialID, &email, &encryptedPassword)
-	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("no stored credentials found")
+	errMsgLower := strings.ToLower(errMsg)
+	for _, indicator := range authErrorIndicators {
+		if strings.Contains(errMsgLower, indicator) {
+			return true
+		}
 	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch credentials: %w", err)
-	}
-
-	// Update connection status to connected (assuming stored credentials are valid)
-	// In a production scenario, you'd want to verify the credentials first
-	_, err = s.db.ExecContext(ctx, `
-		UPDATE sync_credentials
-		SET status = $1, last_sync_error = NULL, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $2
-	`, StatusConnected, credentialID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to update connection status: %w", err)
-	}
-
-	return &ReconnectWealthsimpleResponse{
-		ConnectionID: credentialID,
-		Message:      "Successfully reconnected using stored credentials",
-	}, nil
+	return false
 }
 
 // GetConnectionSyncStatus retrieves detailed sync status for a connection

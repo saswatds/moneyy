@@ -826,12 +826,6 @@ class ApiClient {
     });
   }
 
-  async reconnectWealthsimple(): Promise<{ connection_id: string }> {
-    return this.request('/sync/wealthsimple/reconnect', {
-      method: 'POST',
-    });
-  }
-
   async syncConnection(connectionId: string): Promise<void> {
     return this.request(`/sync/connections/${connectionId}/sync`, {
       method: 'POST',

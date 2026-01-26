@@ -31,7 +31,6 @@ func (h *SyncHandler) RegisterRoutes(r chi.Router) {
 		r.Get("/wealthsimple/check-credentials", h.CheckWealthsimpleCredentials)
 		r.Post("/wealthsimple/initiate", h.InitiateWealthsimpleConnection)
 		r.Post("/wealthsimple/verify-otp", h.VerifyOTP)
-		r.Post("/wealthsimple/reconnect", h.ReconnectWealthsimple)
 		r.Get("/connections", h.ListConnections)
 		r.Get("/connections/{id}", h.GetConnection)
 		r.Get("/connections/{id}/status", h.GetConnectionSyncStatus)
@@ -188,17 +187,6 @@ func (h *SyncHandler) UpdateConnection(w http.ResponseWriter, r *http.Request) {
 	}
 
 	server.RespondJSON(w, http.StatusOK, map[string]string{"message": "Connection updated successfully"})
-}
-
-// ReconnectWealthsimple reconnects using stored Wealthsimple credentials
-func (h *SyncHandler) ReconnectWealthsimple(w http.ResponseWriter, r *http.Request) {
-	resp, err := h.service.ReconnectWealthsimple(r.Context())
-	if err != nil {
-		server.RespondError(w, http.StatusInternalServerError, err)
-		return
-	}
-
-	server.RespondJSON(w, http.StatusOK, resp)
 }
 
 // DeleteConnection deletes a sync connection

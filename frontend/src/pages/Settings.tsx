@@ -111,7 +111,6 @@ export function Settings() {
   const [editFrequency, setEditFrequency] = useState<string>('');
   const [selectedProvider, setSelectedProvider] = useState<string>('');
   const [wealthsimpleCredentials, setWealthsimpleCredentials] = useState({ hasCredentials: false, email: '' });
-  const [reconnecting, setReconnecting] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -120,7 +119,6 @@ export function Settings() {
   const [importResult, setImportResult] = useState<any>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [syncingConnectionId, setSyncingConnectionId] = useState<string | null>(null);
-  const [reconnectingConnectionId, setReconnectingConnectionId] = useState<string | null>(null);
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [historyConnection, setHistoryConnection] = useState<Connection | null>(null);
   const [syncHistory, setSyncHistory] = useState<any | null>(null);
@@ -167,36 +165,6 @@ export function Settings() {
     }
   };
 
-  const handleReconnect = async () => {
-    try {
-      setReconnecting(true);
-      const data = await apiClient.reconnectWealthsimple();
-
-      if (data.connection_id) {
-        await fetchConnections();
-      }
-    } catch (error) {
-      console.error('Failed to reconnect:', error);
-    } finally {
-      setReconnecting(false);
-    }
-  };
-
-  const handleReconnectConnection = async (connectionId: string) => {
-    try {
-      setReconnectingConnectionId(connectionId);
-      // For now, use the general reconnect which updates the existing connection
-      const data = await apiClient.reconnectWealthsimple();
-
-      if (data.connection_id) {
-        await fetchConnections();
-      }
-    } catch (error: any) {
-      console.error('Failed to reconnect:', error);
-    } finally {
-      setReconnectingConnectionId(null);
-    }
-  };
 
   const handleViewHistory = async (connection: Connection) => {
     setHistoryConnection(connection);
@@ -323,16 +291,18 @@ export function Settings() {
   };
 
   const getStatusBadge = (status: string) => {
-    const variants: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-      connected: 'default',
-      syncing: 'secondary',
-      error: 'destructive',
-      disconnected: 'outline',
+    const config: Record<string, { variant: 'default' | 'secondary' | 'destructive' | 'outline', label: string, className?: string }> = {
+      connected: { variant: 'default', label: 'Connected', className: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' },
+      syncing: { variant: 'secondary', label: 'Syncing...', className: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' },
+      error: { variant: 'destructive', label: 'Error' },
+      disconnected: { variant: 'destructive', label: 'Auth Required', className: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400' },
     };
 
+    const statusConfig = config[status] || { variant: 'outline', label: status };
+
     return (
-      <Badge variant={variants[status] || 'outline'} className="capitalize">
-        {status}
+      <Badge variant={statusConfig.variant} className={statusConfig.className}>
+        {statusConfig.label}
       </Badge>
     );
   };
@@ -464,18 +434,6 @@ export function Settings() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  {provider.id === 'wealthsimple' && wealthsimpleCredentials.hasCredentials && !isConnected && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleReconnect}
-                      disabled={reconnecting}
-                      className="w-full mb-2"
-                    >
-                      <IconRefresh className="mr-2 h-4 w-4" />
-                      {reconnecting ? 'Reconnecting...' : 'Quick Reconnect'}
-                    </Button>
-                  )}
                   <Button
                     variant={isAvailable ? 'default' : 'outline'}
                     size="sm"
@@ -541,8 +499,8 @@ export function Settings() {
                             <div>
                               <div className="font-medium">{connection.name}</div>
                               {connection.last_sync_error && (
-                                <div className="text-xs text-destructive mt-0.5">
-                                  Error: {connection.last_sync_error}
+                                <div className={`text-xs mt-0.5 ${connection.status === 'disconnected' ? 'text-orange-600 dark:text-orange-400' : 'text-destructive'}`}>
+                                  {connection.last_sync_error}
                                 </div>
                               )}
                             </div>
@@ -561,36 +519,36 @@ export function Settings() {
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex gap-1 justify-end">
-                              {connection.provider === 'wealthsimple' && (
+                              {connection.provider === 'wealthsimple' && connection.status === 'disconnected' ? (
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  onClick={() => {
+                                    setSelectedProvider('wealthsimple');
+                                    setShowConnectDialog(true);
+                                  }}
+                                  className="bg-orange-600 hover:bg-orange-700 text-white"
+                                >
+                                  <IconLink className="h-4 w-4 mr-1" />
+                                  Login Again
+                                </Button>
+                              ) : null}
+                              {connection.status !== 'disconnected' && (
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  onClick={() => handleReconnectConnection(connection.id)}
-                                  disabled={reconnectingConnectionId === connection.id}
-                                  className="h-8 w-8 p-0 text-orange-600 hover:text-orange-700"
-                                  title="Reconnect account"
+                                  onClick={() => handleSync(connection.id)}
+                                  disabled={connection.status === 'syncing' || syncingConnectionId === connection.id}
+                                  className="h-8 w-8 p-0"
+                                  title="Sync now"
                                 >
-                                  {reconnectingConnectionId === connection.id ? (
+                                  {syncingConnectionId === connection.id ? (
                                     <IconLoader2 className="h-4 w-4 animate-spin" />
                                   ) : (
-                                    <IconLink className="h-4 w-4" />
+                                    <IconRefresh className="h-4 w-4" />
                                   )}
                                 </Button>
                               )}
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleSync(connection.id)}
-                                disabled={connection.status === 'syncing' || syncingConnectionId === connection.id}
-                                className="h-8 w-8 p-0"
-                                title="Sync now"
-                              >
-                                {syncingConnectionId === connection.id ? (
-                                  <IconLoader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <IconRefresh className="h-4 w-4" />
-                                )}
-                              </Button>
                               <Button
                                 variant="ghost"
                                 size="sm"

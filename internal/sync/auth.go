@@ -261,77 +261,6 @@ func (s *Service) verifyOTPReal(ctx context.Context, credentialID, otpCode strin
 	}, nil
 }
 
-// refreshAccessToken refreshes an expired access token
-func (s *Service) refreshAccessToken(ctx context.Context, credentialID string) error {
-	// Get credential
-	var creds struct {
-		EncryptedRefreshToken []byte
-		DeviceID              string
-		SessionID             string
-		AppInstanceID         string
-	}
-
-	err := s.db.QueryRowContext(ctx, `
-		SELECT encrypted_refresh_token, device_id, session_id, app_instance_id
-		FROM sync_credentials
-		WHERE id = $1
-	`, credentialID).Scan(
-		&creds.EncryptedRefreshToken,
-		&creds.DeviceID,
-		&creds.SessionID,
-		&creds.AppInstanceID,
-	)
-
-	if err != nil {
-		return fmt.Errorf("credential not found: %w", err)
-	}
-
-	// Initialize encryption service
-	encService, err := encryption.NewService(s.encryptionKey)
-	if err != nil {
-		return fmt.Errorf("failed to initialize encryption: %w", err)
-	}
-
-	// Decrypt refresh token
-	refreshToken, err := encService.Decrypt(creds.EncryptedRefreshToken)
-	if err != nil {
-		return fmt.Errorf("failed to decrypt refresh token: %w", err)
-	}
-
-	// Create client and refresh
-	wsClient := wealthsimple.NewClient(creds.DeviceID, creds.SessionID, creds.AppInstanceID)
-	tokenResp, err := wsClient.RefreshAccessToken(ctx, refreshToken)
-	if err != nil {
-		return fmt.Errorf("failed to refresh token: %w", err)
-	}
-
-	// Encrypt new tokens
-	encryptedAccessToken, err := encService.Encrypt(tokenResp.AccessToken)
-	if err != nil {
-		return fmt.Errorf("failed to encrypt access token: %w", err)
-	}
-
-	encryptedRefreshToken, err := encService.Encrypt(tokenResp.RefreshToken)
-	if err != nil {
-		return fmt.Errorf("failed to encrypt refresh token: %w", err)
-	}
-
-	// Parse expiration
-	expiresAt, _ := time.Parse(time.RFC3339, tokenResp.ExpiresAt)
-
-	// Update tokens
-	_, err = s.db.ExecContext(ctx, `
-		UPDATE sync_credentials
-		SET encrypted_access_token = $1,
-		    encrypted_refresh_token = $2,
-		    token_expires_at = $3,
-		    updated_at = $4
-		WHERE id = $5
-	`, encryptedAccessToken, encryptedRefreshToken, expiresAt, time.Now(), credentialID)
-
-	return err
-}
-
 // getDecryptedCredentials retrieves and decrypts credentials for a user
 func (s *Service) getDecryptedCredentials(ctx context.Context, userID string) (*wealthsimple.Client, error) {
 	var creds struct {
@@ -361,23 +290,18 @@ func (s *Service) getDecryptedCredentials(ctx context.Context, userID string) (*
 		return nil, fmt.Errorf("credentials not found: %w", err)
 	}
 
-	// Check if token needs refresh
+	// Check if token is expired or expiring soon
 	if creds.TokenExpiresAt.Valid && time.Now().After(creds.TokenExpiresAt.Time.Add(-5*time.Minute)) {
-		// Token expired or expiring soon, refresh it
-		if err := s.refreshAccessToken(ctx, creds.ID); err != nil {
-			return nil, fmt.Errorf("failed to refresh token: %w", err)
-		}
+		// Token expired - mark connection as disconnected (refresh doesn't work due to 2FA requirement)
+		_, _ = s.db.ExecContext(ctx, `
+			UPDATE sync_credentials
+			SET status = $1,
+			    last_sync_error = $2,
+			    updated_at = CURRENT_TIMESTAMP
+			WHERE id = $3
+		`, StatusDisconnected, "Session expired - please login again", creds.ID)
 
-		// Re-fetch credentials
-		err = s.db.QueryRowContext(ctx, `
-			SELECT encrypted_access_token
-			FROM sync_credentials
-			WHERE id = $1
-		`, creds.ID).Scan(&creds.EncryptedAccessToken)
-
-		if err != nil {
-			return nil, fmt.Errorf("failed to re-fetch credentials: %w", err)
-		}
+		return nil, fmt.Errorf("access token expired - re-authentication required")
 	}
 
 	// Decrypt access token
