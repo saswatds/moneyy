@@ -80,8 +80,16 @@ type TokenResponse struct {
 	Profiles            map[string]map[string]string `json:"profiles"`
 }
 
+// LoginResult represents the result of a login attempt
+type LoginResult struct {
+	OTPRequired bool
+	LoginResponse *LoginResponse
+	TokenResponse *TokenResponse
+}
+
 // Login attempts to log in with username and password
-func (c *Client) Login(ctx context.Context, username, password string) (*LoginResponse, error) {
+// Returns LoginResult with either OTP requirement or tokens
+func (c *Client) Login(ctx context.Context, username, password string) (*LoginResult, error) {
 	reqBody := LoginRequest{
 		GrantType:    "password",
 		Username:     username,
@@ -114,24 +122,35 @@ func (c *Client) Login(ctx context.Context, username, password string) (*LoginRe
 	if resp.StatusCode == http.StatusUnauthorized {
 		otpRequired := resp.Header.Get("x-wealthsimple-otp-required") == "true"
 		if otpRequired {
-			return &LoginResponse{
-				OTPRequired:           true,
-				OTPAuthenticatedClaim: resp.Header.Get("x-wealthsimple-otp-authenticated-claim"),
-				OTPOptions:            resp.Header.Get("x-wealthsimple-otp-options"),
+			return &LoginResult{
+				OTPRequired: true,
+				LoginResponse: &LoginResponse{
+					OTPRequired:           true,
+					OTPAuthenticatedClaim: resp.Header.Get("x-wealthsimple-otp-authenticated-claim"),
+					OTPOptions:            resp.Header.Get("x-wealthsimple-otp-options"),
+				},
 			}, nil
 		}
+		// Unauthorized but no OTP header - invalid credentials
+		return nil, fmt.Errorf("unauthorized: invalid credentials")
 	}
 
-	var loginResp LoginResponse
-	if err := json.NewDecoder(resp.Body).Decode(&loginResp); err != nil {
-		return nil, err
+	if resp.StatusCode == http.StatusOK {
+		// Success - decode token response
+		var tokenResp TokenResponse
+		if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+			return nil, fmt.Errorf("failed to decode token response: %w", err)
+		}
+		c.accessToken = tokenResp.AccessToken
+		return &LoginResult{
+			OTPRequired: false,
+			TokenResponse: &tokenResp,
+		}, nil
 	}
 
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusUnauthorized {
-		return nil, fmt.Errorf("login failed: %s - %s", loginResp.Error, loginResp.ErrorDescription)
-	}
-
-	return &loginResp, nil
+	// Other error status codes
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	return nil, fmt.Errorf("login failed with status %d: %s", resp.StatusCode, string(bodyBytes))
 }
 
 // VerifyOTP completes authentication with OTP code

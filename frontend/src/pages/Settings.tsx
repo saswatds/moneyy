@@ -51,6 +51,7 @@ interface Connection {
   status: 'connected' | 'disconnected' | 'error' | 'syncing';
   last_sync_at?: string;
   last_sync_error?: string;
+  token_expires_at?: string;
   sync_frequency: string;
   account_count: number;
   created_at: string;
@@ -322,6 +323,28 @@ export function Settings() {
     });
   };
 
+  const formatTokenExpiry = (dateString?: string) => {
+    if (!dateString) return null;
+    const expiryDate = new Date(dateString);
+    const now = new Date();
+    const diffMs = expiryDate.getTime() - now.getTime();
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffMs < 0) {
+      return 'Expired';
+    } else if (diffHours < 1) {
+      const diffMinutes = Math.floor(diffMs / (1000 * 60));
+      return `Expires in ${diffMinutes} min`;
+    } else if (diffHours < 24) {
+      return `Expires in ${diffHours} hour${diffHours !== 1 ? 's' : ''}`;
+    } else if (diffDays < 7) {
+      return `Expires in ${diffDays} day${diffDays !== 1 ? 's' : ''}`;
+    } else {
+      return `Expires ${expiryDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+    }
+  };
+
   const handleExport = async () => {
     setExporting(true);
     try {
@@ -501,6 +524,11 @@ export function Settings() {
                               {connection.last_sync_error && (
                                 <div className={`text-xs mt-0.5 ${connection.status === 'disconnected' ? 'text-orange-600 dark:text-orange-400' : 'text-destructive'}`}>
                                   {connection.last_sync_error}
+                                </div>
+                              )}
+                              {connection.token_expires_at && (
+                                <div className="text-xs mt-0.5 text-muted-foreground">
+                                  {formatTokenExpiry(connection.token_expires_at)}
                                 </div>
                               )}
                             </div>

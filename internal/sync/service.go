@@ -75,18 +75,19 @@ const (
 
 // Connection represents a connection (stored in sync_credentials)
 type Connection struct {
-	ID            string        `json:"id"`
-	UserID        string        `json:"user_id"`
-	Provider      Provider      `json:"provider"`
-	Name          string        `json:"name"`
+	ID             string        `json:"id"`
+	UserID         string        `json:"user_id"`
+	Provider       Provider      `json:"provider"`
+	Name           string        `json:"name"`
 	Email          string        `json:"email"`
-	Status        Status        `json:"status"`
-	LastSyncAt    *time.Time    `json:"last_sync_at,omitempty"`
-	LastSyncError string        `json:"last_sync_error,omitempty"`
-	SyncFrequency SyncFrequency `json:"sync_frequency"`
-	AccountCount  int           `json:"account_count"`
-	CreatedAt     time.Time     `json:"created_at"`
-	UpdatedAt     time.Time     `json:"updated_at"`
+	Status         Status        `json:"status"`
+	LastSyncAt     *time.Time    `json:"last_sync_at,omitempty"`
+	LastSyncError  string        `json:"last_sync_error,omitempty"`
+	TokenExpiresAt *time.Time    `json:"token_expires_at,omitempty"`
+	SyncFrequency  SyncFrequency `json:"sync_frequency"`
+	AccountCount   int           `json:"account_count"`
+	CreatedAt      time.Time     `json:"created_at"`
+	UpdatedAt      time.Time     `json:"updated_at"`
 }
 
 // SyncStatus is a simple status type for sync responses
@@ -288,7 +289,7 @@ func (s *Service) ListConnections(ctx context.Context) (*ListConnectionsResponse
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, user_id, provider, name, status, last_sync_at, last_sync_error,
 		       sync_frequency, account_count, created_at, updated_at,
-		       encrypted_access_token, device_id, session_id, app_instance_id
+		       token_expires_at, encrypted_access_token, device_id, session_id, app_instance_id
 		FROM sync_credentials
 		WHERE user_id = $1
 		ORDER BY created_at DESC
@@ -311,6 +312,7 @@ func (s *Service) ListConnections(ctx context.Context) (*ListConnectionsResponse
 		conn := &Connection{}
 		var lastSyncAt sql.NullTime
 		var lastSyncError sql.NullString
+		var tokenExpiresAt sql.NullTime
 		var encryptedAccessToken []byte
 		var deviceID, sessionID, appInstanceID string
 		err := rows.Scan(
@@ -325,6 +327,7 @@ func (s *Service) ListConnections(ctx context.Context) (*ListConnectionsResponse
 			&conn.AccountCount,
 			&conn.CreatedAt,
 			&conn.UpdatedAt,
+			&tokenExpiresAt,
 			&encryptedAccessToken,
 			&deviceID,
 			&sessionID,
@@ -338,6 +341,9 @@ func (s *Service) ListConnections(ctx context.Context) (*ListConnectionsResponse
 		}
 		if lastSyncError.Valid {
 			conn.LastSyncError = lastSyncError.String
+		}
+		if tokenExpiresAt.Valid {
+			conn.TokenExpiresAt = &tokenExpiresAt.Time
 		}
 
 		// Automatically validate session if connection is currently marked as connected
