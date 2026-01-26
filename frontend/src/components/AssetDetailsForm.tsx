@@ -30,7 +30,7 @@ import { IconCalendar } from '@tabler/icons-react';
 import { format } from 'date-fns';
 import { Textarea } from '@/components/ui/textarea';
 
-const formSchema = z.object({
+const baseSchema = z.object({
   asset_type: z.enum(['real_estate', 'vehicle', 'collectible', 'equipment']),
   purchase_price: z.coerce.number().positive('Purchase price must be positive'),
   purchase_date: z.date(),
@@ -62,7 +62,9 @@ const formSchema = z.object({
   equipment_description: z.string().optional(),
   serial_number: z.string().optional(),
   equipment_condition: z.string().optional(),
-}).refine(
+});
+
+const formSchema = baseSchema.refine(
   (data) => {
     if (data.depreciation_method === 'straight_line') {
       return data.useful_life_years !== undefined && data.useful_life_years > 0;
@@ -86,7 +88,7 @@ const formSchema = z.object({
   }
 );
 
-type FormValues = z.infer<typeof formSchema>;
+type FormValues = z.infer<typeof baseSchema>;
 
 const assetTypes = [
   { value: 'real_estate', label: 'Real Estate' },
@@ -123,7 +125,7 @@ export function AssetDetailsForm({ accountId, onSuccess, onCancel }: AssetDetail
   const createAsset = useCreateAssetDetails();
 
   const form = useForm<FormValues>({
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(formSchema) as any,
     defaultValues: {
       asset_type: 'real_estate',
       purchase_price: 0,
