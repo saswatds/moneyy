@@ -181,28 +181,38 @@ test:
 	@echo "$(BLUE)Running tests in Docker...$(NC)"
 	@${DOCKER_COMPOSE} exec api go test -v ./...
 
-# Build production images
+# Build production image (local platform only for testing)
 build:
-	@echo "$(BLUE)Building production Docker image...$(NC)"
+	@echo "$(BLUE)Building production Docker image (local platform)...$(NC)"
 	@echo ""
 	@echo "Building image: $(IMAGE):$(VERSION)"
-	@docker build -t $(IMAGE):$(VERSION) -t $(IMAGE):latest .
+	@docker buildx build -t $(IMAGE):$(VERSION) -t $(IMAGE):latest --load .
 	@echo ""
-	@echo "$(GREEN)✓ Production image built$(NC)"
+	@echo "$(GREEN)✓ Production image built for local platform$(NC)"
 	@echo "  $(IMAGE):$(VERSION)"
 	@echo "  $(IMAGE):latest"
 
-# Push images to registry
-push:
-	@echo "$(BLUE)Pushing images to $(REGISTRY)...$(NC)"
-	@echo ""
-	@docker push $(IMAGE):$(VERSION)
-	@docker push $(IMAGE):latest
-	@echo ""
-	@echo "$(GREEN)✓ Images pushed successfully$(NC)"
+# Setup buildx builder for multi-platform builds
+buildx-setup:
+	@echo "$(BLUE)Setting up buildx builder for multi-platform builds...$(NC)"
+	@docker buildx inspect moneyy-builder > /dev/null 2>&1 || \
+		docker buildx create --name moneyy-builder --use
+	@docker buildx inspect --bootstrap
+	@echo "$(GREEN)✓ Buildx builder ready$(NC)"
 
-# Build and push in one command
-build-push: build push
+# Build and push multi-platform images to registry
+push: buildx-setup
+	@echo "$(BLUE)Building and pushing multi-platform images to $(REGISTRY)...$(NC)"
+	@echo ""
+	@docker buildx build --builder moneyy-builder \
+		--platform linux/amd64,linux/arm64 \
+		-t $(IMAGE):$(VERSION) \
+		-t $(IMAGE):latest \
+		--push .
+	@echo ""
+	@echo "$(GREEN)✓ Multi-platform images built and pushed successfully$(NC)"
+	@echo "  Platforms: linux/amd64, linux/arm64"
+
 
 # Login to GitHub Container Registry
 registry-login:
