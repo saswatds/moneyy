@@ -12,7 +12,7 @@ DOCKER_COMPOSE := docker compose
 
 # Container registry
 REGISTRY := ghcr.io
-REGISTRY_USER := saswat
+REGISTRY_USER := saswatds
 IMAGE := $(REGISTRY)/$(REGISTRY_USER)/moneyy
 
 # Version (can be overridden)
