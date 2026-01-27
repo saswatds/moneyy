@@ -25,6 +25,11 @@ func RespondJSON(w http.ResponseWriter, status int, data any) {
 
 // RespondError sends an error response with the given status code
 func RespondError(w http.ResponseWriter, status int, err error) {
+	// Log all server errors (5xx)
+	if status >= 500 {
+		log.Printf("ERROR [%d]: %v", status, err)
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 
@@ -41,6 +46,11 @@ func RespondError(w http.ResponseWriter, status int, err error) {
 
 // RespondErrorMessage sends an error response with a custom message
 func RespondErrorMessage(w http.ResponseWriter, status int, message string) {
+	// Log all server errors (5xx)
+	if status >= 500 {
+		log.Printf("ERROR [%d]: %s", status, message)
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 
