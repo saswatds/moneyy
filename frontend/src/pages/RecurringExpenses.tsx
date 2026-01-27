@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
-import type { RecurringExpense } from '@/lib/api-client';
+import type { RecurringExpense, InferredExpense } from '@/lib/api-client';
 import {
   Card,
   CardContent,
@@ -124,6 +124,23 @@ const calculateMonthlyTotal = (expenses: RecurringExpense[]) => {
   }, 0);
 };
 
+const calculateInferredYearlyAmount = (expense: InferredExpense) => {
+  switch (expense.frequency) {
+    case 'weekly':
+      return expense.amount * 52;
+    case 'bi-weekly':
+      return expense.amount * 26;
+    case 'monthly':
+      return expense.amount * 12;
+    case 'quarterly':
+      return expense.amount * 4;
+    case 'annually':
+      return expense.amount;
+    default:
+      return expense.amount * 12; // Default to monthly
+  }
+};
+
 export function RecurringExpenses() {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -139,6 +156,7 @@ export function RecurringExpenses() {
   });
 
   const activeExpenses = data?.expenses.filter(e => e.is_active) || [];
+  const inferredExpenses = data?.inferred_expenses || [];
 
   // Apply filters
   const filteredExpenses = activeExpenses.filter((expense) => {
@@ -240,6 +258,71 @@ export function RecurringExpenses() {
         </Card>
       </div>
 
+      {/* Inferred Expenses Table */}
+      {inferredExpenses.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Inferred Expenses from Accounts</CardTitle>
+            <CardDescription>
+              Payment obligations automatically detected from your mortgage and loan accounts
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Account</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Frequency</TableHead>
+                  <TableHead className="text-right">Payment Amount</TableHead>
+                  <TableHead className="text-right">Interest Rate</TableHead>
+                  <TableHead className="text-right">Yearly Total</TableHead>
+                  <TableHead className="text-right">Remaining Term</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {inferredExpenses.map((expense) => (
+                  <TableRow key={expense.account_id}>
+                    <TableCell>
+                      <div className="font-medium">{expense.account_name}</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        Original: {formatNumberOnly(expense.original_amount)} {expense.currency}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="secondary" className={`capitalize ${expense.type === 'mortgage' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' : 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400'}`}>
+                        {expense.type}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {getFrequencyLabel(expense.frequency)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div>{formatNumberOnly(expense.amount)}</div>
+                      <div className="text-xs text-muted-foreground">{expense.currency}</div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div>{(expense.interest_rate * 100).toFixed(2)}%</div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div>{formatNumberOnly(calculateInferredYearlyAmount(expense))}</div>
+                      <div className="text-xs text-muted-foreground">{expense.currency}</div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div>
+                        {expense.remaining_term !== undefined
+                          ? `${expense.remaining_term} months`
+                          : 'N/A'}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Expenses Table */}
       <Card>
         <CardHeader>
@@ -303,12 +386,6 @@ export function RecurringExpenses() {
                   ? 'No recurring expenses tracked yet.'
                   : 'No expenses match the selected filters.'}
               </p>
-              {activeExpenses.length === 0 && (
-                <Button onClick={() => setAddDialogOpen(true)}>
-                  <IconPlus className="h-4 w-4 mr-2" />
-                  Add Your First Expense
-                </Button>
-              )}
             </div>
           ) : (
             <Table>

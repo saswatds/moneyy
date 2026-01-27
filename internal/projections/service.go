@@ -625,6 +625,11 @@ func (s *Service) getCurrentAccounts(ctx context.Context) ([]AccountData, error)
 
 // getMortgageDetails fetches mortgage details and current balances
 func (s *Service) getMortgageDetails(ctx context.Context) ([]MortgageData, error) {
+	userID := auth.GetUserID(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("user not authenticated")
+	}
+
 	rows, err := s.accountDB.QueryContext(ctx, `
 		SELECT m.account_id, m.original_amount, m.interest_rate, m.payment_amount, m.payment_frequency,
 		       COALESCE((
@@ -635,7 +640,9 @@ func (s *Service) getMortgageDetails(ctx context.Context) ([]MortgageData, error
 		           LIMIT 1
 		       ), m.original_amount) as current_balance
 		FROM mortgage_details m
-	`)
+		JOIN accounts a ON m.account_id = a.id
+		WHERE a.user_id = $1 AND a.is_active = true
+	`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -657,6 +664,11 @@ func (s *Service) getMortgageDetails(ctx context.Context) ([]MortgageData, error
 
 // getLoanDetails fetches loan details and current balances
 func (s *Service) getLoanDetails(ctx context.Context) ([]LoanData, error) {
+	userID := auth.GetUserID(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("user not authenticated")
+	}
+
 	rows, err := s.accountDB.QueryContext(ctx, `
 		SELECT l.account_id, l.original_amount, l.interest_rate, l.payment_amount, l.payment_frequency,
 		       COALESCE((
@@ -667,7 +679,9 @@ func (s *Service) getLoanDetails(ctx context.Context) ([]LoanData, error) {
 		           LIMIT 1
 		       ), l.original_amount) as current_balance
 		FROM loan_details l
-	`)
+		JOIN accounts a ON l.account_id = a.id
+		WHERE a.user_id = $1 AND a.is_active = true
+	`, userID)
 	if err != nil {
 		return nil, err
 	}

@@ -56,9 +56,10 @@ const CURRENCIES = [
 ];
 
 function EditRecurringExpenseDialogContent({
+  open,
   onOpenChange,
   expense,
-}: Omit<EditRecurringExpenseDialogProps, 'open'>) {
+}: EditRecurringExpenseDialogProps) {
   const queryClient = useQueryClient();
   const [formData, setFormData] = useState({
     name: expense?.name || '',

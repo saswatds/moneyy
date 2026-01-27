@@ -47,7 +47,7 @@ export function WealthsimpleConnectDialog({
       const data = await apiClient.initiateWealthsimpleConnection(username, password);
 
       if (data.require_otp) {
-        setCredentialId(data.credential_id);
+        setCredentialId(data.credential_id || '');
         setStep('otp');
       } else {
         // Direct success (unlikely for Wealthsimple)

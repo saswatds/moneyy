@@ -14,6 +14,7 @@ import (
 )
 
 const SingleUserID = "selfhosted-user"
+const DemoUserID = "demo-user"
 
 // PasskeyAuthProvider implements auth.AuthProvider for self-hosted mode
 type PasskeyAuthProvider struct {
@@ -91,7 +92,27 @@ func (p *PasskeyAuthProvider) Initialize(ctx context.Context) error {
 		}
 	}
 
+	// Create demo user if doesn't exist
+	demoUser, err := p.userRepo.GetByID(ctx, DemoUserID)
+	if err != nil {
+		if err.Error() == "user not found" {
+			log.Println("Creating demo user")
+			demoUser = &auth.User{
+				ID:    DemoUserID,
+				Email: "demo@local",
+				Name:  "Demo User",
+			}
+			err = p.userRepo.Create(ctx, demoUser)
+			if err != nil {
+				return fmt.Errorf("failed to create demo user: %w", err)
+			}
+		} else {
+			return err
+		}
+	}
+
 	log.Printf("Passkey authentication initialized for user: %s", user.Email)
+	log.Printf("Demo user initialized: %s", demoUser.Email)
 	return nil
 }
 

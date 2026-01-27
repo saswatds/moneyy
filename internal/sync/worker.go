@@ -147,12 +147,13 @@ func (s *Service) performInitialSync(ctx context.Context, userID, connectionID s
 			// Account doesn't exist, create it
 			// Determine if this is an asset or liability account
 			isAsset := isAssetAccount(localAccountType)
+			institution := "Wealthsimple"
 
 			createdAccount, err := s.accountSvc.Create(ctx, &account.CreateAccountRequest{
 				Name:         nickname,
 				Type:         account.AccountType(localAccountType),
 				Currency:     account.Currency(mapCurrency(currency)),
-				Institution:  "Wealthsimple",
+				Institution:  &institution,
 				IsAsset:      isAsset,
 				IsSynced:     true,
 				ConnectionID: connectionID,
