@@ -904,9 +904,11 @@ func (s *ImportService) importSyncCredentials(ctx context.Context, tx *sql.Tx, u
 		query := `
 			INSERT INTO sync_credentials (id, user_id, provider, email, name, status,
 			                             last_sync_at, last_sync_error, sync_frequency,
-			                             account_count, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-			ON CONFLICT (id) DO UPDATE SET
+			                             account_count, device_id, session_id, app_instance_id,
+			                             created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+			ON CONFLICT (user_id) DO UPDATE SET
+				id = EXCLUDED.id,
 				provider = EXCLUDED.provider,
 				email = EXCLUDED.email,
 				name = EXCLUDED.name,
@@ -915,6 +917,9 @@ func (s *ImportService) importSyncCredentials(ctx context.Context, tx *sql.Tx, u
 				last_sync_error = EXCLUDED.last_sync_error,
 				sync_frequency = EXCLUDED.sync_frequency,
 				account_count = EXCLUDED.account_count,
+				device_id = EXCLUDED.device_id,
+				session_id = EXCLUDED.session_id,
+				app_instance_id = EXCLUDED.app_instance_id,
 				updated_at = EXCLUDED.updated_at
 		`
 
@@ -929,6 +934,9 @@ func (s *ImportService) importSyncCredentials(ctx context.Context, tx *sql.Tx, u
 			cred.LastSyncError,
 			cred.SyncFrequency,
 			cred.AccountCount,
+			"imported",          // Placeholder device_id since we don't have actual device info
+			"imported",          // Placeholder session_id since we don't have actual session
+			"imported-instance", // Placeholder app_instance_id
 			cred.CreatedAt,
 			cred.UpdatedAt,
 		)
