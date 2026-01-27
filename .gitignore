@@ -53,3 +53,6 @@ internal/data/demo_temp
 # Docker
 *.bak
 docker-compose.override.yml
+
+
+migrations.old
