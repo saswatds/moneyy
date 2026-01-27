@@ -11,6 +11,7 @@ import (
 
 	"money/internal/account"
 	"money/internal/auth"
+	"money/internal/auth/passkey"
 	"money/internal/balance"
 	"money/internal/currency"
 	"money/internal/data"
@@ -92,6 +93,9 @@ func main() {
 	exportSvc := data.NewExportService(db)
 	importSvc := data.NewImportService(db)
 
+	// Demo service (depends on import/export services)
+	demoSvc := data.NewDemoService(db)
+
 	logger.Info("All services initialized successfully")
 
 	// Initialize authentication provider
@@ -154,6 +158,8 @@ func main() {
 		r.Group(func(r chi.Router) {
 			// Apply auth middleware to protected routes only
 			r.Use(auth.AuthMiddleware(authProvider))
+			// Apply demo mode middleware after auth
+			r.Use(auth.DemoModeMiddleware(passkey.DemoUserID))
 
 			handlers.NewAccountHandler(accountSvc).RegisterRoutes(r)
 			handlers.NewBalanceHandler(balanceSvc).RegisterRoutes(r)
@@ -163,6 +169,7 @@ func main() {
 			handlers.NewSyncHandler(syncSvc).RegisterRoutes(r)
 			handlers.NewTransactionHandler(transactionSvc).RegisterRoutes(r)
 			handlers.NewDataHandler(exportSvc, importSvc).RegisterRoutes(r)
+			handlers.NewDemoHandler(demoSvc).RegisterRoutes(r)
 		})
 	})
 

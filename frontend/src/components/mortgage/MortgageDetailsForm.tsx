@@ -99,7 +99,7 @@ export function MortgageDetailsForm({ accountId, onSuccess }: MortgageDetailsFor
               <Label htmlFor="rate_type">Rate Type</Label>
               <Select
                 value={formData.rate_type}
-                onValueChange={(value) => updateField('rate_type', value)}
+                onValueChange={(value) => updateField('rate_type', value as "fixed" | "variable")}
               >
                 <SelectTrigger id="rate_type">
                   <SelectValue />
@@ -197,7 +197,7 @@ export function MortgageDetailsForm({ accountId, onSuccess }: MortgageDetailsFor
               <Label htmlFor="payment_frequency">Payment Frequency</Label>
               <Select
                 value={formData.payment_frequency}
-                onValueChange={(value) => updateField('payment_frequency', value)}
+                onValueChange={(value) => updateField('payment_frequency', value as "weekly" | "bi-weekly" | "semi-monthly" | "monthly")}
               >
                 <SelectTrigger id="payment_frequency">
                   <SelectValue />

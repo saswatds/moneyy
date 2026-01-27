@@ -81,11 +81,19 @@ export interface SyncStatusResponse {
 }
 
 export interface SyncConnection {
-  connection_id: string;
-  connection_name: string;
+  id: string;
+  user_id: string;
+  provider: string;
+  name: string;
+  email?: string;
   status: 'connected' | 'disconnected' | 'error' | 'syncing';
   last_sync_at?: string;
   last_sync_error?: string;
+  token_expires_at?: string;
+  sync_frequency: string;
+  account_count: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface WealthsimpleInitiateResponse {
@@ -503,6 +511,18 @@ export interface UpdateRecurringExpenseRequest {
   is_active?: boolean;
 }
 
+export interface InferredExpense {
+  account_id: string;
+  account_name: string;
+  type: 'mortgage' | 'loan';
+  amount: number;
+  currency: 'CAD' | 'USD' | 'INR';
+  frequency: string;
+  interest_rate: number;
+  remaining_term?: number;
+  original_amount: number;
+}
+
 class ApiClient {
   private baseUrl: string;
   private getToken: () => string | null = () => localStorage.getItem('auth_token');
@@ -521,6 +541,11 @@ class ApiClient {
     // Add Authorization header if token exists
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    // Add demo mode header if enabled
+    if (localStorage.getItem('demo_mode') === 'true') {
+      headers['X-Demo-Mode'] = 'true';
     }
 
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
@@ -788,7 +813,7 @@ class ApiClient {
   }
 
   // Recurring Expenses
-  async getRecurringExpenses(): Promise<{ expenses: RecurringExpense[] }> {
+  async getRecurringExpenses(): Promise<{ expenses: RecurringExpense[]; inferred_expenses: InferredExpense[] }> {
     return this.request('/recurring-expenses');
   }
 
@@ -926,6 +951,23 @@ class ApiClient {
     }
 
     return response.json();
+  }
+
+  // Demo mode endpoints
+  async seedDemoData(): Promise<{ success: boolean; message: string }> {
+    return this.request('/demo/seed', {
+      method: 'POST',
+    });
+  }
+
+  async resetDemoData(): Promise<{ success: boolean; message: string }> {
+    return this.request('/demo/reset', {
+      method: 'POST',
+    });
+  }
+
+  async getDemoStatus(): Promise<{ has_data: boolean }> {
+    return this.request('/demo/status');
   }
 }
 

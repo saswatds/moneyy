@@ -123,7 +123,7 @@ export function SensitivityAnalysisDialog({
           modifiedConfig = onUpdateValue(parameterName, value);
         } else {
           // Direct property update
-          (modifiedConfig as Record<string, number>)[parameterName] = value;
+          (modifiedConfig as any)[parameterName] = value;
         }
 
         // Run projection

@@ -43,3 +43,21 @@ func AuthMiddleware(provider AuthProvider) func(http.Handler) http.Handler {
 		})
 	}
 }
+
+// DemoModeMiddleware overrides the user context to demo user when X-Demo-Mode header is present
+// This middleware should be placed after AuthMiddleware to ensure authentication is validated first
+func DemoModeMiddleware(demoUserID string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := r.Context()
+
+			// Check if demo mode is enabled via header
+			if r.Header.Get("X-Demo-Mode") == "true" {
+				// Override user context to demo user
+				ctx = WithUserID(ctx, demoUserID)
+			}
+
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}

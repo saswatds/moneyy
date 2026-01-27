@@ -13,7 +13,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { IconLink, IconBuilding, IconRefresh, IconTrash, IconPlus, IconBrandStripe, IconBrandPaypal, IconEdit, IconDownload, IconUpload, IconAlertCircle, IconLoader2, IconHistory } from '@tabler/icons-react';
+import { IconLink, IconBuilding, IconRefresh, IconTrash, IconPlus, IconBrandStripe, IconBrandPaypal, IconEdit, IconDownload, IconUpload, IconAlertCircle, IconLoader2, IconHistory, IconChartLine } from '@tabler/icons-react';
 import {
   Table,
   TableBody,
@@ -50,6 +50,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { WealthsimpleConnectDialog } from '@/components/sync/WealthsimpleConnectDialog';
 import { useRef } from 'react';
 import { apiClient } from '@/lib/api-client';
+import { useDemoMode } from '@/lib/demo-context';
 
 interface Connection {
   id: string;
@@ -111,6 +112,7 @@ const AVAILABLE_PROVIDERS: Provider[] = [
 ];
 
 export function Settings() {
+  const { isDemoMode, enterDemoMode, exitDemoMode, resetDemoData, isLoading: demoLoading } = useDemoMode();
   const [connections, setConnections] = useState<Connection[]>([]);
   const [loading, setLoading] = useState(true);
   const [showConnectDialog, setShowConnectDialog] = useState(false);
@@ -722,6 +724,141 @@ export function Settings() {
               </Button>
             </CardContent>
           </Card>
+        </div>
+      </div>
+
+      {/* Demo Mode Section */}
+      <div className="space-y-4">
+        <div>
+          <h2 className="text-xl font-semibold">Demo Mode</h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            {isDemoMode
+              ? 'You are currently exploring sample data'
+              : 'Try the app with sample data without affecting your real accounts'}
+          </p>
+        </div>
+
+        <Separator />
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {isDemoMode ? (
+            <>
+              {/* Reset Demo Data Card */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <IconRefresh className="h-5 w-5" />
+                    Reset Demo Data
+                  </CardTitle>
+                  <CardDescription>
+                    Restore demo data to its original state
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="text-sm text-muted-foreground">
+                    <p>This will:</p>
+                    <ul className="list-disc list-inside space-y-1 mt-2">
+                      <li>Delete all current demo data</li>
+                      <li>Restore original sample accounts</li>
+                      <li>Reset balances and transactions</li>
+                    </ul>
+                  </div>
+                  <Button
+                    onClick={() => resetDemoData()}
+                    disabled={demoLoading}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    {demoLoading ? (
+                      <>
+                        <IconLoader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Resetting...
+                      </>
+                    ) : (
+                      <>
+                        <IconRefresh className="mr-2 h-4 w-4" />
+                        Reset Demo Data
+                      </>
+                    )}
+                  </Button>
+                </CardContent>
+              </Card>
+
+              {/* Exit Demo Mode Card */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <IconAlertCircle className="h-5 w-5" />
+                    Exit Demo Mode
+                  </CardTitle>
+                  <CardDescription>
+                    Switch back to your real accounts
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="text-sm text-muted-foreground">
+                    <p>This will:</p>
+                    <ul className="list-disc list-inside space-y-1 mt-2">
+                      <li>Switch to your real data</li>
+                      <li>Preserve demo data for later</li>
+                      <li>You can re-enter demo mode anytime</li>
+                    </ul>
+                  </div>
+                  <Button
+                    onClick={exitDemoMode}
+                    disabled={demoLoading}
+                    className="w-full"
+                  >
+                    Exit Demo Mode
+                  </Button>
+                </CardContent>
+              </Card>
+            </>
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <IconChartLine className="h-5 w-5" />
+                  Try Demo Mode
+                </CardTitle>
+                <CardDescription>
+                  Explore with sample financial data
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="text-sm text-muted-foreground">
+                  <p className="mb-2">Demo mode includes:</p>
+                  <ul className="list-disc list-inside space-y-1">
+                    <li>Sample Canadian accounts (TD, Wealthsimple, etc.)</li>
+                    <li>Investment portfolios with holdings</li>
+                    <li>Mortgage and loan examples</li>
+                    <li>Physical assets and recurring expenses</li>
+                    <li>Projection scenarios</li>
+                  </ul>
+                  <p className="mt-3 font-medium">
+                    Your real data will be preserved and can be accessed anytime.
+                  </p>
+                </div>
+                <Button
+                  onClick={() => enterDemoMode()}
+                  disabled={demoLoading}
+                  className="w-full"
+                >
+                  {demoLoading ? (
+                    <>
+                      <IconLoader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Loading demo...
+                    </>
+                  ) : (
+                    <>
+                      <IconChartLine className="mr-2 h-4 w-4" />
+                      Enter Demo Mode
+                    </>
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
 

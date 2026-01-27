@@ -64,7 +64,7 @@ type Account struct {
 	Name         string      `json:"name"`
 	Type         AccountType `json:"type"`
 	Currency     Currency    `json:"currency"`
-	Institution  string      `json:"institution,omitempty"`
+	Institution  *string     `json:"institution,omitempty"`
 	IsAsset      bool        `json:"is_asset"`
 	IsActive     bool        `json:"is_active"`
 	IsSynced     bool        `json:"is_synced"`               // true if managed by a connection
@@ -78,7 +78,7 @@ type CreateAccountRequest struct {
 	Name         string      `json:"name"`
 	Type         AccountType `json:"type"`
 	Currency     Currency    `json:"currency"`
-	Institution  string      `json:"institution,omitempty"`
+	Institution  *string     `json:"institution,omitempty"`
 	IsAsset      bool        `json:"is_asset"`
 	IsSynced     bool        `json:"is_synced,omitempty"`     // Optional: mark as synced account
 	ConnectionID string      `json:"connection_id,omitempty"` // Optional: connection reference
@@ -444,7 +444,7 @@ func (s *Service) Update(ctx context.Context, id string, req *UpdateAccountReque
 		account.Currency = *req.Currency
 	}
 	if req.Institution != nil {
-		account.Institution = *req.Institution
+		account.Institution = req.Institution
 	}
 	if req.IsAsset != nil {
 		account.IsAsset = *req.IsAsset
