@@ -81,11 +81,19 @@ export interface SyncStatusResponse {
 }
 
 export interface SyncConnection {
-  connection_id: string;
-  connection_name: string;
+  id: string;
+  user_id: string;
+  provider: string;
+  name: string;
+  email?: string;
   status: 'connected' | 'disconnected' | 'error' | 'syncing';
   last_sync_at?: string;
   last_sync_error?: string;
+  token_expires_at?: string;
+  sync_frequency: string;
+  account_count: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface WealthsimpleInitiateResponse {
