@@ -740,24 +740,6 @@ export function Settings() {
 
         <Separator />
 
-        {isDemoMode ? (
-          <Alert>
-            <IconAlertCircle className="h-4 w-4" />
-            <AlertTitle>Demo Mode Active</AlertTitle>
-            <AlertDescription>
-              You're currently viewing and interacting with sample demo data. Any changes you make will only affect the demo data, not your real accounts. You can switch back to your real data anytime.
-            </AlertDescription>
-          </Alert>
-        ) : (
-          <Alert>
-            <IconAlertCircle className="h-4 w-4" />
-            <AlertTitle>Real Data Mode</AlertTitle>
-            <AlertDescription>
-              You're currently viewing your real financial data. Switch to demo mode to explore the app with sample data.
-            </AlertDescription>
-          </Alert>
-        )}
-
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {isDemoMode ? (
             <>
