@@ -36,13 +36,17 @@ func (h *DemoHandler) RegisterRoutes(r chi.Router) {
 func (h *DemoHandler) HandleSeed(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	// Verify user is authenticated
 	userID := auth.GetUserID(ctx)
 	if userID == "" {
 		server.RespondError(w, http.StatusUnauthorized, fmt.Errorf("user not authenticated"))
 		return
 	}
 
-	err := h.demoService.SeedDemoData(ctx, userID)
+	// Always seed demo data for demo-user, not the authenticated user
+	// This ensures demo mode works correctly
+	const demoUserID = "demo-user"
+	err := h.demoService.SeedDemoData(ctx, demoUserID)
 	if err != nil {
 		server.RespondError(w, http.StatusInternalServerError, fmt.Errorf("failed to seed demo data: %w", err))
 		return
@@ -58,13 +62,16 @@ func (h *DemoHandler) HandleSeed(w http.ResponseWriter, r *http.Request) {
 func (h *DemoHandler) HandleReset(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	// Verify user is authenticated
 	userID := auth.GetUserID(ctx)
 	if userID == "" {
 		server.RespondError(w, http.StatusUnauthorized, fmt.Errorf("user not authenticated"))
 		return
 	}
 
-	err := h.demoService.ResetDemoData(ctx, userID)
+	// Always reset demo data for demo-user
+	const demoUserID = "demo-user"
+	err := h.demoService.ResetDemoData(ctx, demoUserID)
 	if err != nil {
 		server.RespondError(w, http.StatusInternalServerError, fmt.Errorf("failed to reset demo data: %w", err))
 		return
@@ -80,13 +87,16 @@ func (h *DemoHandler) HandleReset(w http.ResponseWriter, r *http.Request) {
 func (h *DemoHandler) HandleStatus(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	// Verify user is authenticated
 	userID := auth.GetUserID(ctx)
 	if userID == "" {
 		server.RespondError(w, http.StatusUnauthorized, fmt.Errorf("user not authenticated"))
 		return
 	}
 
-	hasData, err := h.demoService.HasDemoData(ctx, userID)
+	// Always check demo data for demo-user
+	const demoUserID = "demo-user"
+	hasData, err := h.demoService.HasDemoData(ctx, demoUserID)
 	if err != nil {
 		server.RespondError(w, http.StatusInternalServerError, fmt.Errorf("failed to check demo data status: %w", err))
 		return
