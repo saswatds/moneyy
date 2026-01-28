@@ -734,7 +734,7 @@ func (s *Service) getRecurringExpensesTotal(ctx context.Context) (float64, error
 
 // calculateTax calculates tax based on progressive tax brackets
 func (s *Service) calculateTax(income float64, brackets []TaxBracket) float64 {
-	if len(brackets) == 0 {
+	if len(brackets) == 0 || income <= 0 {
 		return 0
 	}
 
