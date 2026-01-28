@@ -126,6 +126,29 @@ type AccountSummary struct {
 	ByType            map[string]int `json:"by_type"`
 }
 
+// verifyAccountOwnership checks if the account belongs to the authenticated user
+func (s *Service) verifyAccountOwnership(ctx context.Context, accountID string) error {
+	userID := auth.GetUserID(ctx)
+	if userID == "" {
+		return fmt.Errorf("user not authenticated")
+	}
+
+	var ownerID string
+	err := s.db.QueryRowContext(ctx, "SELECT user_id FROM accounts WHERE id = $1", accountID).Scan(&ownerID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return fmt.Errorf("account not found")
+		}
+		return fmt.Errorf("failed to verify account ownership: %w", err)
+	}
+
+	if ownerID != userID {
+		return fmt.Errorf("access denied: account does not belong to user")
+	}
+
+	return nil
+}
+
 // Create creates a new account
 func (s *Service) Create(ctx context.Context, req *CreateAccountRequest) (*Account, error) {
 	// TODO: Get user ID from auth context

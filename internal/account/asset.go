@@ -9,6 +9,7 @@ import (
 	"math"
 	"time"
 
+	"money/internal/auth"
 	"money/internal/balance"
 	"github.com/google/uuid"
 )
@@ -110,6 +111,11 @@ type DepreciationScheduleResponse struct {
 
 // CreateAssetDetails creates asset details for an account
 func (s *Service) CreateAssetDetails(ctx context.Context, accountID string, req *CreateAssetDetailsRequest) (*AssetDetails, error) {
+	// Verify account ownership
+	if err := s.verifyAccountOwnership(ctx, accountID); err != nil {
+		return nil, err
+	}
+
 	// Validate depreciation method requirements
 	if err := validateAssetDetails(req.DepreciationMethod, req.UsefulLifeYears, req.DepreciationRate); err != nil {
 		return nil, err
@@ -157,15 +163,21 @@ func (s *Service) CreateAssetDetails(ctx context.Context, accountID string, req 
 
 // GetAssetDetails retrieves asset details for an account
 func (s *Service) GetAssetDetails(ctx context.Context, accountID string) (*AssetDetails, error) {
+	userID := auth.GetUserID(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("user not authenticated")
+	}
+
 	var details AssetDetails
 
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, account_id, asset_type, purchase_price, purchase_date,
-			depreciation_method, useful_life_years, salvage_value, depreciation_rate,
-			type_specific_data, notes, created_at, updated_at
-		FROM asset_details
-		WHERE account_id = $1
-	`, accountID).Scan(
+		SELECT ad.id, ad.account_id, ad.asset_type, ad.purchase_price, ad.purchase_date,
+			ad.depreciation_method, ad.useful_life_years, ad.salvage_value, ad.depreciation_rate,
+			ad.type_specific_data, ad.notes, ad.created_at, ad.updated_at
+		FROM asset_details ad
+		JOIN accounts a ON ad.account_id = a.id
+		WHERE ad.account_id = $1 AND a.user_id = $2
+	`, accountID, userID).Scan(
 		&details.ID, &details.AccountID, &details.AssetType, &details.PurchasePrice, &details.PurchaseDate,
 		&details.DepreciationMethod, &details.UsefulLifeYears, &details.SalvageValue, &details.DepreciationRate,
 		&details.TypeSpecificData, &details.Notes, &details.CreatedAt, &details.UpdatedAt,
@@ -180,6 +192,11 @@ func (s *Service) GetAssetDetails(ctx context.Context, accountID string) (*Asset
 
 // UpdateAssetDetails updates asset details for an account
 func (s *Service) UpdateAssetDetails(ctx context.Context, accountID string, req *UpdateAssetDetailsRequest) (*AssetDetails, error) {
+	// Verify account ownership
+	if err := s.verifyAccountOwnership(ctx, accountID); err != nil {
+		return nil, err
+	}
+
 	// Validate depreciation method requirements
 	if err := validateAssetDetails(req.DepreciationMethod, req.UsefulLifeYears, req.DepreciationRate); err != nil {
 		return nil, err
@@ -235,13 +252,20 @@ func (s *Service) GetAssetValuation(ctx context.Context, accountID string) (*Ass
 
 // GetAssetsSummary retrieves all assets with calculated current values
 func (s *Service) GetAssetsSummary(ctx context.Context) (*AssetsSummaryResponse, error) {
+	userID := auth.GetUserID(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("user not authenticated")
+	}
+
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, account_id, asset_type, purchase_price, purchase_date,
-			depreciation_method, useful_life_years, salvage_value, depreciation_rate,
-			type_specific_data, notes, created_at, updated_at
-		FROM asset_details
-		ORDER BY created_at DESC
-	`)
+		SELECT ad.id, ad.account_id, ad.asset_type, ad.purchase_price, ad.purchase_date,
+			ad.depreciation_method, ad.useful_life_years, ad.salvage_value, ad.depreciation_rate,
+			ad.type_specific_data, ad.notes, ad.created_at, ad.updated_at
+		FROM asset_details ad
+		JOIN accounts a ON ad.account_id = a.id
+		WHERE a.user_id = $1
+		ORDER BY ad.created_at DESC
+	`, userID)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get assets: %w", err)
@@ -322,6 +346,11 @@ func (s *Service) RecordDepreciation(ctx context.Context, accountID string, req 
 
 // GetDepreciationHistory retrieves all depreciation entries for an asset
 func (s *Service) GetDepreciationHistory(ctx context.Context, accountID string) (*DepreciationEntriesResponse, error) {
+	// Verify account ownership
+	if err := s.verifyAccountOwnership(ctx, accountID); err != nil {
+		return nil, err
+	}
+
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, account_id, entry_date, current_value, accumulated_depreciation, notes, created_at
 		FROM asset_depreciation_entries

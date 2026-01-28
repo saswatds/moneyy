@@ -179,6 +179,11 @@ type MortgagePaymentsResponse struct {
 
 // CreateMortgageDetails creates mortgage details for an account
 func (s *Service) CreateMortgageDetails(ctx context.Context, accountID string, req *CreateMortgageDetailsRequest) (*MortgageDetails, error) {
+	// Verify account ownership
+	if err := s.verifyAccountOwnership(ctx, accountID); err != nil {
+		return nil, err
+	}
+
 	// Calculate maturity date
 	maturityDate := Date{Time: req.StartDate.Time.AddDate(0, req.TermMonths, 0)}
 
@@ -271,6 +276,11 @@ func (s *Service) CreateMortgageDetails(ctx context.Context, accountID string, r
 
 // GetMortgageDetails retrieves mortgage details for an account
 func (s *Service) GetMortgageDetails(ctx context.Context, accountID string) (*MortgageDetails, error) {
+	// Verify account ownership
+	if err := s.verifyAccountOwnership(ctx, accountID); err != nil {
+		return nil, err
+	}
+
 	var details MortgageDetails
 
 	err := s.db.QueryRowContext(ctx, `
@@ -398,6 +408,11 @@ func getNextPaymentDate(currentDate time.Time, frequency string) time.Time {
 
 // RecordMortgagePayment records an actual mortgage payment
 func (s *Service) RecordMortgagePayment(ctx context.Context, accountID string, req *CreateMortgagePaymentRequest) (*MortgagePayment, error) {
+	// Verify account ownership
+	if err := s.verifyAccountOwnership(ctx, accountID); err != nil {
+		return nil, err
+	}
+
 	// Get current balance from either the last payment or the original mortgage amount
 	var currentBalance float64
 	err := s.db.QueryRowContext(ctx, `
@@ -502,6 +517,11 @@ func (s *Service) SyncMortgageBalance(ctx context.Context, accountID string) err
 
 // GetMortgagePayments retrieves all payments for a mortgage account
 func (s *Service) GetMortgagePayments(ctx context.Context, accountID string) (*MortgagePaymentsResponse, error) {
+	// Verify account ownership
+	if err := s.verifyAccountOwnership(ctx, accountID); err != nil {
+		return nil, err
+	}
+
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, account_id, payment_date,
 			payment_amount, principal_amount, interest_amount, extra_payment,

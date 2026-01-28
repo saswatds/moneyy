@@ -14,9 +14,6 @@ type AuthProvider interface {
 	// VerifyToken validates a JWT and returns the user ID
 	VerifyToken(ctx context.Context, token string) (string, error)
 
-	// GetAuthMode returns "passkey" or "clerk"
-	GetAuthMode() string
-
 	// RegisterRoutes registers auth-specific routes
 	RegisterRoutes(r chi.Router)
 }

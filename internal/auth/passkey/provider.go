@@ -137,11 +137,6 @@ func (p *PasskeyAuthProvider) VerifyToken(ctx context.Context, token string) (st
 	return claims.UserID, nil
 }
 
-// GetAuthMode returns "passkey"
-func (p *PasskeyAuthProvider) GetAuthMode() string {
-	return "passkey"
-}
-
 // RegisterRoutes registers passkey-specific routes
 func (p *PasskeyAuthProvider) RegisterRoutes(r chi.Router) {
 	r.Post("/register/begin", p.handleRegistrationBegin)
