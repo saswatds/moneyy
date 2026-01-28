@@ -966,9 +966,18 @@ func (s *Service) DeleteScenario(ctx context.Context, id string) (*DeleteScenari
 		return nil, fmt.Errorf("user not authenticated")
 	}
 
-	_, err := s.accountDB.ExecContext(ctx, `DELETE FROM projection_scenarios WHERE id = $1 AND user_id = $2`, id, userID)
+	result, err := s.accountDB.ExecContext(ctx, `DELETE FROM projection_scenarios WHERE id = $1 AND user_id = $2`, id, userID)
 	if err != nil {
 		return &DeleteScenarioResponse{Success: false}, err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return &DeleteScenarioResponse{Success: false}, err
+	}
+
+	if rowsAffected == 0 {
+		return nil, fmt.Errorf("scenario not found or unauthorized")
 	}
 
 	return &DeleteScenarioResponse{Success: true}, nil
