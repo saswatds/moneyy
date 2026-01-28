@@ -20,7 +20,6 @@ import (
 	"money/internal/holdings"
 	"money/internal/logger"
 	"money/internal/projections"
-	"money/internal/server"
 	"money/internal/server/handlers"
 	"money/internal/sync"
 	"money/internal/transaction"
@@ -110,7 +109,7 @@ func main() {
 		log.Fatalf("Failed to initialize auth: %v", err)
 	}
 
-	logger.Info("Authentication initialized", "mode", authProvider.GetAuthMode())
+	logger.Info("Authentication initialized")
 
 	// Setup HTTP router
 	logger.Info("Registering HTTP handlers")
@@ -145,13 +144,6 @@ func main() {
 		// Auth routes (public)
 		r.Route("/auth", func(r chi.Router) {
 			authProvider.RegisterRoutes(r)
-
-			// Auth mode endpoint
-			r.Get("/mode", func(w http.ResponseWriter, r *http.Request) {
-				server.RespondJSON(w, http.StatusOK, map[string]string{
-					"mode": authProvider.GetAuthMode(),
-				})
-			})
 		})
 
 		// Protected routes group

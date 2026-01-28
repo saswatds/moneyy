@@ -82,6 +82,11 @@ type LoanPaymentsResponse struct {
 
 // CreateLoanDetails creates loan details for an account
 func (s *Service) CreateLoanDetails(ctx context.Context, accountID string, req *CreateLoanDetailsRequest) (*LoanDetails, error) {
+	// Verify account ownership
+	if err := s.verifyAccountOwnership(ctx, accountID); err != nil {
+		return nil, err
+	}
+
 	// Calculate maturity date
 	maturityDate := Date{Time: req.StartDate.Time.AddDate(0, req.TermMonths, 0)}
 
@@ -159,6 +164,11 @@ func (s *Service) CreateLoanDetails(ctx context.Context, accountID string, req *
 
 // GetLoanDetails retrieves loan details for an account
 func (s *Service) GetLoanDetails(ctx context.Context, accountID string) (*LoanDetails, error) {
+	// Verify account ownership
+	if err := s.verifyAccountOwnership(ctx, accountID); err != nil {
+		return nil, err
+	}
+
 	var details LoanDetails
 
 	err := s.db.QueryRowContext(ctx, `
@@ -250,6 +260,11 @@ func calculateLoanAmortizationSchedule(details *LoanDetails) []AmortizationEntry
 
 // RecordLoanPayment records an actual loan payment
 func (s *Service) RecordLoanPayment(ctx context.Context, accountID string, req *CreateLoanPaymentRequest) (*LoanPayment, error) {
+	// Verify account ownership
+	if err := s.verifyAccountOwnership(ctx, accountID); err != nil {
+		return nil, err
+	}
+
 	// Get current balance from either the last payment or the original loan amount
 	var currentBalance float64
 	err := s.db.QueryRowContext(ctx, `
@@ -350,6 +365,11 @@ func (s *Service) SyncLoanBalance(ctx context.Context, accountID string) error {
 
 // GetLoanPayments retrieves all payments for a loan account
 func (s *Service) GetLoanPayments(ctx context.Context, accountID string) (*LoanPaymentsResponse, error) {
+	// Verify account ownership
+	if err := s.verifyAccountOwnership(ctx, accountID); err != nil {
+		return nil, err
+	}
+
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, account_id, payment_date,
 			payment_amount, principal_amount, interest_amount, extra_payment,

@@ -6,10 +6,7 @@ export interface User {
   name: string;
 }
 
-export type AuthMode = 'passkey' | 'clerk' | null;
-
 interface AuthContextType {
-  mode: AuthMode;
   isAuthenticated: boolean;
   isLoading: boolean;
   user: User | null;
@@ -25,8 +22,7 @@ const TOKEN_KEY = 'auth_token';
 const USER_KEY = 'auth_user';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [mode, setMode] = useState<AuthMode>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [token, setTokenState] = useState<string | null>(() => {
     return localStorage.getItem(TOKEN_KEY);
   });
@@ -58,25 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   };
 
-  // Detect auth mode on mount
-  useEffect(() => {
-    const detectAuthMode = async () => {
-      try {
-        const response = await fetch('/api/auth/mode');
-        const data = await response.json();
-        setMode(data.mode as AuthMode);
-      } catch (error) {
-        console.error('Failed to detect auth mode:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    detectAuthMode();
-  }, []);
-
   const value = {
-    mode,
     isAuthenticated: !!token && !!user,
     isLoading,
     user,
