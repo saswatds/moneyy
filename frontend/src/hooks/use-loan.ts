@@ -5,12 +5,12 @@ import type {
   CreateLoanPaymentRequest,
 } from '@/lib/api-client';
 
-export function useLoanDetails(accountId: string) {
+export function useLoanDetails(accountId: string, enabled: boolean = true) {
   return useQuery({
     queryKey: ['loan-details', accountId],
     queryFn: () => apiClient.getLoanDetails(accountId),
     retry: false, // Don't retry if loan details don't exist
-    enabled: !!accountId,
+    enabled: !!accountId && enabled,
   });
 }
 

@@ -24,7 +24,7 @@ type Balance struct {
 	AccountID string    `json:"account_id"`
 	Amount    float64   `json:"amount"`
 	Date      time.Time `json:"date"`
-	Notes     string    `json:"notes,omitempty"`
+	Notes     *string   `json:"notes,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
@@ -145,11 +145,15 @@ func (s *Service) GetAccountBalances(ctx context.Context, accountID string) (*Li
 func (s *Service) Create(ctx context.Context, req *CreateBalanceRequest) (*CreateBalanceResponse, error) {
 	// TODO: Verify user owns the account
 
+	var notes *string
+	if req.Notes != "" {
+		notes = &req.Notes
+	}
 	balance := &Balance{
 		AccountID: req.AccountID,
 		Amount:    req.Amount,
 		Date:      req.Date,
-		Notes:     req.Notes,
+		Notes:     notes,
 		CreatedAt: time.Now(),
 	}
 
@@ -229,7 +233,7 @@ func (s *Service) Update(ctx context.Context, id string, req *UpdateBalanceReque
 		balance.Date = *req.Date
 	}
 	if req.Notes != nil {
-		balance.Notes = *req.Notes
+		balance.Notes = req.Notes
 	}
 
 	_, err = s.db.ExecContext(ctx, `

@@ -2,11 +2,13 @@ import { useNavigate } from 'react-router-dom';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth-context';
-import { IconLogout } from '@tabler/icons-react';
+import { useDemoMode } from '@/lib/demo-context';
+import { IconLogout, IconInfoCircle, IconX } from '@tabler/icons-react';
 
 export function Header() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const { isDemoMode, exitDemoMode } = useDemoMode();
 
   const handleLogout = () => {
     logout();
@@ -14,13 +16,31 @@ export function Header() {
   };
 
   return (
-    <header className="border-b border-border bg-card">
+    <header className={isDemoMode ? "border-b border-amber-500/20 bg-amber-500/10" : "border-b border-border bg-card"}>
       <div className="flex h-16 items-center gap-4 px-4 sm:px-6 lg:px-8">
         <SidebarTrigger className="-ml-1" />
         <div className="flex flex-1 items-center justify-between">
-          <div className="text-sm font-medium text-muted-foreground">
-            Let's keep track of your finances!
-          </div>
+          {isDemoMode ? (
+            <div className="flex items-center gap-3">
+              <IconInfoCircle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              <span className="text-sm font-medium text-amber-900 dark:text-amber-100">
+                Demo Mode - You're exploring sample data
+              </span>
+              <Button
+                onClick={exitDemoMode}
+                variant="outline"
+                size="sm"
+                className="ml-2 h-7 bg-background hover:bg-background/80"
+              >
+                <IconX className="h-3 w-3 mr-1" />
+                Exit Demo
+              </Button>
+            </div>
+          ) : (
+            <div className="text-sm font-medium text-muted-foreground">
+              Let's keep track of your finances!
+            </div>
+          )}
           <div className="flex items-center gap-4">
             {user && (
               <div className="text-sm text-muted-foreground">

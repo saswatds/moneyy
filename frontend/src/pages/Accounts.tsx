@@ -516,7 +516,11 @@ export function Accounts() {
               <tbody>
                 {filteredAccounts.length > 0 ? (
                   filteredAccounts.map((account) => (
-                    <tr key={account.id} className="border-b border-border last:border-0">
+                    <tr
+                      key={account.id}
+                      className="border-b border-border last:border-0 cursor-pointer hover:bg-muted/50"
+                      onClick={() => navigate(`/accounts/${account.id}`)}
+                    >
                       <td className="px-4 py-4">
                         <div className="text-sm text-muted-foreground">
                           {account.institution || '-'}
@@ -580,13 +584,6 @@ export function Accounts() {
                       </td>
                       <td className="px-4 py-4">
                         <div className="flex items-center gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => navigate(`/accounts/${account.id}`)}
-                          >
-                            View
-                          </Button>
                           <Button
                             variant="outline"
                             size="sm"
