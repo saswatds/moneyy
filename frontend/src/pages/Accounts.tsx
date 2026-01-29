@@ -488,13 +488,10 @@ export function Accounts() {
               <thead>
                 <tr className="border-b border-border">
                   <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
-                    Institution
+                    Type
                   </th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
                     Name
-                  </th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
-                    Type
                   </th>
                   <th className="px-4 py-3 text-right text-sm font-medium text-muted-foreground">
                     Current Balance
@@ -503,10 +500,10 @@ export function Accounts() {
                     Currency
                   </th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
-                    Category
+                    Institution
                   </th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
-                    Status
+                    Category
                   </th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
                     Actions
@@ -522,9 +519,9 @@ export function Accounts() {
                       onClick={() => navigate(`/accounts/${account.id}`)}
                     >
                       <td className="px-4 py-4">
-                        <div className="text-sm text-muted-foreground">
-                          {account.institution || '-'}
-                        </div>
+                        <span className={`px-2 py-1 text-xs font-medium rounded ${getAccountTypeBadgeColor(account.type)}`}>
+                          {getAccountTypeLabel(account.type)}
+                        </span>
                       </td>
                       <td className="px-4 py-4">
                         <div className="flex items-center gap-2">
@@ -549,16 +546,16 @@ export function Accounts() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-4">
-                        <span className={`px-2 py-1 text-xs font-medium rounded ${getAccountTypeBadgeColor(account.type)}`}>
-                          {getAccountTypeLabel(account.type)}
-                        </span>
-                      </td>
                       <td className="px-4 py-4 text-right">
                         <div className="text-sm">{formatBalance(account)}</div>
                       </td>
                       <td className="px-4 py-4">
                         <div className="text-sm">{account.currency}</div>
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="text-sm text-muted-foreground">
+                          {account.institution || '-'}
+                        </div>
                       </td>
                       <td className="px-4 py-4">
                         <span
@@ -569,17 +566,6 @@ export function Accounts() {
                           }`}
                         >
                           {account.is_asset ? 'Asset' : 'Liability'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-4">
-                        <span
-                          className={`px-2 py-1 text-xs font-medium rounded ${
-                            account.is_active
-                              ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                              : 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400'
-                          }`}
-                        >
-                          {account.is_active ? 'Active' : 'Inactive'}
                         </span>
                       </td>
                       <td className="px-4 py-4">
@@ -611,7 +597,7 @@ export function Accounts() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={8} className="px-4 py-12 text-center">
+                    <td colSpan={7} className="px-4 py-12 text-center">
                       <div className="text-muted-foreground">
                         {filterType !== 'all' || filterCategory !== 'all'
                           ? 'No accounts match the selected filters.'
