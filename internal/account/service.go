@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/lib/pq"
+
 	"money/internal/auth"
 	"money/internal/balance"
 )
@@ -364,7 +366,7 @@ func (s *Service) ListWithBalance(ctx context.Context) (*ListAccountsWithBalance
 			FROM balances
 			WHERE account_id = ANY($1)
 			ORDER BY account_id, date DESC
-		`, accountIDs)
+		`, pq.Array(accountIDs))
 		if err != nil {
 			// If there's an error fetching balances, just return accounts without balances
 			return &ListAccountsWithBalanceResponse{Accounts: accounts}, nil
@@ -492,19 +494,27 @@ func (s *Service) Update(ctx context.Context, id string, req *UpdateAccountReque
 
 // Delete deletes an account (soft delete by setting is_active to false)
 func (s *Service) Delete(ctx context.Context, id string) (*DeleteAccountResponse, error) {
-	// TODO: Get user ID from auth context and verify ownership
 	userID := auth.GetUserID(ctx)
 	if userID == "" {
 		return nil, fmt.Errorf("user not authenticated")
 	}
 
-	_, err := s.db.ExecContext(ctx, `
+	result, err := s.db.ExecContext(ctx, `
 		DELETE FROM accounts
 		WHERE id = $1 AND user_id = $2
 	`, id, userID)
 
 	if err != nil {
 		return nil, err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return nil, err
+	}
+
+	if rowsAffected == 0 {
+		return nil, fmt.Errorf("account not found or access denied")
 	}
 
 	return &DeleteAccountResponse{Success: true}, nil
