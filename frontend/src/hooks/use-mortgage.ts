@@ -5,12 +5,12 @@ import type {
   CreateMortgagePaymentRequest,
 } from '@/lib/api-client';
 
-export function useMortgageDetails(accountId: string) {
+export function useMortgageDetails(accountId: string, enabled: boolean = true) {
   return useQuery({
     queryKey: ['mortgage-details', accountId],
     queryFn: () => apiClient.getMortgageDetails(accountId),
     retry: false, // Don't retry if mortgage details don't exist
-    enabled: !!accountId,
+    enabled: !!accountId && enabled,
   });
 }
 

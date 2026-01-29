@@ -57,7 +57,7 @@ type Holding struct {
 
 	// Metadata
 	PurchaseDate *time.Time `json:"purchase_date,omitempty"`
-	Notes        string     `json:"notes,omitempty"`
+	Notes        *string    `json:"notes,omitempty"`
 	CreatedAt    time.Time  `json:"created_at"`
 	UpdatedAt    time.Time  `json:"updated_at"`
 }
@@ -109,13 +109,17 @@ type DeleteHoldingResponse struct {
 func (s *Service) Create(ctx context.Context, req *CreateHoldingRequest) (*CreateHoldingResponse, error) {
 	// TODO: Verify user owns the account
 
+	var notes *string
+	if req.Notes != "" {
+		notes = &req.Notes
+	}
 	holding := &Holding{
 		AccountID: req.AccountID,
 		Type:      req.Type,
 		Symbol:    req.Symbol,
 		Quantity:  req.Quantity,
 		CostBasis: req.CostBasis,
-		Notes:     req.Notes,
+		Notes:     notes,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
@@ -272,7 +276,7 @@ func (s *Service) Update(ctx context.Context, id string, req *UpdateHoldingReque
 		holding.Amount = req.Amount
 	}
 	if req.Notes != nil {
-		holding.Notes = *req.Notes
+		holding.Notes = req.Notes
 	}
 	holding.UpdatedAt = time.Now()
 
