@@ -154,6 +154,32 @@ const calculateInferredYearlyAmount = (expense: InferredExpense) => {
   }
 };
 
+const calculateInferredMonthlyTotal = (expenses: InferredExpense[]) => {
+  return expenses.reduce((total, expense) => {
+    let monthlyAmount = 0;
+    switch (expense.frequency) {
+      case 'weekly':
+        monthlyAmount = expense.amount * 4.33;
+        break;
+      case 'bi-weekly':
+        monthlyAmount = expense.amount * 2.17;
+        break;
+      case 'monthly':
+        monthlyAmount = expense.amount;
+        break;
+      case 'quarterly':
+        monthlyAmount = expense.amount / 3;
+        break;
+      case 'annually':
+        monthlyAmount = expense.amount / 12;
+        break;
+      default:
+        monthlyAmount = expense.amount;
+    }
+    return total + monthlyAmount;
+  }, 0);
+};
+
 export function RecurringExpenses() {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -179,7 +205,9 @@ export function RecurringExpenses() {
     return true;
   });
 
-  const monthlyTotal = calculateMonthlyTotal(filteredExpenses);
+  const recurringMonthlyTotal = calculateMonthlyTotal(filteredExpenses);
+  const inferredMonthlyTotal = calculateInferredMonthlyTotal(inferredExpenses);
+  const monthlyTotal = recurringMonthlyTotal + inferredMonthlyTotal;
   const annualTotal = monthlyTotal * 12;
 
   // Get unique categories, frequencies, and currencies for filters
@@ -241,7 +269,12 @@ export function RecurringExpenses() {
               <div className="text-3xl font-bold tabular-nums">
                 {formatNumberWithSmallCents(monthlyTotal)}
               </div>
-              <div className="text-sm text-muted-foreground mt-1">CAD</div>
+              <div className="text-xs text-muted-foreground mt-1">
+                {inferredMonthlyTotal > 0 && (
+                  <span>{formatNumberOnly(recurringMonthlyTotal)} + {formatNumberOnly(inferredMonthlyTotal)} (loans)</span>
+                )}
+                {inferredMonthlyTotal === 0 && <span>CAD</span>}
+              </div>
             </div>
           </CardHeader>
         </Card>
@@ -263,9 +296,13 @@ export function RecurringExpenses() {
             <CardDescription>Active Expenses</CardDescription>
             <div className="mt-2">
               <div className="text-3xl font-bold tabular-nums">
-                {activeExpenses.length}
+                {activeExpenses.length + inferredExpenses.length}
               </div>
-              <div className="text-sm text-muted-foreground mt-1">Tracked</div>
+              <div className="text-xs text-muted-foreground mt-1">
+                {inferredExpenses.length > 0
+                  ? `${activeExpenses.length} tracked + ${inferredExpenses.length} from loans`
+                  : 'Tracked'}
+              </div>
             </div>
           </CardHeader>
         </Card>

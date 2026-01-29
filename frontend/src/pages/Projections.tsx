@@ -28,6 +28,7 @@ import {
   IconBulb,
   IconCopy,
   IconInfoCircle,
+  IconChevronDown,
 } from '@tabler/icons-react';
 import {
   Select,
@@ -101,6 +102,7 @@ export function Projections() {
   const [cloneDialogOpen, setCloneDialogOpen] = useState(false);
   const [cloneName, setCloneName] = useState('');
   const [sensitivityDialogOpen, setSensitivityDialogOpen] = useState(false);
+  const [taxBracketsOpen, setTaxBracketsOpen] = useState(false);
   const [sensitivityParameter, setSensitivityParameter] = useState<{
     name: string;
     label: string;
@@ -250,6 +252,34 @@ export function Projections() {
       return total + monthlyAmountInCAD;
     }, 0) || 0;
 
+  // Calculate monthly total from inferred expenses (loans/mortgages)
+  const computedInferredExpenses = recurringExpensesData?.inferred_expenses?.reduce((total, expense) => {
+    let monthlyAmount = 0;
+    switch (expense.frequency) {
+      case 'weekly':
+        monthlyAmount = expense.amount * 4.33;
+        break;
+      case 'bi-weekly':
+        monthlyAmount = expense.amount * 2.17;
+        break;
+      case 'monthly':
+        monthlyAmount = expense.amount;
+        break;
+      case 'quarterly':
+        monthlyAmount = expense.amount / 3;
+        break;
+      case 'annually':
+        monthlyAmount = expense.amount / 12;
+        break;
+      default:
+        monthlyAmount = expense.amount;
+    }
+    const monthlyAmountInCAD = convertToCAD(monthlyAmount, expense.currency);
+    return total + monthlyAmountInCAD;
+  }, 0) || 0;
+
+  const totalRecurringExpenses = computedRecurringExpenses + computedInferredExpenses;
+
   const handleCalculate = () => {
     calculateMutation.mutate();
   };
@@ -286,6 +316,19 @@ export function Projections() {
       setCloneDialogOpen(true);
     }
   };
+
+  // Get marginal tax rate for a given income
+  const getMarginalRate = (income: number, brackets: { up_to_income: number; rate: number }[]) => {
+    for (const bracket of brackets) {
+      if (bracket.up_to_income === 0 || income <= bracket.up_to_income) {
+        return bracket.rate;
+      }
+    }
+    return brackets[brackets.length - 1]?.rate || 0;
+  };
+
+  const federalRate = getMarginalRate(config.annual_salary, config.federal_tax_brackets);
+  const provincialRate = getMarginalRate(config.annual_salary, config.provincial_tax_brackets);
 
   const openSensitivityAnalysis = (
     name: string,
@@ -1024,7 +1067,19 @@ export function Projections() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>Annual Growth</Label>
+                    <Label className="flex items-center gap-1.5">
+                      Annual Growth
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <button className="text-muted-foreground hover:text-foreground">
+                            <IconInfoCircle className="h-3.5 w-3.5" />
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-64 text-sm">
+                          Expected yearly salary increase from raises, promotions, or cost-of-living adjustments. Typical range: 2-5% annually.
+                        </PopoverContent>
+                      </Popover>
+                    </Label>
                     <PercentageInput
                       value={config.annual_salary_growth}
                       onChange={(value) => setConfig({ ...config, annual_salary_growth: value })}
@@ -1046,14 +1101,26 @@ export function Projections() {
                       onChange={(value) => setConfig({ ...config, monthly_expenses: value })}
                       onAnalyze={() => openSensitivityAnalysis('monthly_expenses', 'Monthly Expenses', config.monthly_expenses)}
                     />
-                    {computedRecurringExpenses > 0 && (
+                    {totalRecurringExpenses > 0 && (
                       <p className="text-xs text-muted-foreground">
-                        + {Math.round(computedRecurringExpenses).toLocaleString()} CAD/mo from recurring
+                        + {Math.round(totalRecurringExpenses).toLocaleString()} CAD/mo from tracked expenses
                       </p>
                     )}
                   </div>
                   <div className="space-y-2">
-                    <Label>Annual Growth</Label>
+                    <Label className="flex items-center gap-1.5">
+                      Annual Growth
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <button className="text-muted-foreground hover:text-foreground">
+                            <IconInfoCircle className="h-3.5 w-3.5" />
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-64 text-sm">
+                          How much your expenses are expected to increase each year due to lifestyle changes. Often set to match or slightly exceed inflation.
+                        </PopoverContent>
+                      </Popover>
+                    </Label>
                     <PercentageInput
                       value={config.annual_expense_growth}
                       onChange={(value) => setConfig({ ...config, annual_expense_growth: value })}
@@ -1062,7 +1129,19 @@ export function Projections() {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label>Inflation Rate</Label>
+                  <Label className="flex items-center gap-1.5">
+                    Inflation Rate
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <button className="text-muted-foreground hover:text-foreground">
+                          <IconInfoCircle className="h-3.5 w-3.5" />
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-64 text-sm">
+                        General price increase rate used to calculate the real (inflation-adjusted) value of your future net worth. Historical average: 2-3%.
+                      </PopoverContent>
+                    </Popover>
+                  </Label>
                   <PercentageInput
                     value={config.inflation_rate}
                     onChange={(value) => setConfig({ ...config, inflation_rate: value })}
@@ -1077,18 +1156,41 @@ export function Projections() {
               <div className="space-y-4">
                 <h4 className="text-sm font-medium border-b pb-2">Investments</h4>
                 <div className="space-y-2">
-                  <Label>Savings Rate</Label>
+                  <Label className="flex items-center gap-1.5">
+                    % Invested
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <button className="text-muted-foreground hover:text-foreground">
+                          <IconInfoCircle className="h-3.5 w-3.5" />
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-64 text-sm">
+                        Percentage of your leftover income (after expenses) that gets invested. The remainder stays as cash in checking/savings accounts.
+                      </PopoverContent>
+                    </Popover>
+                  </Label>
                   <PercentageInput
                     value={config.monthly_savings_rate}
                     onChange={(value) => setConfig({ ...config, monthly_savings_rate: value })}
                     step={1}
-                    onAnalyze={() => openSensitivityAnalysis('monthly_savings_rate', 'Savings Invested Rate', config.monthly_savings_rate)}
+                    onAnalyze={() => openSensitivityAnalysis('monthly_savings_rate', '% Invested', config.monthly_savings_rate)}
                     className="w-48"
                   />
-                  <p className="text-xs text-muted-foreground">% of leftover money invested</p>
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">Expected Returns</Label>
+                  <Label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    Expected Returns
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <button className="text-muted-foreground hover:text-foreground">
+                          <IconInfoCircle className="h-3.5 w-3.5" />
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-64 text-sm">
+                        Assumed annual return for each investment account type. Stock market historical average: 7-10%. These returns are compounded monthly.
+                      </PopoverContent>
+                    </Popover>
+                  </Label>
                   <div className="grid gap-2">
                     {Object.entries(config.investment_returns).map(([accountType, rate]) => (
                       <div key={accountType} className="flex items-center gap-3">
@@ -1121,8 +1223,20 @@ export function Projections() {
 
               {/* Tax Brackets Section */}
               <div className="space-y-4">
-                <h4 className="text-sm font-medium border-b pb-2">Tax Brackets</h4>
-                <div className="grid gap-4 md:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setTaxBracketsOpen(!taxBracketsOpen)}
+                  className="flex items-center justify-between w-full text-sm font-medium border-b pb-2 hover:text-foreground/80"
+                >
+                  <span className="flex items-center gap-2">
+                    Tax Brackets
+                    <span className="text-xs font-normal text-muted-foreground">
+                      ({(federalRate * 100).toFixed(1)}% fed + {(provincialRate * 100).toFixed(1)}% prov = {((federalRate + provincialRate) * 100).toFixed(1)}%)
+                    </span>
+                  </span>
+                  <IconChevronDown className={`h-4 w-4 transition-transform ${taxBracketsOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {taxBracketsOpen && <div className="grid gap-4 md:grid-cols-2">
                   {/* Federal */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
@@ -1251,7 +1365,7 @@ export function Projections() {
                       ))}
                     </div>
                   </div>
-                </div>
+                </div>}
               </div>
 
               {/* Actions */}
