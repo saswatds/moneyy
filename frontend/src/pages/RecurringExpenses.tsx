@@ -66,6 +66,19 @@ const getFrequencyLabel = (frequency: string) => {
   }
 };
 
+const formatRemainingTerm = (months: number) => {
+  const years = Math.floor(months / 12);
+  const remainingMonths = months % 12;
+
+  if (years === 0) {
+    return `${remainingMonths} month${remainingMonths !== 1 ? 's' : ''}`;
+  }
+  if (remainingMonths === 0) {
+    return `${years} year${years !== 1 ? 's' : ''}`;
+  }
+  return `${years} yr${years !== 1 ? 's' : ''} ${remainingMonths} mo`;
+};
+
 const getCategoryBadgeColor = (category: string) => {
   const colors: Record<string, string> = {
     housing: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
@@ -309,11 +322,16 @@ export function RecurringExpenses() {
                       <div className="text-xs text-muted-foreground">{expense.currency}</div>
                     </TableCell>
                     <TableCell className="text-right">
-                      <div>
-                        {expense.remaining_term !== undefined
-                          ? `${expense.remaining_term} months`
-                          : 'N/A'}
-                      </div>
+                      {expense.remaining_term !== undefined ? (
+                        <>
+                          <div>{formatRemainingTerm(expense.remaining_term)}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {new Date(new Date().setMonth(new Date().getMonth() + expense.remaining_term)).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+                          </div>
+                        </>
+                      ) : (
+                        <div>N/A</div>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
