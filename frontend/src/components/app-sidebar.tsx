@@ -5,6 +5,7 @@ import {
   IconSettings,
   IconHome,
   IconReceipt,
+  IconCash,
 } from '@tabler/icons-react';
 import {
   Sidebar,
@@ -29,6 +30,11 @@ const items = [
     title: 'Assets',
     url: '/assets',
     icon: IconHome,
+  },
+  {
+    title: 'Income & Taxes',
+    url: '/income',
+    icon: IconCash,
   },
   {
     title: 'Expenses',

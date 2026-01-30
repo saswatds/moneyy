@@ -18,6 +18,7 @@ import (
 	"money/internal/database"
 	"money/internal/env"
 	"money/internal/holdings"
+	"money/internal/income"
 	"money/internal/logger"
 	"money/internal/projections"
 	"money/internal/server/handlers"
@@ -95,6 +96,9 @@ func main() {
 	// Demo service (depends on import/export services)
 	demoSvc := data.NewDemoService(db)
 
+	// Income service (no dependencies)
+	incomeSvc := income.NewService(db)
+
 	logger.Info("All services initialized successfully")
 
 	// Initialize authentication provider
@@ -162,6 +166,7 @@ func main() {
 			handlers.NewTransactionHandler(transactionSvc).RegisterRoutes(r)
 			handlers.NewDataHandler(exportSvc, importSvc).RegisterRoutes(r)
 			handlers.NewDemoHandler(demoSvc).RegisterRoutes(r)
+			handlers.NewIncomeHandler(incomeSvc).RegisterRoutes(r)
 		})
 	})
 

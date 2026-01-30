@@ -16,6 +16,7 @@ import { AssetSetup } from './pages/AssetSetup';
 import { AssetDashboard } from './pages/AssetDashboard';
 import { OptionsSetup } from './pages/OptionsSetup';
 import { OptionsDashboard } from './pages/OptionsDashboard';
+import { IncomeTaxes } from './pages/IncomeTaxes';
 import { Projections } from './pages/Projections';
 import { RecurringExpenses } from './pages/RecurringExpenses';
 import { Settings } from './pages/Settings';
@@ -74,6 +75,7 @@ function App() {
                 <Route path="accounts/:accountId/asset" element={<AssetDashboard />} />
                 <Route path="accounts/:accountId/options/setup" element={<OptionsSetup />} />
                 <Route path="accounts/:accountId/options" element={<OptionsDashboard />} />
+                <Route path="income" element={<IncomeTaxes />} />
                 <Route path="projections" element={<Projections />} />
                 <Route path="expenses" element={<RecurringExpenses />} />
                 <Route path="settings" element={<Settings />} />

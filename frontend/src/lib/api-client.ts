@@ -751,6 +751,131 @@ export interface UpdateVestingEventRequest {
   notes?: string;
 }
 
+// Income & Taxes Types
+export type IncomeCategory = 'employment' | 'investment' | 'rental' | 'business' | 'other';
+export type IncomeFrequency = 'one_time' | 'monthly' | 'bi-weekly' | 'annually';
+
+export interface IncomeRecord {
+  id: string;
+  user_id: string;
+  source: string;
+  category: IncomeCategory;
+  amount: number;
+  currency: 'CAD' | 'USD' | 'INR';
+  frequency: IncomeFrequency;
+  tax_year: number;
+  date_received?: string;
+  description?: string;
+  is_taxable: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IncomeTaxBracket {
+  up_to_income: number;
+  rate: number;
+}
+
+export interface TaxConfiguration {
+  id?: string;
+  user_id?: string;
+  tax_year: number;
+  province: string;
+  federal_brackets: IncomeTaxBracket[];
+  provincial_brackets: IncomeTaxBracket[];
+  cpp_rate: number;
+  cpp_max_pensionable_earnings: number;
+  cpp_basic_exemption: number;
+  ei_rate: number;
+  ei_max_insurable_earnings: number;
+  basic_personal_amount: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface IncomeByCategory {
+  employment: number;
+  investment: number;
+  rental: number;
+  business: number;
+  other: number;
+}
+
+export interface AnnualIncomeSummary {
+  id?: string;
+  user_id?: string;
+  tax_year: number;
+  total_gross_income: number;
+  total_taxable_income: number;
+  employment_income: number;
+  investment_income: number;
+  rental_income: number;
+  business_income: number;
+  other_income: number;
+  stock_options_benefit: number;
+  federal_tax: number;
+  provincial_tax: number;
+  cpp_contribution: number;
+  ei_contribution: number;
+  total_tax: number;
+  net_income: number;
+  effective_tax_rate: number;
+  marginal_tax_rate: number;
+  computed_at?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface YearSummary {
+  year: number;
+  total_gross_income: number;
+  total_tax: number;
+  net_income: number;
+  effective_tax_rate: number;
+  by_category: IncomeByCategory;
+}
+
+export interface YearComparisonResponse {
+  years: YearSummary[];
+}
+
+export interface CreateIncomeRecordRequest {
+  source: string;
+  category: IncomeCategory;
+  amount: number;
+  currency: 'CAD' | 'USD' | 'INR';
+  frequency: IncomeFrequency;
+  tax_year: number;
+  date_received?: string;
+  description?: string;
+  is_taxable?: boolean;
+}
+
+export interface UpdateIncomeRecordRequest {
+  source?: string;
+  category?: IncomeCategory;
+  amount?: number;
+  currency?: 'CAD' | 'USD' | 'INR';
+  frequency?: IncomeFrequency;
+  tax_year?: number;
+  date_received?: string;
+  description?: string;
+  is_taxable?: boolean;
+}
+
+export interface SaveTaxConfigRequest {
+  tax_year: number;
+  province: string;
+  federal_brackets: IncomeTaxBracket[];
+  provincial_brackets: IncomeTaxBracket[];
+  cpp_rate?: number;
+  cpp_max_pensionable_earnings?: number;
+  cpp_basic_exemption?: number;
+  ei_rate?: number;
+  ei_max_insurable_earnings?: number;
+  basic_personal_amount?: number;
+}
+
 class ApiClient {
   private baseUrl: string;
   private getToken: () => string | null = () => localStorage.getItem('auth_token');
@@ -1341,6 +1466,59 @@ class ApiClient {
   async getUpcomingVestingEvents(accountId: string, days?: number): Promise<{ events: VestingEvent[] }> {
     const daysParam = days ? `?days=${days}` : '';
     return this.request(`/accounts/${accountId}/options/vesting-timeline${daysParam}`);
+  }
+
+  // Income & Taxes endpoints
+
+  async getIncomeRecords(year?: number, category?: IncomeCategory): Promise<{ records: IncomeRecord[] }> {
+    const params = new URLSearchParams();
+    if (year) params.append('year', year.toString());
+    if (category) params.append('category', category);
+    const queryString = params.toString();
+    return this.request(`/income${queryString ? `?${queryString}` : ''}`);
+  }
+
+  async getIncomeRecord(id: string): Promise<IncomeRecord> {
+    return this.request(`/income/${id}`);
+  }
+
+  async createIncomeRecord(data: CreateIncomeRecordRequest): Promise<IncomeRecord> {
+    return this.request('/income', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateIncomeRecord(id: string, data: UpdateIncomeRecordRequest): Promise<IncomeRecord> {
+    return this.request(`/income/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteIncomeRecord(id: string): Promise<{ success: boolean }> {
+    return this.request(`/income/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getAnnualIncomeSummary(year: number): Promise<AnnualIncomeSummary> {
+    return this.request(`/income/summary/${year}`);
+  }
+
+  async getIncomeComparison(startYear: number, endYear: number): Promise<YearComparisonResponse> {
+    return this.request(`/income/comparison?start=${startYear}&end=${endYear}`);
+  }
+
+  async getIncomeTaxConfig(year: number): Promise<TaxConfiguration> {
+    return this.request(`/income/tax-config/${year}`);
+  }
+
+  async saveIncomeTaxConfig(data: SaveTaxConfigRequest): Promise<TaxConfiguration> {
+    return this.request('/income/tax-config', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
   }
 }
 
