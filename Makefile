@@ -50,7 +50,8 @@ help:
 	@echo "$(GREEN)🔧 Development:$(NC)"
 	@echo "  make restart      - Restart all services (keeps data)"
 	@echo "  make shell        - Open shell in API container"
-	@echo "  make test         - Run tests in Docker"
+	@echo "  make test         - Run tests locally (Go + frontend)"
+	@echo "  make test-docker  - Run tests in Docker"
 	@echo ""
 	@echo "$(GREEN)🏗️  Build & Publish:$(NC)"
 	@echo "  make build        - Build production Docker images"
@@ -187,8 +188,13 @@ db-shell:
 	@echo "$(BLUE)Connecting to moneyy database...$(NC)"
 	@${DOCKER_COMPOSE} exec postgres psql -U postgres -d moneyy
 
-# Run tests in Docker
+# Run tests locally
 test:
+	@echo "$(BLUE)Running Go tests...$(NC)"
+	@go test -v ./...
+
+# Run tests in Docker
+test-docker:
 	@echo "$(BLUE)Running tests in Docker...$(NC)"
 	@${DOCKER_COMPOSE} exec api go test -v ./...
 

@@ -116,16 +116,21 @@ func CleanupTestDB(t *testing.T, db *sql.DB) {
 	}
 
 	for _, table := range tables {
-		query := fmt.Sprintf("DELETE FROM %s WHERE id LIKE 'test-%%' OR user_id LIKE 'test-%%'", table)
-		if table == "balances" {
+		var query string
+		switch table {
+		case "balances", "asset_depreciation_entries", "mortgage_payments", "loan_payments",
+			"asset_details", "mortgage_details", "loan_details":
 			query = fmt.Sprintf("DELETE FROM %s WHERE account_id LIKE 'test-%%'", table)
-		} else if table == "asset_depreciation_entries" || table == "mortgage_payments" || table == "loan_payments" {
-			query = fmt.Sprintf("DELETE FROM %s WHERE account_id LIKE 'test-%%'", table)
+		case "accounts":
+			query = fmt.Sprintf("DELETE FROM %s WHERE id LIKE 'test-%%' OR user_id LIKE 'test-%%'", table)
+		case "users":
+			query = fmt.Sprintf("DELETE FROM %s WHERE id LIKE 'test-%%'", table)
+		default:
+			query = fmt.Sprintf("DELETE FROM %s WHERE id LIKE 'test-%%'", table)
 		}
 
-		if _, err := db.Exec(query); err != nil {
-			t.Logf("Warning: failed to clean %s: %v", table, err)
-		}
+		// Silently ignore cleanup errors - test containers are ephemeral
+		_, _ = db.Exec(query)
 	}
 
 	db.Close()

@@ -66,6 +66,19 @@ const getFrequencyLabel = (frequency: string) => {
   }
 };
 
+const formatRemainingTerm = (months: number) => {
+  const years = Math.floor(months / 12);
+  const remainingMonths = months % 12;
+
+  if (years === 0) {
+    return `${remainingMonths} month${remainingMonths !== 1 ? 's' : ''}`;
+  }
+  if (remainingMonths === 0) {
+    return `${years} year${years !== 1 ? 's' : ''}`;
+  }
+  return `${years} yr${years !== 1 ? 's' : ''} ${remainingMonths} mo`;
+};
+
 const getCategoryBadgeColor = (category: string) => {
   const colors: Record<string, string> = {
     housing: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
@@ -141,6 +154,32 @@ const calculateInferredYearlyAmount = (expense: InferredExpense) => {
   }
 };
 
+const calculateInferredMonthlyTotal = (expenses: InferredExpense[]) => {
+  return expenses.reduce((total, expense) => {
+    let monthlyAmount = 0;
+    switch (expense.frequency) {
+      case 'weekly':
+        monthlyAmount = expense.amount * 4.33;
+        break;
+      case 'bi-weekly':
+        monthlyAmount = expense.amount * 2.17;
+        break;
+      case 'monthly':
+        monthlyAmount = expense.amount;
+        break;
+      case 'quarterly':
+        monthlyAmount = expense.amount / 3;
+        break;
+      case 'annually':
+        monthlyAmount = expense.amount / 12;
+        break;
+      default:
+        monthlyAmount = expense.amount;
+    }
+    return total + monthlyAmount;
+  }, 0);
+};
+
 export function RecurringExpenses() {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -166,7 +205,9 @@ export function RecurringExpenses() {
     return true;
   });
 
-  const monthlyTotal = calculateMonthlyTotal(filteredExpenses);
+  const recurringMonthlyTotal = calculateMonthlyTotal(filteredExpenses);
+  const inferredMonthlyTotal = calculateInferredMonthlyTotal(inferredExpenses);
+  const monthlyTotal = recurringMonthlyTotal + inferredMonthlyTotal;
   const annualTotal = monthlyTotal * 12;
 
   // Get unique categories, frequencies, and currencies for filters
@@ -228,7 +269,12 @@ export function RecurringExpenses() {
               <div className="text-3xl font-bold tabular-nums">
                 {formatNumberWithSmallCents(monthlyTotal)}
               </div>
-              <div className="text-sm text-muted-foreground mt-1">CAD</div>
+              <div className="text-xs text-muted-foreground mt-1">
+                {inferredMonthlyTotal > 0 && (
+                  <span>{formatNumberOnly(recurringMonthlyTotal)} + {formatNumberOnly(inferredMonthlyTotal)} (loans)</span>
+                )}
+                {inferredMonthlyTotal === 0 && <span>CAD</span>}
+              </div>
             </div>
           </CardHeader>
         </Card>
@@ -250,9 +296,13 @@ export function RecurringExpenses() {
             <CardDescription>Active Expenses</CardDescription>
             <div className="mt-2">
               <div className="text-3xl font-bold tabular-nums">
-                {activeExpenses.length}
+                {activeExpenses.length + inferredExpenses.length}
               </div>
-              <div className="text-sm text-muted-foreground mt-1">Tracked</div>
+              <div className="text-xs text-muted-foreground mt-1">
+                {inferredExpenses.length > 0
+                  ? `${activeExpenses.length} tracked + ${inferredExpenses.length} from loans`
+                  : 'Tracked'}
+              </div>
             </div>
           </CardHeader>
         </Card>
@@ -309,11 +359,16 @@ export function RecurringExpenses() {
                       <div className="text-xs text-muted-foreground">{expense.currency}</div>
                     </TableCell>
                     <TableCell className="text-right">
-                      <div>
-                        {expense.remaining_term !== undefined
-                          ? `${expense.remaining_term} months`
-                          : 'N/A'}
-                      </div>
+                      {expense.remaining_term !== undefined ? (
+                        <>
+                          <div>{formatRemainingTerm(expense.remaining_term)}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {new Date(new Date().setMonth(new Date().getMonth() + expense.remaining_term)).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+                          </div>
+                        </>
+                      ) : (
+                        <div>N/A</div>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
