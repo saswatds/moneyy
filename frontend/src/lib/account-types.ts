@@ -15,6 +15,7 @@ export interface AccountTypeConfig {
     hasLoan: boolean;
     hasAsset: boolean;
     hasTransactions: boolean;
+    hasOptions?: boolean;
   };
 
   ui: {
@@ -392,6 +393,33 @@ export const ACCOUNT_TYPE_CONFIGS: Record<string, AccountTypeConfig> = {
       showHoldingsHistory: false,
     },
     badgeColor: 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400',
+  },
+
+  // Employee Equity
+  stock_options: {
+    type: 'stock_options',
+    label: 'Stock Options/RSUs',
+    description: 'Employee equity compensation',
+    isAsset: true,
+    features: {
+      hasBalances: false,
+      hasHoldings: false,
+      hasMortgage: false,
+      hasLoan: false,
+      hasAsset: false,
+      hasTransactions: false,
+      hasOptions: true,
+    },
+    ui: {
+      showBalanceChart: false,
+      showBalanceForm: false,
+      showHoldingForm: false,
+      showBalanceHistory: false,
+      showHoldingsHistory: false,
+      redirectToSpecialPage: (accountId) => `/accounts/${accountId}/options`,
+      requiresSetup: true,
+    },
+    badgeColor: 'bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-400',
   },
 };
 

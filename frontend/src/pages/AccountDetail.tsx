@@ -93,6 +93,12 @@ export function AccountDetail() {
       navigate(`/accounts/${id}/asset`, { replace: true });
       return;
     }
+
+    // Handle stock options accounts
+    if (accountConfig.features.hasOptions) {
+      navigate(`/accounts/${id}/options`, { replace: true });
+      return;
+    }
   }, [accountConfig, account, mortgageDetails, mortgageLoading, loanDetails, loanLoading, id, navigate]);
 
   if (accountLoading || balancesLoading || holdingsLoading) {
