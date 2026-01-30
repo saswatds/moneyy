@@ -308,7 +308,7 @@ func TestHandleGetAssetsSummary_Success(t *testing.T) {
 	accountSvc := account.NewService(db, db, balanceSvc)
 
 	usefulLife := 10
-	accountSvc.CreateAssetDetails(ctx, accountID, &account.CreateAssetDetailsRequest{
+	_, err := accountSvc.CreateAssetDetails(ctx, accountID, &account.CreateAssetDetailsRequest{
 		AccountID:          accountID,
 		AssetType:          "vehicle",
 		PurchasePrice:      25000.00,
@@ -316,7 +316,11 @@ func TestHandleGetAssetsSummary_Success(t *testing.T) {
 		DepreciationMethod: "straight_line",
 		UsefulLifeYears:    &usefulLife,
 		SalvageValue:       5000.00,
+		TypeSpecificData:   json.RawMessage("{}"),
 	})
+	if err != nil {
+		t.Fatalf("Failed to create asset details: %v", err)
+	}
 
 	req := httptest.NewRequest("GET", "/assets/summary", nil)
 	req = req.WithContext(ctx)
@@ -360,7 +364,7 @@ func TestHandleGetAssetsSummary_IsolationBetweenUsers(t *testing.T) {
 
 	usefulLife := 10
 	ctx1 := account.CreateAuthContext(user1)
-	accountSvc.CreateAssetDetails(ctx1, accountID1, &account.CreateAssetDetailsRequest{
+	_, err := accountSvc.CreateAssetDetails(ctx1, accountID1, &account.CreateAssetDetailsRequest{
 		AccountID:          accountID1,
 		AssetType:          "vehicle",
 		PurchasePrice:      25000.00,
@@ -368,10 +372,14 @@ func TestHandleGetAssetsSummary_IsolationBetweenUsers(t *testing.T) {
 		DepreciationMethod: "straight_line",
 		UsefulLifeYears:    &usefulLife,
 		SalvageValue:       5000.00,
+		TypeSpecificData:   json.RawMessage("{}"),
 	})
+	if err != nil {
+		t.Fatalf("Failed to create asset details for user1: %v", err)
+	}
 
 	ctx2 := account.CreateAuthContext(user2)
-	accountSvc.CreateAssetDetails(ctx2, accountID2, &account.CreateAssetDetailsRequest{
+	_, err = accountSvc.CreateAssetDetails(ctx2, accountID2, &account.CreateAssetDetailsRequest{
 		AccountID:          accountID2,
 		AssetType:          "vehicle",
 		PurchasePrice:      30000.00,
@@ -379,7 +387,11 @@ func TestHandleGetAssetsSummary_IsolationBetweenUsers(t *testing.T) {
 		DepreciationMethod: "straight_line",
 		UsefulLifeYears:    &usefulLife,
 		SalvageValue:       6000.00,
+		TypeSpecificData:   json.RawMessage("{}"),
 	})
+	if err != nil {
+		t.Fatalf("Failed to create asset details for user2: %v", err)
+	}
 
 	// Act - user1 requests summary
 	req1 := httptest.NewRequest("GET", "/assets/summary", nil)

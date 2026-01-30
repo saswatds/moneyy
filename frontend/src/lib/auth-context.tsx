@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useState, type ReactNode } from 'react';
 
 export interface User {
   id: string;
@@ -22,7 +22,7 @@ const TOKEN_KEY = 'auth_token';
 const USER_KEY = 'auth_user';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading] = useState(false);
   const [token, setTokenState] = useState<string | null>(() => {
     return localStorage.getItem(TOKEN_KEY);
   });

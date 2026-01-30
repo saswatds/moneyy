@@ -38,7 +38,7 @@ func (s *Service) performInitialSync(ctx context.Context, userID, connectionID s
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to get credentials: %v", err)
 		_ = s.UpdateConnectionError(ctx, connectionID, errMsg)
-		return fmt.Errorf(errMsg)
+		return fmt.Errorf("%s", errMsg)
 	}
 
 	// Get identity ID from credentials
@@ -52,7 +52,7 @@ func (s *Service) performInitialSync(ctx context.Context, userID, connectionID s
 	if err != nil || identityID == "" {
 		errMsg := fmt.Sprintf("identity ID not found in credentials: %v", err)
 		_ = s.UpdateConnectionError(ctx, connectionID, errMsg)
-		return fmt.Errorf(errMsg)
+		return fmt.Errorf("%s", errMsg)
 	}
 
 	// Fetch accounts from Wealthsimple
@@ -66,7 +66,7 @@ func (s *Service) performInitialSync(ctx context.Context, userID, connectionID s
 		log.Printf("ERROR: failed to fetch accounts: %v", err)
 		errMsg := fmt.Sprintf("failed to fetch accounts: %v", err)
 		_ = s.UpdateConnectionError(ctx, connectionID, errMsg)
-		return fmt.Errorf(errMsg)
+		return fmt.Errorf("%s", errMsg)
 	}
 
 	// Parse accounts from identity.accounts.edges structure
@@ -74,21 +74,21 @@ func (s *Service) performInitialSync(ctx context.Context, userID, connectionID s
 	if !ok {
 		errMsg := "invalid response format: no identity field"
 		_ = s.UpdateConnectionError(ctx, connectionID, errMsg)
-		return fmt.Errorf(errMsg)
+		return fmt.Errorf("%s", errMsg)
 	}
 
 	accountsData, ok := identity["accounts"].(map[string]interface{})
 	if !ok {
 		errMsg := "invalid response format: no accounts field"
 		_ = s.UpdateConnectionError(ctx, connectionID, errMsg)
-		return fmt.Errorf(errMsg)
+		return fmt.Errorf("%s", errMsg)
 	}
 
 	edges, ok := accountsData["edges"].([]interface{})
 	if !ok {
 		errMsg := "invalid response format: no edges field"
 		_ = s.UpdateConnectionError(ctx, connectionID, errMsg)
-		return fmt.Errorf(errMsg)
+		return fmt.Errorf("%s", errMsg)
 	}
 
 	log.Printf("INFO: processing account edges: count=%d", len(edges))
