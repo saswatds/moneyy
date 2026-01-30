@@ -523,6 +523,234 @@ export interface InferredExpense {
   original_amount: number;
 }
 
+// Stock Options Types
+export type GrantType = 'iso' | 'nso' | 'rsu' | 'rsa';
+export type VestingStatus = 'pending' | 'vested' | 'forfeited';
+export type ExerciseMethod = 'cash' | 'cashless' | 'same_day_sale';
+
+export interface EquityGrant {
+  id: string;
+  account_id: string;
+  grant_type: GrantType;
+  grant_date: string;
+  quantity: number;
+  strike_price?: number;
+  fmv_at_grant: number;
+  expiration_date?: string;
+  company_name: string;
+  currency: string;
+  grant_number?: string;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EquityGrantWithSummary extends EquityGrant {
+  vested_quantity: number;
+  unvested_quantity: number;
+  exercised_quantity: number;
+  current_fmv?: number;
+  vested_value: number;
+  unvested_value: number;
+  intrinsic_value: number;
+}
+
+export interface VestingSchedule {
+  id: string;
+  grant_id: string;
+  schedule_type: 'time_based' | 'milestone';
+  cliff_months?: number;
+  total_vesting_months?: number;
+  vesting_frequency?: 'monthly' | 'quarterly' | 'annually';
+  milestone_description?: string;
+  created_at: string;
+}
+
+export interface VestingEvent {
+  id: string;
+  grant_id: string;
+  vest_date: string;
+  quantity: number;
+  fmv_at_vest: number;
+  status: VestingStatus;
+  notes?: string;
+  created_at: string;
+}
+
+export interface EquityExercise {
+  id: string;
+  grant_id: string;
+  exercise_date: string;
+  quantity: number;
+  strike_price: number;
+  fmv_at_exercise: number;
+  exercise_cost: number;
+  taxable_benefit: number;
+  exercise_method?: ExerciseMethod;
+  notes?: string;
+  created_at: string;
+}
+
+export interface EquitySale {
+  id: string;
+  account_id: string;
+  grant_id?: string;
+  exercise_id?: string;
+  sale_date: string;
+  quantity: number;
+  sale_price: number;
+  total_proceeds: number;
+  cost_basis: number;
+  capital_gain: number;
+  holding_period_days?: number;
+  is_qualified?: boolean;
+  notes?: string;
+  created_at: string;
+}
+
+export interface FMVEntry {
+  id: string;
+  account_id: string;
+  currency: string;
+  effective_date: string;
+  fmv_per_share: number;
+  notes?: string;
+  created_at: string;
+}
+
+export interface CurrencySummary {
+  currency: string;
+  vested_value: number;
+  unvested_value: number;
+  total_intrinsic_value: number;
+  current_fmv?: number;
+  vested_shares: number;
+  unvested_shares: number;
+}
+
+export interface OptionsSummary {
+  total_grants: number;
+  total_shares: number;
+  vested_shares: number;
+  unvested_shares: number;
+  exercised_shares: number;
+  sold_shares: number;
+  current_fmv?: number;
+  vested_value: number;
+  unvested_value: number;
+  total_intrinsic_value: number;
+  by_grant_type: Record<string, number>;
+  by_currency?: Record<string, CurrencySummary>;
+  grants: EquityGrantWithSummary[];
+}
+
+export interface CurrencyTaxData {
+  currency: string;
+  total_taxable_benefit: number;
+  total_capital_gains: number;
+  stock_option_deduction: number;
+  qualified_gains: number;
+  non_qualified_gains: number;
+  estimated_tax: number;
+}
+
+export interface TaxSummary {
+  year: number;
+  total_taxable_benefit: number;
+  total_capital_gains: number;
+  stock_option_deduction: number;
+  qualified_gains: number;
+  non_qualified_gains: number;
+  estimated_tax: number;
+  by_currency?: Record<string, CurrencyTaxData>;
+}
+
+export interface CreateEquityGrantRequest {
+  account_id: string;
+  grant_type: GrantType;
+  grant_date: string;
+  quantity: number;
+  strike_price?: number;
+  fmv_at_grant: number;
+  expiration_date?: string;
+  company_name: string;
+  currency: string;
+  grant_number?: string;
+  notes?: string;
+}
+
+export interface UpdateEquityGrantRequest {
+  grant_type?: GrantType;
+  grant_date?: string;
+  quantity?: number;
+  strike_price?: number;
+  fmv_at_grant?: number;
+  expiration_date?: string;
+  company_name?: string;
+  currency?: string;
+  grant_number?: string;
+  notes?: string;
+}
+
+export interface SetVestingScheduleRequest {
+  grant_id: string;
+  schedule_type: 'time_based' | 'milestone';
+  cliff_months?: number;
+  total_vesting_months?: number;
+  vesting_frequency?: 'monthly' | 'quarterly' | 'annually';
+  milestone_description?: string;
+}
+
+export interface RecordExerciseRequest {
+  grant_id: string;
+  exercise_date: string;
+  quantity: number;
+  fmv_at_exercise: number;
+  exercise_method?: ExerciseMethod;
+  notes?: string;
+}
+
+export interface UpdateExerciseRequest {
+  exercise_date?: string;
+  quantity?: number;
+  fmv_at_exercise?: number;
+  exercise_method?: ExerciseMethod;
+  notes?: string;
+}
+
+export interface RecordSaleRequest {
+  account_id: string;
+  grant_id?: string;
+  exercise_id?: string;
+  sale_date: string;
+  quantity: number;
+  sale_price: number;
+  cost_basis: number;
+  notes?: string;
+}
+
+export interface UpdateSaleRequest {
+  sale_date?: string;
+  quantity?: number;
+  sale_price?: number;
+  cost_basis?: number;
+  notes?: string;
+}
+
+export interface RecordFMVRequest {
+  account_id: string;
+  currency: string;
+  effective_date: string;
+  fmv_per_share: number;
+  notes?: string;
+}
+
+export interface UpdateVestingEventRequest {
+  status?: VestingStatus;
+  fmv_at_vest?: number;
+  notes?: string;
+}
+
 class ApiClient {
   private baseUrl: string;
   private getToken: () => string | null = () => localStorage.getItem('auth_token');
@@ -968,6 +1196,151 @@ class ApiClient {
 
   async getDemoStatus(): Promise<{ has_data: boolean }> {
     return this.request('/demo/status');
+  }
+
+  // Stock Options endpoints
+
+  // Grants
+  async createEquityGrant(accountId: string, data: CreateEquityGrantRequest): Promise<EquityGrant> {
+    return this.request(`/accounts/${accountId}/options/grants`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getEquityGrants(accountId: string): Promise<{ grants: EquityGrant[] }> {
+    return this.request(`/accounts/${accountId}/options/grants`);
+  }
+
+  async getEquityGrant(accountId: string, grantId: string): Promise<EquityGrant> {
+    return this.request(`/accounts/${accountId}/options/grants/${grantId}`);
+  }
+
+  async updateEquityGrant(accountId: string, grantId: string, data: UpdateEquityGrantRequest): Promise<EquityGrant> {
+    return this.request(`/accounts/${accountId}/options/grants/${grantId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteEquityGrant(accountId: string, grantId: string): Promise<{ success: boolean }> {
+    return this.request(`/accounts/${accountId}/options/grants/${grantId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Vesting Schedule
+  async setVestingSchedule(accountId: string, grantId: string, data: SetVestingScheduleRequest): Promise<VestingSchedule> {
+    return this.request(`/accounts/${accountId}/options/grants/${grantId}/vesting-schedule`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getVestingSchedule(accountId: string, grantId: string): Promise<VestingSchedule> {
+    return this.request(`/accounts/${accountId}/options/grants/${grantId}/vesting-schedule`);
+  }
+
+  async generateVestingEvents(accountId: string, grantId: string): Promise<{ events: VestingEvent[] }> {
+    return this.request(`/accounts/${accountId}/options/grants/${grantId}/vesting-events/generate`, {
+      method: 'POST',
+    });
+  }
+
+  async getVestingEvents(accountId: string, grantId: string): Promise<{ events: VestingEvent[] }> {
+    return this.request(`/accounts/${accountId}/options/grants/${grantId}/vesting-events`);
+  }
+
+  async updateVestingEvent(accountId: string, eventId: string, data: UpdateVestingEventRequest): Promise<VestingEvent> {
+    return this.request(`/accounts/${accountId}/options/vesting-events/${eventId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  // Exercises
+  async recordExercise(accountId: string, grantId: string, data: RecordExerciseRequest): Promise<EquityExercise> {
+    return this.request(`/accounts/${accountId}/options/grants/${grantId}/exercises`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getExercises(accountId: string, grantId: string): Promise<{ exercises: EquityExercise[] }> {
+    return this.request(`/accounts/${accountId}/options/grants/${grantId}/exercises`);
+  }
+
+  async getAllExercises(accountId: string): Promise<{ exercises: EquityExercise[] }> {
+    return this.request(`/accounts/${accountId}/options/exercises`);
+  }
+
+  async updateExercise(accountId: string, exerciseId: string, data: UpdateExerciseRequest): Promise<EquityExercise> {
+    return this.request(`/accounts/${accountId}/options/exercises/${exerciseId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteExercise(accountId: string, exerciseId: string): Promise<void> {
+    return this.request(`/accounts/${accountId}/options/exercises/${exerciseId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Sales
+  async recordSale(accountId: string, data: RecordSaleRequest): Promise<EquitySale> {
+    return this.request(`/accounts/${accountId}/options/sales`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getSales(accountId: string): Promise<{ sales: EquitySale[] }> {
+    return this.request(`/accounts/${accountId}/options/sales`);
+  }
+
+  async updateSale(accountId: string, saleId: string, data: UpdateSaleRequest): Promise<EquitySale> {
+    return this.request(`/accounts/${accountId}/options/sales/${saleId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteSale(accountId: string, saleId: string): Promise<void> {
+    return this.request(`/accounts/${accountId}/options/sales/${saleId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // FMV
+  async recordFMV(accountId: string, data: RecordFMVRequest): Promise<FMVEntry> {
+    return this.request(`/accounts/${accountId}/options/fmv`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getFMVHistory(accountId: string): Promise<{ entries: FMVEntry[] }> {
+    return this.request(`/accounts/${accountId}/options/fmv`);
+  }
+
+  async getCurrentFMV(accountId: string): Promise<FMVEntry | null> {
+    return this.request(`/accounts/${accountId}/options/fmv/current`);
+  }
+
+  // Summary
+  async getOptionsSummary(accountId: string): Promise<OptionsSummary> {
+    return this.request(`/accounts/${accountId}/options/summary`);
+  }
+
+  async getTaxSummary(accountId: string, year?: number): Promise<TaxSummary> {
+    const yearParam = year ? `?year=${year}` : '';
+    return this.request(`/accounts/${accountId}/options/tax-summary${yearParam}`);
+  }
+
+  async getUpcomingVestingEvents(accountId: string, days?: number): Promise<{ events: VestingEvent[] }> {
+    const daysParam = days ? `?days=${days}` : '';
+    return this.request(`/accounts/${accountId}/options/vesting-timeline${daysParam}`);
   }
 }
 

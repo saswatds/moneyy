@@ -48,6 +48,7 @@ const (
 	AccountTypeMortgage     AccountType = "mortgage"
 	AccountTypeLineOfCredit AccountType = "line_of_credit"
 	AccountTypeOther        AccountType = "other"
+	AccountTypeStockOptions AccountType = "stock_options"
 )
 
 // Currency represents supported currencies

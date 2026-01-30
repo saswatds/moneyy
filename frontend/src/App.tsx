@@ -14,6 +14,8 @@ import { LoanDashboard } from './pages/LoanDashboard';
 import { Assets } from './pages/Assets';
 import { AssetSetup } from './pages/AssetSetup';
 import { AssetDashboard } from './pages/AssetDashboard';
+import { OptionsSetup } from './pages/OptionsSetup';
+import { OptionsDashboard } from './pages/OptionsDashboard';
 import { Projections } from './pages/Projections';
 import { RecurringExpenses } from './pages/RecurringExpenses';
 import { Settings } from './pages/Settings';
@@ -70,6 +72,8 @@ function App() {
                 <Route path="assets" element={<Assets />} />
                 <Route path="accounts/:accountId/asset/setup" element={<AssetSetup />} />
                 <Route path="accounts/:accountId/asset" element={<AssetDashboard />} />
+                <Route path="accounts/:accountId/options/setup" element={<OptionsSetup />} />
+                <Route path="accounts/:accountId/options" element={<OptionsDashboard />} />
                 <Route path="projections" element={<Projections />} />
                 <Route path="expenses" element={<RecurringExpenses />} />
                 <Route path="settings" element={<Settings />} />
