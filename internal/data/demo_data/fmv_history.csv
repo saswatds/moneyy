@@ -1,0 +1,6 @@
+id,account_id,currency,effective_date,fmv_per_share,notes,created_at
+demo-fmv-1,demo-acc-techcorp-options,USD,2022-03-15,15.00,Initial grant FMV,2022-03-15T00:00:00Z
+demo-fmv-2,demo-acc-techcorp-options,USD,2023-01-15,25.00,409A valuation,2023-01-15T00:00:00Z
+demo-fmv-3,demo-acc-techcorp-options,USD,2024-03-01,30.00,409A valuation,2024-03-01T00:00:00Z
+demo-fmv-4,demo-acc-techcorp-options,USD,2025-06-01,40.00,Series C valuation,2025-06-01T00:00:00Z
+demo-fmv-5,demo-acc-techcorp-options,USD,2026-01-15,45.00,Current 409A valuation,2026-01-15T00:00:00Z

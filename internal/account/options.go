@@ -1502,8 +1502,8 @@ func (s *Service) GetTaxSummary(ctx context.Context, accountID string, year int)
 		FROM equity_exercises ee
 		JOIN equity_grants eg ON ee.grant_id = eg.id
 		WHERE eg.account_id = $1
-		AND EXTRACT(YEAR FROM ee.exercise_date) = $2
-	`, accountID, year)
+		AND strftime('%Y', ee.exercise_date) = $2
+	`, accountID, fmt.Sprintf("%d", year))
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get exercises: %w", err)
@@ -1531,8 +1531,8 @@ func (s *Service) GetTaxSummary(ctx context.Context, accountID string, year int)
 		FROM equity_sales es
 		LEFT JOIN equity_grants eg ON es.grant_id = eg.id
 		WHERE es.account_id = $1
-		AND EXTRACT(YEAR FROM es.sale_date) = $2
-	`, accountID, year)
+		AND strftime('%Y', es.sale_date) = $2
+	`, accountID, fmt.Sprintf("%d", year))
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get sales: %w", err)

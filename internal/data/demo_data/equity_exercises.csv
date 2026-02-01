@@ -1,0 +1,2 @@
+id,grant_id,exercise_date,quantity,strike_price,fmv_at_exercise,exercise_cost,taxable_benefit,exercise_method,notes,created_at
+demo-exercise-1,demo-grant-iso-1,2025-01-15,2500,15.00,40.00,37500.00,62500.00,cash,Early exercise of vested ISO shares,2025-01-15T00:00:00Z

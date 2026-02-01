@@ -170,6 +170,13 @@ func CleanupTestDB(t *testing.T, db *sql.DB) {
 	db.Exec("DELETE FROM synced_accounts WHERE credential_id IN (SELECT id FROM sync_credentials WHERE user_id LIKE 'test-%' OR user_id LIKE 'empty-%')")
 	db.Exec("DELETE FROM synced_accounts WHERE local_account_id IN (SELECT id FROM accounts WHERE user_id LIKE 'test-%' OR user_id LIKE 'empty-%')")
 
+	// Equity tables (in dependency order)
+	db.Exec("DELETE FROM equity_sales WHERE grant_id IN (SELECT id FROM equity_grants WHERE account_id IN (SELECT id FROM accounts WHERE user_id LIKE 'test-%' OR user_id LIKE 'empty-%'))")
+	db.Exec("DELETE FROM equity_exercises WHERE grant_id IN (SELECT id FROM equity_grants WHERE account_id IN (SELECT id FROM accounts WHERE user_id LIKE 'test-%' OR user_id LIKE 'empty-%'))")
+	db.Exec("DELETE FROM vesting_schedules WHERE grant_id IN (SELECT id FROM equity_grants WHERE account_id IN (SELECT id FROM accounts WHERE user_id LIKE 'test-%' OR user_id LIKE 'empty-%'))")
+	db.Exec("DELETE FROM fmv_history WHERE account_id IN (SELECT id FROM accounts WHERE user_id LIKE 'test-%' OR user_id LIKE 'empty-%')")
+	db.Exec("DELETE FROM equity_grants WHERE account_id IN (SELECT id FROM accounts WHERE user_id LIKE 'test-%' OR user_id LIKE 'empty-%')")
+
 	// Tables with account_id
 	tablesWithAccountID := []string{
 		"asset_depreciation_entries",
@@ -356,6 +363,8 @@ func CreateValidTestArchive(t *testing.T, userID string) []byte {
 		"asset_details", "asset_depreciation_entries",
 		"recurring_expenses", "projection_scenarios",
 		"sync_credentials", "synced_accounts",
+		"equity_grants", "vesting_schedules", "fmv_history",
+		"equity_exercises", "equity_sales",
 	}
 
 	for _, table := range requiredTables {

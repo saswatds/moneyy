@@ -1,0 +1,13 @@
+id,account_id,amount,date,notes,created_at
+demo-bal-td-checking-1,demo-acc-td-checking,5234.50,2026-01-26,,2026-01-26T00:00:00Z
+demo-bal-tangerine-savings-1,demo-acc-tangerine-savings,12500.00,2026-01-26,,2026-01-26T00:00:00Z
+demo-bal-td-usd-1,demo-acc-td-usd,3200.00,2026-01-26,,2026-01-26T00:00:00Z
+demo-bal-wealthsimple-tfsa-1,demo-acc-wealthsimple-tfsa,45000.00,2026-01-26,,2026-01-26T00:00:00Z
+demo-bal-questrade-rrsp-1,demo-acc-questrade-rrsp,78500.00,2026-01-26,,2026-01-26T00:00:00Z
+demo-bal-coinbase-1,demo-acc-coinbase,8000.00,2026-01-26,,2026-01-26T00:00:00Z
+demo-bal-techcorp-options-1,demo-acc-techcorp-options,76500.00,2026-01-26,Exercised options value (1700 shares @ $45 FMV),2026-01-26T00:00:00Z
+demo-bal-toronto-condo-1,demo-acc-toronto-condo,650000.00,2026-01-26,,2026-01-26T00:00:00Z
+demo-bal-honda-civic-1,demo-acc-honda-civic,22000.00,2026-01-26,,2026-01-26T00:00:00Z
+demo-bal-td-mortgage-1,demo-acc-td-mortgage,-485000.00,2026-01-26,,2026-01-26T00:00:00Z
+demo-bal-td-credit-card-1,demo-acc-td-credit-card,-1850.00,2026-01-26,,2026-01-26T00:00:00Z
+demo-bal-student-loan-1,demo-acc-student-loan,-15000.00,2026-01-26,,2026-01-26T00:00:00Z

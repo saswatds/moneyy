@@ -1,0 +1,2 @@
+id,account_id,original_amount,interest_rate,rate_type,start_date,term_months,amortization_months,payment_amount,payment_frequency,payment_day,property_address,property_city,property_province,property_postal_code,property_value,renewal_date,maturity_date,lender,mortgage_number,notes,created_at,updated_at
+demo-mortgage-details-1,demo-acc-td-mortgage,520000.00,0.025,fixed,2023-06-01,60,300,2200.00,monthly,1,123 Bay Street,Toronto,ON,M5J 2R8,650000.00,2028-06-01,2048-06-01,TD Bank,MTG-123456789,5-year fixed rate mortgage,2023-06-01T00:00:00Z,2026-01-26T00:00:00Z

@@ -1,0 +1,11 @@
+id,name,amount,currency,frequency,category,description,is_active,created_at,updated_at
+demo-exp-property-tax,Property Tax,350.00,CAD,monthly,Housing,Property tax for condo,true,2023-06-01T00:00:00Z,2026-01-26T00:00:00Z
+demo-exp-condo-fees,Condo Fees,450.00,CAD,monthly,Housing,Monthly condo maintenance fees,true,2023-06-01T00:00:00Z,2026-01-26T00:00:00Z
+demo-exp-utilities,Utilities,180.00,CAD,monthly,Utilities,"Electricity, water, and gas",true,2023-06-01T00:00:00Z,2026-01-26T00:00:00Z
+demo-exp-internet,Internet,80.00,CAD,monthly,Utilities,Home internet service,true,2023-06-01T00:00:00Z,2026-01-26T00:00:00Z
+demo-exp-phone,Mobile Phone,65.00,CAD,monthly,Utilities,Cell phone plan,true,2023-06-01T00:00:00Z,2026-01-26T00:00:00Z
+demo-exp-car-insurance,Car Insurance,150.00,CAD,monthly,Transportation,Auto insurance,true,2020-07-01T00:00:00Z,2026-01-26T00:00:00Z
+demo-exp-gas,Gasoline,200.00,CAD,monthly,Transportation,Monthly gas expenses,true,2020-07-01T00:00:00Z,2026-01-26T00:00:00Z
+demo-exp-groceries,Groceries,600.00,CAD,monthly,Food,Monthly grocery expenses,true,2023-06-01T00:00:00Z,2026-01-26T00:00:00Z
+demo-exp-dining,Dining Out,300.00,CAD,monthly,Food,Restaurants and takeout,true,2023-06-01T00:00:00Z,2026-01-26T00:00:00Z
+demo-exp-entertainment,Entertainment,150.00,CAD,monthly,Entertainment,"Streaming services, movies, events",true,2023-06-01T00:00:00Z,2026-01-26T00:00:00Z

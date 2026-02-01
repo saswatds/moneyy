@@ -536,8 +536,8 @@ func (s *Service) getStockOptionsBenefit(ctx context.Context, userID string, yea
 		FROM equity_exercises ee
 		JOIN equity_grants eg ON ee.grant_id = eg.id
 		JOIN accounts a ON eg.account_id = a.id
-		WHERE a.user_id = $1 AND EXTRACT(YEAR FROM ee.exercise_date) = $2
-	`, userID, year).Scan(&benefit)
+		WHERE a.user_id = $1 AND strftime('%Y', ee.exercise_date) = $2
+	`, userID, fmt.Sprintf("%d", year)).Scan(&benefit)
 
 	if err != nil {
 		return 0

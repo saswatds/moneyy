@@ -45,10 +45,7 @@ logs/
 backups
 
 # Database data
-data
-
-# Demo data
-internal/data/demo_temp
+/data
 
 # Docker
 *.bak

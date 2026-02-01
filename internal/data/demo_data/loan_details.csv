@@ -1,0 +1,2 @@
+id,account_id,original_amount,interest_rate,rate_type,start_date,term_months,payment_amount,payment_frequency,payment_day,loan_type,lender,loan_number,purpose,maturity_date,notes,created_at,updated_at
+demo-loan-details-1,demo-acc-student-loan,25000.00,0.04,fixed,2020-09-01,120,253.00,monthly,15,Student Loan,National Student Loans Service Centre,SL-987654321,Education,2030-09-01,Federal student loan,2020-09-01T00:00:00Z,2026-01-26T00:00:00Z

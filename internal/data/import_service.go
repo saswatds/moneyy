@@ -74,7 +74,8 @@ func (s *ImportService) ValidateArchive(archive []byte) (*ValidationResult, erro
 		"accounts", "balances", "holdings", "holding_transactions",
 		"mortgage_details", "mortgage_payments", "loan_details", "loan_payments",
 		"asset_details", "asset_depreciation_entries", "recurring_expenses",
-		"projection_scenarios",
+		"projection_scenarios", "equity_grants", "vesting_schedules", "fmv_history",
+		"equity_exercises", "equity_sales",
 	}
 
 	for _, tableName := range expectedTables {
@@ -177,6 +178,7 @@ func (s *ImportService) extractArchiveData(archive []byte) (map[string][]byte, e
 		"mortgage_details", "mortgage_payments", "loan_details", "loan_payments",
 		"asset_details", "asset_depreciation_entries", "recurring_expenses",
 		"projection_scenarios", "sync_credentials", "synced_accounts",
+		"equity_grants", "vesting_schedules", "fmv_history", "equity_exercises", "equity_sales",
 		// Note: exchange_rates are not imported - they are fetched automatically from the API
 	}
 
@@ -243,6 +245,11 @@ func (s *ImportService) importInTransaction(ctx context.Context, userID string, 
 		{"asset_depreciation_entries", s.importAssetDepreciation},
 		{"recurring_expenses", s.importRecurringExpenses},
 		{"projection_scenarios", s.importProjections},
+		{"equity_grants", s.importEquityGrants},
+		{"vesting_schedules", s.importVestingSchedules},
+		{"fmv_history", s.importFMVHistory},
+		{"equity_exercises", s.importEquityExercises},
+		{"equity_sales", s.importEquitySales},
 		// Note: exchange_rates are not imported - they are fetched automatically from the API
 	}
 
@@ -846,6 +853,225 @@ func (s *ImportService) importExchangeRates(ctx context.Context, tx *sql.Tx, use
 		result, err := tx.ExecContext(ctx, query,
 			er.ID, er.FromCurrency, er.ToCurrency,
 			er.Rate, er.Date, er.CreatedAt,
+		)
+		if err != nil {
+			summary.Errors++
+			continue
+		}
+
+		rowsAffected, _ := result.RowsAffected()
+		if rowsAffected == 1 {
+			summary.Created++
+		} else {
+			summary.Updated++
+		}
+	}
+
+	return summary, nil
+}
+
+// importEquityGrants imports equity grant records
+func (s *ImportService) importEquityGrants(ctx context.Context, tx *sql.Tx, userID string, data []byte, _ string) (ImportTableSummary, error) {
+	var grants []EquityGrant
+	if err := json.Unmarshal(data, &grants); err != nil {
+		return ImportTableSummary{}, err
+	}
+
+	summary := ImportTableSummary{}
+
+	for _, g := range grants {
+		query := `
+			INSERT INTO equity_grants (id, account_id, grant_type, grant_date, quantity,
+				strike_price, fmv_at_grant, currency, expiration_date, company_name,
+				grant_number, notes, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+			ON CONFLICT (id) DO UPDATE SET
+				grant_type = excluded.grant_type,
+				grant_date = excluded.grant_date,
+				quantity = excluded.quantity,
+				strike_price = excluded.strike_price,
+				fmv_at_grant = excluded.fmv_at_grant,
+				currency = excluded.currency,
+				expiration_date = excluded.expiration_date,
+				company_name = excluded.company_name,
+				grant_number = excluded.grant_number,
+				notes = excluded.notes,
+				updated_at = excluded.updated_at
+		`
+
+		result, err := tx.ExecContext(ctx, query,
+			g.ID, g.AccountID, g.GrantType, g.GrantDate, g.Quantity,
+			g.StrikePrice, g.FMVAtGrant, g.Currency, g.ExpirationDate, g.CompanyName,
+			g.GrantNumber, g.Notes, g.CreatedAt, g.UpdatedAt,
+		)
+		if err != nil {
+			summary.Errors++
+			continue
+		}
+
+		rowsAffected, _ := result.RowsAffected()
+		if rowsAffected == 1 {
+			summary.Created++
+		} else {
+			summary.Updated++
+		}
+	}
+
+	return summary, nil
+}
+
+// importVestingSchedules imports vesting schedule records
+func (s *ImportService) importVestingSchedules(ctx context.Context, tx *sql.Tx, userID string, data []byte, _ string) (ImportTableSummary, error) {
+	var schedules []VestingSchedule
+	if err := json.Unmarshal(data, &schedules); err != nil {
+		return ImportTableSummary{}, err
+	}
+
+	summary := ImportTableSummary{}
+
+	for _, vs := range schedules {
+		query := `
+			INSERT INTO vesting_schedules (id, grant_id, schedule_type, cliff_months,
+				total_vesting_months, vesting_frequency, milestone_description, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			ON CONFLICT (id) DO UPDATE SET
+				schedule_type = excluded.schedule_type,
+				cliff_months = excluded.cliff_months,
+				total_vesting_months = excluded.total_vesting_months,
+				vesting_frequency = excluded.vesting_frequency,
+				milestone_description = excluded.milestone_description
+		`
+
+		result, err := tx.ExecContext(ctx, query,
+			vs.ID, vs.GrantID, vs.ScheduleType, vs.CliffMonths,
+			vs.TotalVestingMonths, vs.VestingFrequency, vs.MilestoneDescription, vs.CreatedAt,
+		)
+		if err != nil {
+			summary.Errors++
+			continue
+		}
+
+		rowsAffected, _ := result.RowsAffected()
+		if rowsAffected == 1 {
+			summary.Created++
+		} else {
+			summary.Updated++
+		}
+	}
+
+	return summary, nil
+}
+
+// importFMVHistory imports FMV history records
+func (s *ImportService) importFMVHistory(ctx context.Context, tx *sql.Tx, userID string, data []byte, _ string) (ImportTableSummary, error) {
+	var fmvRecords []FMVHistory
+	if err := json.Unmarshal(data, &fmvRecords); err != nil {
+		return ImportTableSummary{}, err
+	}
+
+	summary := ImportTableSummary{}
+
+	for _, fmv := range fmvRecords {
+		query := `
+			INSERT INTO fmv_history (id, account_id, currency, effective_date, fmv_per_share, notes, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
+			ON CONFLICT (id) DO UPDATE SET
+				currency = excluded.currency,
+				effective_date = excluded.effective_date,
+				fmv_per_share = excluded.fmv_per_share,
+				notes = excluded.notes
+		`
+
+		result, err := tx.ExecContext(ctx, query,
+			fmv.ID, fmv.AccountID, fmv.Currency, fmv.EffectiveDate, fmv.FMVPerShare, fmv.Notes, fmv.CreatedAt,
+		)
+		if err != nil {
+			summary.Errors++
+			continue
+		}
+
+		rowsAffected, _ := result.RowsAffected()
+		if rowsAffected == 1 {
+			summary.Created++
+		} else {
+			summary.Updated++
+		}
+	}
+
+	return summary, nil
+}
+
+// importEquityExercises imports equity exercise records
+func (s *ImportService) importEquityExercises(ctx context.Context, tx *sql.Tx, userID string, data []byte, _ string) (ImportTableSummary, error) {
+	var exercises []EquityExercise
+	if err := json.Unmarshal(data, &exercises); err != nil {
+		return ImportTableSummary{}, err
+	}
+
+	summary := ImportTableSummary{}
+
+	for _, ex := range exercises {
+		query := `
+			INSERT INTO equity_exercises (id, grant_id, exercise_date, quantity,
+				fmv_at_exercise, cost_basis, exercise_type, notes, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			ON CONFLICT (id) DO UPDATE SET
+				exercise_date = excluded.exercise_date,
+				quantity = excluded.quantity,
+				fmv_at_exercise = excluded.fmv_at_exercise,
+				cost_basis = excluded.cost_basis,
+				exercise_type = excluded.exercise_type,
+				notes = excluded.notes
+		`
+
+		result, err := tx.ExecContext(ctx, query,
+			ex.ID, ex.GrantID, ex.ExerciseDate, ex.Quantity,
+			ex.FMVAtExercise, ex.CostBasis, ex.ExerciseType, ex.Notes, ex.CreatedAt,
+		)
+		if err != nil {
+			summary.Errors++
+			continue
+		}
+
+		rowsAffected, _ := result.RowsAffected()
+		if rowsAffected == 1 {
+			summary.Created++
+		} else {
+			summary.Updated++
+		}
+	}
+
+	return summary, nil
+}
+
+// importEquitySales imports equity sale records
+func (s *ImportService) importEquitySales(ctx context.Context, tx *sql.Tx, userID string, data []byte, _ string) (ImportTableSummary, error) {
+	var sales []EquitySale
+	if err := json.Unmarshal(data, &sales); err != nil {
+		return ImportTableSummary{}, err
+	}
+
+	summary := ImportTableSummary{}
+
+	for _, sale := range sales {
+		query := `
+			INSERT INTO equity_sales (id, grant_id, exercise_id, sale_date, quantity,
+				sale_price, total_proceeds, gain_loss, sale_type, notes, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+			ON CONFLICT (id) DO UPDATE SET
+				exercise_id = excluded.exercise_id,
+				sale_date = excluded.sale_date,
+				quantity = excluded.quantity,
+				sale_price = excluded.sale_price,
+				total_proceeds = excluded.total_proceeds,
+				gain_loss = excluded.gain_loss,
+				sale_type = excluded.sale_type,
+				notes = excluded.notes
+		`
+
+		result, err := tx.ExecContext(ctx, query,
+			sale.ID, sale.GrantID, sale.ExerciseID, sale.SaleDate, sale.Quantity,
+			sale.SalePrice, sale.TotalProceeds, sale.GainLoss, sale.SaleType, sale.Notes, sale.CreatedAt,
 		)
 		if err != nil {
 			summary.Errors++
