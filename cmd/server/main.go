@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"money/internal/account"
+	"money/internal/apikeys"
 	"money/internal/auth"
 	"money/internal/auth/passkey"
 	"money/internal/balance"
@@ -20,6 +21,7 @@ import (
 	"money/internal/holdings"
 	"money/internal/income"
 	"money/internal/logger"
+	"money/internal/moneyy"
 	"money/internal/projections"
 	"money/internal/server/handlers"
 	"money/internal/sync"
@@ -99,6 +101,15 @@ func main() {
 	// Income service (no dependencies)
 	incomeSvc := income.NewService(db)
 
+	// API Keys service (depends on encryption key)
+	apiKeysSvc, err := apikeys.NewService(db, encryptionKey)
+	if err != nil {
+		log.Fatalf("Failed to initialize API keys service: %v", err)
+	}
+
+	// Moneyy service (depends on API keys service)
+	moneySvc := moneyy.NewService(apiKeysSvc)
+
 	logger.Info("All services initialized successfully")
 
 	// Initialize authentication provider
@@ -167,6 +178,7 @@ func main() {
 			handlers.NewDataHandler(exportSvc, importSvc).RegisterRoutes(r)
 			handlers.NewDemoHandler(demoSvc).RegisterRoutes(r)
 			handlers.NewIncomeHandler(incomeSvc).RegisterRoutes(r)
+			handlers.NewAPIKeysHandler(apiKeysSvc, moneySvc).RegisterRoutes(r)
 		})
 	})
 

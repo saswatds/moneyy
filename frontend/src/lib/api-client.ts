@@ -876,6 +876,29 @@ export interface SaveTaxConfigRequest {
   basic_personal_amount?: number;
 }
 
+// API Keys Types
+export interface APIKeyStatus {
+  provider: string;
+  is_configured: boolean;
+  name?: string;
+  last_used_at?: string;
+  is_active?: boolean;
+}
+
+export interface SaveAPIKeyRequest {
+  provider: string;
+  api_key: string;
+  name?: string;
+}
+
+export interface TransformedTaxBrackets {
+  country: string;
+  year: number;
+  region: string;
+  federal_brackets: IncomeTaxBracket[];
+  provincial_brackets: IncomeTaxBracket[];
+}
+
 class ApiClient {
   private baseUrl: string;
   private getToken: () => string | null = () => localStorage.getItem('auth_token');
@@ -1519,6 +1542,31 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify(data),
     });
+  }
+
+  // API Keys endpoints
+
+  async getAPIKeyStatus(provider: string): Promise<APIKeyStatus> {
+    return this.request(`/api-keys/status/${provider}`);
+  }
+
+  async saveAPIKey(data: SaveAPIKeyRequest): Promise<APIKeyStatus> {
+    return this.request('/api-keys', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteAPIKey(provider: string): Promise<{ success: boolean }> {
+    return this.request(`/api-keys/${provider}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Moneyy API endpoints
+
+  async fetchTaxBracketsFromAPI(country: string, year: number, region: string): Promise<TransformedTaxBrackets> {
+    return this.request(`/moneyy/tax-brackets/${country}/${year}/${region}`);
   }
 }
 

@@ -48,6 +48,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { WealthsimpleConnectDialog } from '@/components/sync/WealthsimpleConnectDialog';
+import { APIKeySection } from '@/components/settings/APIKeySection';
 import { useRef } from 'react';
 import { apiClient } from '@/lib/api-client';
 import { useDemoMode } from '@/lib/demo-context';
@@ -725,6 +726,12 @@ export function Settings() {
             </CardContent>
           </Card>
         </div>
+      </div>
+
+      {/* API Integrations Section */}
+      <div className="space-y-4">
+        <Separator />
+        <APIKeySection />
       </div>
 
       {/* Demo Mode Section */}
