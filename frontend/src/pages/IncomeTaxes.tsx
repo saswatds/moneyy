@@ -16,7 +16,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { IconPlus } from '@tabler/icons-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { IconPlus, IconCash, IconReceipt } from '@tabler/icons-react';
 import {
   AddIncomeDialog,
   EditIncomeDialog,
@@ -26,6 +27,7 @@ import {
   IncomeBreakdownChart,
   YearComparisonChart,
   YearSelector,
+  TaxConfigurationCard,
 } from '@/components/income';
 
 const formatNumber = (amount: number) => {
@@ -63,6 +65,7 @@ export function IncomeTaxes() {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedIncome, setSelectedIncome] = useState<IncomeRecord | null>(null);
+  const [activeTab, setActiveTab] = useState('income');
 
   // Fetch data
   const { data: recordsData, isLoading: recordsLoading } = useIncomeRecords(
@@ -99,7 +102,7 @@ export function IncomeTaxes() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Income & Taxes</h1>
           <p className="text-muted-foreground mt-2">
-            Track your income sources and view tax calculations
+            Track your income sources and manage tax configuration
           </p>
         </div>
         <div className="flex items-center gap-4">
@@ -107,14 +110,16 @@ export function IncomeTaxes() {
             selectedYear={selectedYear}
             onYearChange={setSelectedYear}
           />
-          <Button onClick={() => setAddDialogOpen(true)}>
-            <IconPlus className="h-4 w-4 mr-2" />
-            Add Income
-          </Button>
+          {activeTab === 'income' && (
+            <Button onClick={() => setAddDialogOpen(true)}>
+              <IconPlus className="h-4 w-4 mr-2" />
+              Add Income
+            </Button>
+          )}
         </div>
       </div>
 
-      {/* Summary Cards */}
+      {/* Summary Cards - Always visible */}
       {summary && (
         <div className="grid gap-4 md:grid-cols-3">
           <Card>
@@ -157,54 +162,76 @@ export function IncomeTaxes() {
         </div>
       )}
 
-      {/* Tax Breakdown and Income Chart */}
-      {summary && (
-        <div className="grid gap-6 md:grid-cols-2">
-          <TaxSummaryCard summary={summary} />
-          <IncomeBreakdownChart summary={summary} />
-        </div>
-      )}
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList>
+          <TabsTrigger value="income">
+            <IconCash className="h-4 w-4 mr-2" />
+            Income
+          </TabsTrigger>
+          <TabsTrigger value="taxes">
+            <IconReceipt className="h-4 w-4 mr-2" />
+            Tax Configuration
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Income Records Table */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Income Records</CardTitle>
-              <CardDescription>
-                Manage your income sources for {selectedYear}
-              </CardDescription>
+        {/* Income Tab */}
+        <TabsContent value="income" className="space-y-6 mt-6">
+          {/* Tax Breakdown and Income Chart */}
+          {summary && (
+            <div className="grid gap-6 md:grid-cols-2">
+              <TaxSummaryCard summary={summary} />
+              <IncomeBreakdownChart summary={summary} />
             </div>
-            <Select
-              value={categoryFilter}
-              onValueChange={(value) => setCategoryFilter(value as IncomeCategory | 'all')}
-            >
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Filter by category" />
-              </SelectTrigger>
-              <SelectContent>
-                {INCOME_CATEGORIES.map((cat) => (
-                  <SelectItem key={cat.value} value={cat.value}>
-                    {cat.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <IncomeTable
-            records={records}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-          />
-        </CardContent>
-      </Card>
+          )}
 
-      {/* Multi-Year Comparison */}
-      {comparison && comparison.years.length > 0 && (
-        <YearComparisonChart years={comparison.years} />
-      )}
+          {/* Income Records Table */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Income Records</CardTitle>
+                  <CardDescription>
+                    Manage your income sources for {selectedYear}
+                  </CardDescription>
+                </div>
+                <Select
+                  value={categoryFilter}
+                  onValueChange={(value) => setCategoryFilter(value as IncomeCategory | 'all')}
+                >
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Filter by category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {INCOME_CATEGORIES.map((cat) => (
+                      <SelectItem key={cat.value} value={cat.value}>
+                        {cat.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <IncomeTable
+                records={records}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+              />
+            </CardContent>
+          </Card>
+
+          {/* Multi-Year Comparison */}
+          {comparison && comparison.years.length > 0 && (
+            <YearComparisonChart years={comparison.years} />
+          )}
+        </TabsContent>
+
+        {/* Taxes Tab */}
+        <TabsContent value="taxes" className="mt-6">
+          <TaxConfigurationCard selectedYear={selectedYear} />
+        </TabsContent>
+      </Tabs>
 
       {/* Dialogs */}
       <AddIncomeDialog

@@ -6,3 +6,5 @@ export { TaxSummaryCard } from './TaxSummaryCard';
 export { IncomeBreakdownChart } from './IncomeBreakdownChart';
 export { YearComparisonChart } from './YearComparisonChart';
 export { YearSelector } from './YearSelector';
+export { FetchTaxBracketsDialog } from './FetchTaxBracketsDialog';
+export { TaxConfigurationCard } from './TaxConfigurationCard';
