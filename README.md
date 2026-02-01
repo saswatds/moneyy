@@ -30,57 +30,74 @@ Money is a modern, self-hosted personal finance management platform that gives y
 
 ## Deployment
 
-**Prerequisites:** Docker with Compose plugin installed
+**Prerequisites:** Docker installed
 
-**1. Clone the repository**
+### Option 1: Using Pre-built Image (Recommended)
 
 ```bash
+# Generate secure keys
+ENC_MASTER_KEY=$(openssl rand -base64 32)
+JWT_SECRET=$(openssl rand -base64 32)
+
+# Run the container
+docker run -d \
+  --name moneyy \
+  -p 4000:4000 \
+  -v moneyy-data:/app/data \
+  -e ENC_MASTER_KEY="$ENC_MASTER_KEY" \
+  -e JWT_SECRET="$JWT_SECRET" \
+  -e WEBAUTHN_RP_ID=localhost \
+  -e WEBAUTHN_RP_ORIGIN=http://localhost:4000 \
+  ghcr.io/saswatds/moneyy:latest
+```
+
+### Option 2: Build from Source
+
+```bash
+# Clone and build
 git clone https://github.com/saswatds/moneyy.git
 cd moneyy
-```
+docker build -t moneyy .
 
-**2. Create environment file**
+# Generate secure keys
+ENC_MASTER_KEY=$(openssl rand -base64 32)
+JWT_SECRET=$(openssl rand -base64 32)
 
-Copy the example and configure:
-
-```bash
-cp .env.prod.example .env.prod
-```
-
-Edit `.env.prod` with your values:
-
-```bash
-# REQUIRED - Database password
-DB_PASSWORD=your_secure_production_password_here
-
-# REQUIRED - Generate secure keys
-ENC_MASTER_KEY=your_production_encryption_key_here
-JWT_SECRET=your_production_jwt_secret_min_32_chars_here
-
-# REQUIRED - WebAuthn settings
-WEBAUTHN_RP_ID=localhost
-WEBAUTHN_RP_ORIGIN=http://localhost:4000
-
-# Optional - CORS origins
-CORS_ORIGINS=http://localhost:4000
-
-# Optional - Docker image version (default: latest)
-VERSION=latest
-```
-
-Generate secure keys:
-```bash
-openssl rand -base64 32  # Use for ENC_MASTER_KEY
-openssl rand -base64 32  # Use for JWT_SECRET
-```
-
-**3. Deploy**
-
-```bash
-docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
+# Run
+docker run -d \
+  --name moneyy \
+  -p 4000:4000 \
+  -v moneyy-data:/app/data \
+  -e ENC_MASTER_KEY="$ENC_MASTER_KEY" \
+  -e JWT_SECRET="$JWT_SECRET" \
+  -e WEBAUTHN_RP_ID=localhost \
+  -e WEBAUTHN_RP_ORIGIN=http://localhost:4000 \
+  moneyy
 ```
 
 Your instance will be available at `http://localhost:4000`
+
+### Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `ENC_MASTER_KEY` | Yes | Encryption key for sensitive data (base64, 32 bytes) |
+| `JWT_SECRET` | Yes | JWT signing secret (min 32 characters) |
+| `WEBAUTHN_RP_ID` | Yes | WebAuthn relying party ID (your domain) |
+| `WEBAUTHN_RP_ORIGIN` | Yes | WebAuthn origin URL |
+| `DB_PATH` | No | SQLite database path (default: `/app/data/moneyy.db`) |
+| `SERVER_PORT` | No | Server port (default: `4000`) |
+| `LOG_LEVEL` | No | Log level: debug, info, warn, error (default: `info`) |
+| `CORS_ORIGINS` | No | Allowed CORS origins (default: `*`) |
+
+### Data Persistence
+
+The SQLite database is stored in `/app/data` inside the container. Mount a volume to persist your data:
+
+```bash
+-v moneyy-data:/app/data      # Named volume (recommended)
+-v /path/on/host:/app/data    # Bind mount
+```
 
 ---
 

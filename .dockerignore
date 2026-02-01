@@ -1,0 +1,49 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Node modules (frontend has its own in container)
+frontend/node_modules
+
+# Go build artifacts
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test files
+*_test.go
+**/*_test.go
+coverage.out
+coverage.html
+
+# Development files
+.air.toml
+Dockerfile.dev
+docker-compose.yml
+docker-compose.prod.yml
+frontend/Dockerfile.dev
+
+# Data directories
+data/
+*.db
+*.db-shm
+*.db-wal
+
+# Documentation
+*.md
+
+# Local env files
+.env
+.env.*
+!.env.example
+
+# OS files
+.DS_Store
+Thumbs.db

@@ -1,3 +1,10 @@
+# =============================================================================
+# Moneyy - Single Production Docker Image
+# =============================================================================
+# Build: docker build -t moneyy .
+# Run:   docker run -p 4000:4000 -v moneyy-data:/app/data -e ENC_MASTER_KEY=... moneyy
+# =============================================================================
+
 # Frontend build stage
 FROM node:20-alpine AS frontend-builder
 
@@ -41,22 +48,25 @@ RUN go mod download
 COPY . .
 
 # Build the application with proper architecture detection
+# Using pure Go SQLite driver (modernc.org/sqlite) - no CGO needed
 ARG TARGETARCH
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -a -installsuffix cgo -o server ./cmd/server
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -a -installsuffix cgo -o migrate ./cmd/migrate
 
-# Final stage
-FROM alpine:latest
+# Final stage - minimal production image
+FROM alpine:3.19
 
 # Install runtime dependencies
 RUN apk --no-cache add ca-certificates tzdata
 
+# Create non-root user for security
+RUN addgroup -g 1000 moneyy && \
+    adduser -u 1000 -G moneyy -s /bin/sh -D moneyy
+
 # Set working directory
 WORKDIR /app
 
-# Copy binaries from api-builder
+# Copy binary from api-builder
 COPY --from=api-builder /app/server .
-COPY --from=api-builder /app/migrate .
 
 # Copy migrations
 COPY --from=api-builder /app/migrations ./migrations
@@ -64,8 +74,27 @@ COPY --from=api-builder /app/migrations ./migrations
 # Copy frontend build from frontend-builder
 COPY --from=frontend-builder /app/dist ./static
 
+# Create data directory for SQLite database
+RUN mkdir -p /app/data && chown -R moneyy:moneyy /app
+
+# Switch to non-root user
+USER moneyy
+
+# Environment defaults
+ENV DB_PATH=/app/data/moneyy.db \
+    SERVER_PORT=4000 \
+    LOG_LEVEL=info \
+    LOG_FORMAT=json
+
+# Volume for persistent SQLite data
+VOLUME ["/app/data"]
+
 # Expose port
 EXPOSE 4000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD wget --quiet --tries=1 --spider http://localhost:4000/api/health || exit 1
 
 # Run the application
 CMD ["./server"]
