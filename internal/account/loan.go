@@ -93,7 +93,7 @@ func (s *Service) CreateLoanDetails(ctx context.Context, accountID string, req *
 	id := uuid.New().String()
 	now := time.Now()
 
-	err := s.db.QueryRowContext(ctx, `
+	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO loan_details (
 			id, account_id, original_amount, interest_rate, rate_type,
 			start_date, term_months,
@@ -107,22 +107,11 @@ func (s *Service) CreateLoanDetails(ctx context.Context, accountID string, req *
 			$11, $12, $13, $14, $15, $16,
 			$17, $18
 		)
-		RETURNING id, account_id, original_amount, interest_rate, rate_type,
-			start_date, term_months,
-			payment_amount, payment_frequency, payment_day,
-			loan_type, lender, loan_number, purpose, maturity_date, notes,
-			created_at, updated_at
 	`, id, accountID, req.OriginalAmount, req.InterestRate, req.RateType,
 		req.StartDate, req.TermMonths,
 		req.PaymentAmount, req.PaymentFrequency, req.PaymentDay,
 		req.LoanType, req.Lender, req.LoanNumber, req.Purpose, maturityDate, req.Notes,
-		now, now).Scan(
-		&id, &accountID, &req.OriginalAmount, &req.InterestRate, &req.RateType,
-		&req.StartDate, &req.TermMonths,
-		&req.PaymentAmount, &req.PaymentFrequency, &req.PaymentDay,
-		&req.LoanType, &req.Lender, &req.LoanNumber, &req.Purpose, &maturityDate, &req.Notes,
-		&now, &now,
-	)
+		now, now)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create loan details: %w", err)
@@ -285,26 +274,31 @@ func (s *Service) RecordLoanPayment(ctx context.Context, accountID string, req *
 	id := uuid.New().String()
 	now := time.Now()
 
-	var payment LoanPayment
-	err = s.db.QueryRowContext(ctx, `
+	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO loan_payments (
 			id, account_id, payment_date,
 			payment_amount, principal_amount, interest_amount, extra_payment,
 			balance_after, notes, created_at
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-		RETURNING id, account_id, payment_date,
-			payment_amount, principal_amount, interest_amount, extra_payment,
-			balance_after, notes, created_at
 	`, id, accountID, req.PaymentDate,
 		req.PaymentAmount, req.PrincipalAmount, req.InterestAmount, req.ExtraPayment,
-		balanceAfter, req.Notes, now).Scan(
-		&payment.ID, &payment.AccountID, &payment.PaymentDate,
-		&payment.PaymentAmount, &payment.PrincipalAmount, &payment.InterestAmount, &payment.ExtraPayment,
-		&payment.BalanceAfter, &payment.Notes, &payment.CreatedAt,
-	)
+		balanceAfter, req.Notes, now)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to record payment: %w", err)
+	}
+
+	payment := &LoanPayment{
+		ID:              id,
+		AccountID:       accountID,
+		PaymentDate:     req.PaymentDate,
+		PaymentAmount:   req.PaymentAmount,
+		PrincipalAmount: req.PrincipalAmount,
+		InterestAmount:  req.InterestAmount,
+		ExtraPayment:    req.ExtraPayment,
+		BalanceAfter:    balanceAfter,
+		Notes:           req.Notes,
+		CreatedAt:       now,
 	}
 
 	// Also create a balance entry so the loan balance appears in the accounts list
@@ -319,7 +313,7 @@ func (s *Service) RecordLoanPayment(ctx context.Context, accountID string, req *
 		fmt.Printf("Warning: failed to create balance entry: %v\n", err)
 	}
 
-	return &payment, nil
+	return payment, nil
 }
 
 // SyncLoanBalance syncs the loan balance to the balance service

@@ -70,21 +70,33 @@ func (s *Service) CreateIncomeRecord(ctx context.Context, req *CreateIncomeRecor
 		isTaxable = *req.IsTaxable
 	}
 
-	record := &IncomeRecord{}
-	err := s.db.QueryRowContext(ctx, `
-		INSERT INTO income_records (user_id, source, category, amount, currency, frequency, tax_year, date_received, description, is_taxable)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-		RETURNING id, user_id, source, category, amount, currency, frequency, tax_year, date_received, description, is_taxable, created_at, updated_at
-	`, userID, req.Source, req.Category, req.Amount, req.Currency, req.Frequency, req.TaxYear, req.DateReceived, req.Description, isTaxable,
-	).Scan(&record.ID, &record.UserID, &record.Source, &record.Category, &record.Amount, &record.Currency,
-		&record.Frequency, &record.TaxYear, &record.DateReceived, &record.Description, &record.IsTaxable,
-		&record.CreatedAt, &record.UpdatedAt)
+	id := uuid.New().String()
+	now := time.Now()
+
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO income_records (id, user_id, source, category, amount, currency, frequency, tax_year, date_received, description, is_taxable, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+	`, id, userID, req.Source, req.Category, req.Amount, req.Currency, req.Frequency, req.TaxYear, req.DateReceived, req.Description, isTaxable, now, now)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create income record: %w", err)
 	}
 
-	return record, nil
+	return &IncomeRecord{
+		ID:           id,
+		UserID:       userID,
+		Source:       req.Source,
+		Category:     req.Category,
+		Amount:       req.Amount,
+		Currency:     req.Currency,
+		Frequency:    req.Frequency,
+		TaxYear:      req.TaxYear,
+		DateReceived: req.DateReceived,
+		Description:  req.Description,
+		IsTaxable:    isTaxable,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}, nil
 }
 
 // GetIncomeRecord retrieves a single income record
@@ -221,25 +233,25 @@ func (s *Service) UpdateIncomeRecord(ctx context.Context, id string, req *Update
 		argCount++
 	}
 
-	query += fmt.Sprintf(` WHERE id = $%d AND user_id = $%d
-		RETURNING id, user_id, source, category, amount, currency, frequency, tax_year, date_received, description, is_taxable, created_at, updated_at`,
-		argCount, argCount+1)
+	query += fmt.Sprintf(` WHERE id = $%d AND user_id = $%d`, argCount, argCount+1)
 	args = append(args, id, userID)
 
-	record := &IncomeRecord{}
-	err := s.db.QueryRowContext(ctx, query, args...).Scan(
-		&record.ID, &record.UserID, &record.Source, &record.Category, &record.Amount, &record.Currency,
-		&record.Frequency, &record.TaxYear, &record.DateReceived, &record.Description, &record.IsTaxable,
-		&record.CreatedAt, &record.UpdatedAt)
-
-	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("income record not found")
-	}
+	result, err := s.db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update income record: %w", err)
 	}
 
-	return record, nil
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return nil, fmt.Errorf("failed to check rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return nil, fmt.Errorf("income record not found")
+	}
+
+	// Fetch the updated record
+	return s.GetIncomeRecord(ctx, id)
 }
 
 // DeleteIncomeRecord deletes an income record

@@ -50,28 +50,36 @@ func (s *Service) initiateWealthsimpleConnectionReal(ctx context.Context, userID
 	}
 
 	// Store encrypted credentials in database (temporary, until OTP verified)
-	var credentialID string
+	credentialID := uuid.New().String()
 	connectionName := fmt.Sprintf("Wealthsimple - %s", username)
-	err = s.db.QueryRowContext(ctx, `
+	now := time.Now()
+
+	// Check if credential already exists for this user
+	var existingID string
+	existingErr := s.db.QueryRowContext(ctx, `SELECT id FROM sync_credentials WHERE user_id = $1`, userID).Scan(&existingID)
+	if existingErr == nil {
+		credentialID = existingID // Use existing ID for update
+	}
+
+	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO sync_credentials (
-			user_id, provider, name, status, sync_frequency,
+			id, user_id, provider, name, status, sync_frequency,
 			encrypted_username, encrypted_password,
 			device_id, session_id, app_instance_id, email,
 			created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		ON CONFLICT (user_id) DO UPDATE SET
-			name = EXCLUDED.name,
-			encrypted_username = EXCLUDED.encrypted_username,
-			encrypted_password = EXCLUDED.encrypted_password,
-			device_id = EXCLUDED.device_id,
-			session_id = EXCLUDED.session_id,
-			app_instance_id = EXCLUDED.app_instance_id,
-			email = EXCLUDED.email,
-			updated_at = EXCLUDED.updated_at
-		RETURNING id
-	`, userID, ProviderWealthsimple, connectionName, StatusSyncing, SyncFrequencyDaily,
+			name = excluded.name,
+			encrypted_username = excluded.encrypted_username,
+			encrypted_password = excluded.encrypted_password,
+			device_id = excluded.device_id,
+			session_id = excluded.session_id,
+			app_instance_id = excluded.app_instance_id,
+			email = excluded.email,
+			updated_at = excluded.updated_at
+	`, credentialID, userID, ProviderWealthsimple, connectionName, StatusSyncing, SyncFrequencyDaily,
 		encryptedUsername, encryptedPassword,
-		deviceID, sessionID, appInstanceID, username, time.Now(), time.Now()).Scan(&credentialID)
+		deviceID, sessionID, appInstanceID, username, now, now)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to store credentials: %w", err)
