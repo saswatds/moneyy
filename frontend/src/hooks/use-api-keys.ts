@@ -46,3 +46,12 @@ export function useFetchTaxBrackets() {
       apiClient.fetchTaxBracketsFromAPI(country, year, region),
   });
 }
+
+// Fetch Tax Params from Moneyy API
+
+export function useFetchTaxParams() {
+  return useMutation({
+    mutationFn: ({ country, year, region }: { country: string; year: number; region: string }) =>
+      apiClient.fetchTaxParamsFromAPI(country, year, region),
+  });
+}

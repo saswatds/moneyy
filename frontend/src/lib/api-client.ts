@@ -776,6 +776,10 @@ export interface IncomeTaxBracket {
   rate: number;
 }
 
+export type FieldSource = 'api' | 'manual';
+
+export type FieldSources = Record<string, FieldSource>;
+
 export interface TaxConfiguration {
   id?: string;
   user_id?: string;
@@ -789,6 +793,7 @@ export interface TaxConfiguration {
   ei_rate: number;
   ei_max_insurable_earnings: number;
   basic_personal_amount: number;
+  field_sources?: FieldSources;
   created_at?: string;
   updated_at?: string;
 }
@@ -874,6 +879,7 @@ export interface SaveTaxConfigRequest {
   ei_rate?: number;
   ei_max_insurable_earnings?: number;
   basic_personal_amount?: number;
+  field_sources?: FieldSources;
 }
 
 // API Keys Types
@@ -897,6 +903,20 @@ export interface TransformedTaxBrackets {
   region: string;
   federal_brackets: IncomeTaxBracket[];
   provincial_brackets: IncomeTaxBracket[];
+}
+
+export interface TransformedTaxParams {
+  country: string;
+  year: number;
+  region: string;
+  cpp_rate: number;
+  cpp_max_pensionable_earnings: number;
+  cpp_basic_exemption: number;
+  ei_rate: number;
+  ei_max_insurable_earnings: number;
+  basic_personal_amount: number;
+  rrsp_limit: number;
+  tfsa_limit: number;
 }
 
 class ApiClient {
@@ -1567,6 +1587,10 @@ class ApiClient {
 
   async fetchTaxBracketsFromAPI(country: string, year: number, region: string): Promise<TransformedTaxBrackets> {
     return this.request(`/moneyy/tax-brackets/${country}/${year}/${region}`);
+  }
+
+  async fetchTaxParamsFromAPI(country: string, year: number, region: string): Promise<TransformedTaxParams> {
+    return this.request(`/moneyy/tax-params/${country}/${year}/${region}`);
   }
 }
 

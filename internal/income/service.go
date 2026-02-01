@@ -406,12 +406,13 @@ func (s *Service) GetTaxConfig(ctx context.Context, year int) (*TaxConfiguration
 
 	config := &TaxConfiguration{}
 	var federalBracketsJSON, provincialBracketsJSON []byte
+	var fieldSourcesJSON sql.NullString
 
 	err := s.db.QueryRowContext(ctx, `
 		SELECT id, user_id, tax_year, province, federal_brackets, provincial_brackets,
 			cpp_rate, cpp_max_pensionable_earnings, cpp_basic_exemption,
 			ei_rate, ei_max_insurable_earnings, basic_personal_amount,
-			created_at, updated_at
+			field_sources, created_at, updated_at
 		FROM tax_configurations
 		WHERE user_id = $1 AND tax_year = $2
 	`, userID, year).Scan(
@@ -419,7 +420,7 @@ func (s *Service) GetTaxConfig(ctx context.Context, year int) (*TaxConfiguration
 		&federalBracketsJSON, &provincialBracketsJSON,
 		&config.CPPRate, &config.CPPMaxPensionableEarnings, &config.CPPBasicExemption,
 		&config.EIRate, &config.EIMaxInsurableEarnings, &config.BasicPersonalAmount,
-		&config.CreatedAt, &config.UpdatedAt)
+		&fieldSourcesJSON, &config.CreatedAt, &config.UpdatedAt)
 
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("tax configuration not found for year %d", year)
@@ -434,6 +435,15 @@ func (s *Service) GetTaxConfig(ctx context.Context, year int) (*TaxConfiguration
 	}
 	if err := json.Unmarshal(provincialBracketsJSON, &config.ProvincialBrackets); err != nil {
 		return nil, fmt.Errorf("failed to parse provincial brackets: %w", err)
+	}
+
+	// Parse field sources (default to empty map if null or invalid)
+	config.FieldSources = make(FieldSources)
+	if fieldSourcesJSON.Valid && fieldSourcesJSON.String != "" {
+		if err := json.Unmarshal([]byte(fieldSourcesJSON.String), &config.FieldSources); err != nil {
+			// Log error but don't fail - just use empty map
+			config.FieldSources = make(FieldSources)
+		}
 	}
 
 	return config, nil
@@ -482,14 +492,24 @@ func (s *Service) SaveTaxConfig(ctx context.Context, req *SaveTaxConfigRequest) 
 		basicPersonalAmount = *req.BasicPersonalAmount
 	}
 
+	// Handle field sources - merge with existing if present
+	fieldSources := make(FieldSources)
+	if req.FieldSources != nil {
+		fieldSources = req.FieldSources
+	}
+	fieldSourcesJSON, err := json.Marshal(fieldSources)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal field sources: %w", err)
+	}
+
 	now := time.Now()
 	newID := uuid.New().String()
 
 	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO tax_configurations (id, user_id, tax_year, province, federal_brackets, provincial_brackets,
 			cpp_rate, cpp_max_pensionable_earnings, cpp_basic_exemption,
-			ei_rate, ei_max_insurable_earnings, basic_personal_amount, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+			ei_rate, ei_max_insurable_earnings, basic_personal_amount, field_sources, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 		ON CONFLICT (user_id, tax_year) DO UPDATE SET
 			province = excluded.province,
 			federal_brackets = excluded.federal_brackets,
@@ -500,9 +520,10 @@ func (s *Service) SaveTaxConfig(ctx context.Context, req *SaveTaxConfigRequest) 
 			ei_rate = excluded.ei_rate,
 			ei_max_insurable_earnings = excluded.ei_max_insurable_earnings,
 			basic_personal_amount = excluded.basic_personal_amount,
-			updated_at = $14
+			field_sources = excluded.field_sources,
+			updated_at = $15
 	`, newID, userID, req.TaxYear, req.Province, federalBracketsJSON, provincialBracketsJSON,
-		cppRate, cppMaxPensionable, cppBasicExemption, eiRate, eiMaxInsurable, basicPersonalAmount, now, now)
+		cppRate, cppMaxPensionable, cppBasicExemption, eiRate, eiMaxInsurable, basicPersonalAmount, fieldSourcesJSON, now, now)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to save tax configuration: %w", err)
@@ -557,6 +578,7 @@ func (s *Service) getDefaultTaxConfig(year int) *TaxConfiguration {
 		EIRate:                    0.0163,
 		EIMaxInsurableEarnings:    63200,
 		BasicPersonalAmount:       15705,
+		FieldSources:              make(FieldSources),
 	}
 }
 

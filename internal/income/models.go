@@ -57,22 +57,34 @@ type TaxBracket struct {
 	Rate       float64 `json:"rate"`
 }
 
+// FieldSource represents the source of a field value
+type FieldSource string
+
+const (
+	FieldSourceAPI    FieldSource = "api"
+	FieldSourceManual FieldSource = "manual"
+)
+
+// FieldSources maps field names to their data source
+type FieldSources map[string]FieldSource
+
 // TaxConfiguration represents per-user tax settings per year
 type TaxConfiguration struct {
-	ID                       string       `json:"id"`
-	UserID                   string       `json:"user_id"`
-	TaxYear                  int          `json:"tax_year"`
-	Province                 string       `json:"province"`
-	FederalBrackets          []TaxBracket `json:"federal_brackets"`
-	ProvincialBrackets       []TaxBracket `json:"provincial_brackets"`
-	CPPRate                  float64      `json:"cpp_rate"`
-	CPPMaxPensionableEarnings float64     `json:"cpp_max_pensionable_earnings"`
-	CPPBasicExemption        float64      `json:"cpp_basic_exemption"`
-	EIRate                   float64      `json:"ei_rate"`
-	EIMaxInsurableEarnings   float64      `json:"ei_max_insurable_earnings"`
-	BasicPersonalAmount      float64      `json:"basic_personal_amount"`
-	CreatedAt                time.Time    `json:"created_at"`
-	UpdatedAt                time.Time    `json:"updated_at"`
+	ID                        string       `json:"id"`
+	UserID                    string       `json:"user_id"`
+	TaxYear                   int          `json:"tax_year"`
+	Province                  string       `json:"province"`
+	FederalBrackets           []TaxBracket `json:"federal_brackets"`
+	ProvincialBrackets        []TaxBracket `json:"provincial_brackets"`
+	CPPRate                   float64      `json:"cpp_rate"`
+	CPPMaxPensionableEarnings float64      `json:"cpp_max_pensionable_earnings"`
+	CPPBasicExemption         float64      `json:"cpp_basic_exemption"`
+	EIRate                    float64      `json:"ei_rate"`
+	EIMaxInsurableEarnings    float64      `json:"ei_max_insurable_earnings"`
+	BasicPersonalAmount       float64      `json:"basic_personal_amount"`
+	FieldSources              FieldSources `json:"field_sources"`
+	CreatedAt                 time.Time    `json:"created_at"`
+	UpdatedAt                 time.Time    `json:"updated_at"`
 }
 
 // AnnualIncomeSummary represents pre-computed annual totals
@@ -172,6 +184,7 @@ type SaveTaxConfigRequest struct {
 	EIRate                    *float64     `json:"ei_rate,omitempty"`
 	EIMaxInsurableEarnings    *float64     `json:"ei_max_insurable_earnings,omitempty"`
 	BasicPersonalAmount       *float64     `json:"basic_personal_amount,omitempty"`
+	FieldSources              FieldSources `json:"field_sources,omitempty"`
 }
 
 // YearComparisonResponse represents multi-year income comparison
