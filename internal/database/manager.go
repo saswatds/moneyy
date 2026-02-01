@@ -35,8 +35,9 @@ func NewManager() (*Manager, error) {
 		}
 	}
 
-	// Build SQLite connection string with pragmas for better performance
-	dsn := fmt.Sprintf("%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(ON)", dbPath)
+	// Build SQLite connection string with pragmas
+	// Use DELETE journal mode for NAS/network storage compatibility (WAL doesn't work on network filesystems)
+	dsn := fmt.Sprintf("%s?_pragma=journal_mode(DELETE)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(ON)", dbPath)
 
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
