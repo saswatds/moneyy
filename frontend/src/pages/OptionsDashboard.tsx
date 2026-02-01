@@ -35,7 +35,7 @@ import {
   useAllExercises,
   useDeleteEquityGrant,
 } from '@/hooks/use-options';
-import type { EquityGrantWithSummary, CurrencySummary } from '@/lib/api-client';
+import type { EquityGrantWithSummary } from '@/lib/api-client';
 import { formatCurrency, convertCurrency, aggregateToCAD } from '@/lib/currency';
 import { GrantForm } from '@/components/options/GrantForm';
 import { FMVForm } from '@/components/options/FMVForm';

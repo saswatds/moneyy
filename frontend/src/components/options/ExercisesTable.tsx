@@ -39,7 +39,6 @@ export function ExercisesTable({ exercises, grants, accountId }: ExercisesTableP
   const [editDialogOpen, setEditDialogOpen] = useState(false);
 
   const { data: exchangeRates } = useExchangeRates();
-  const updateExercise = useUpdateExercise(accountId);
   const deleteExercise = useDeleteExercise(accountId);
 
   const getGrantCurrency = (grantId: string) => {
@@ -239,7 +238,7 @@ interface EditExerciseFormProps {
   onCancel: () => void;
 }
 
-function EditExerciseForm({ exercise, accountId, currency, onSuccess, onCancel }: EditExerciseFormProps) {
+function EditExerciseForm({ exercise, accountId, currency: _currency, onSuccess, onCancel }: EditExerciseFormProps) {
   const updateExercise = useUpdateExercise(accountId);
 
   const [exerciseDate, setExerciseDate] = useState(exercise.exercise_date.split('T')[0]);

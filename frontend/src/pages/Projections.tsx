@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 import type { ProjectionConfig, ProjectionResponse } from '@/lib/api-client';
 import { useExchangeRates } from '@/hooks/use-exchange-rates';
+import { useAnnualIncomeSummary, useIncomeTaxConfig } from '@/hooks/use-income';
 import { EventsList } from '@/components/projections/EventsList';
 import { SensitivityAnalysisDialog } from '@/components/projections/SensitivityAnalysisDialog';
 import { CurrencyInput } from '@/components/projections/CurrencyInput';
@@ -24,11 +26,11 @@ import {
   IconAlertCircle,
   IconPlus,
   IconTrash,
-  IconDeviceFloppy,
   IconBulb,
   IconCopy,
   IconInfoCircle,
-  IconChevronDown,
+  IconLink,
+  IconRefresh,
 } from '@tabler/icons-react';
 import {
   Select,
@@ -93,6 +95,8 @@ const defaultConfig: ProjectionConfig = {
 };
 
 export function Projections() {
+  const navigate = useNavigate();
+  const currentYear = new Date().getFullYear();
   const [config, setConfig] = useState<ProjectionConfig>(defaultConfig);
   const [projectionData, setProjectionData] = useState<ProjectionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -102,13 +106,34 @@ export function Projections() {
   const [cloneDialogOpen, setCloneDialogOpen] = useState(false);
   const [cloneName, setCloneName] = useState('');
   const [sensitivityDialogOpen, setSensitivityDialogOpen] = useState(false);
-  const [taxBracketsOpen, setTaxBracketsOpen] = useState(false);
+  const [useComputedIncome, setUseComputedIncome] = useState(true);
+  const [useComputedExpenses, setUseComputedExpenses] = useState(true);
   const [sensitivityParameter, setSensitivityParameter] = useState<{
     name: string;
     label: string;
     value: number;
     updateFn?: (path: string, value: number) => ProjectionConfig;
   } | null>(null);
+
+  // Fetch income and tax configuration from Income & Taxes system
+  const { data: incomeSummary } = useAnnualIncomeSummary(currentYear);
+  const { data: taxConfig } = useIncomeTaxConfig(currentYear);
+
+  // Computed values from Income & Taxes system
+  const computedAnnualIncome = useMemo(() => {
+    if (!incomeSummary) return 0;
+    return incomeSummary.total_gross_income + incomeSummary.stock_options_benefit;
+  }, [incomeSummary]);
+
+  const syncedFederalBrackets = useMemo(() => {
+    if (!taxConfig?.federal_brackets?.length) return defaultConfig.federal_tax_brackets;
+    return taxConfig.federal_brackets;
+  }, [taxConfig]);
+
+  const syncedProvincialBrackets = useMemo(() => {
+    if (!taxConfig?.provincial_brackets?.length) return defaultConfig.provincial_tax_brackets;
+    return taxConfig.provincial_brackets;
+  }, [taxConfig]);
 
   // Load scenarios
   const { data: scenariosData, refetch: refetchScenarios } = useQuery({
@@ -279,6 +304,32 @@ export function Projections() {
   }, 0) || 0;
 
   const totalRecurringExpenses = computedRecurringExpenses + computedInferredExpenses;
+
+  // Computed monthly expenses (this is what's actually tracked)
+  const computedMonthlyExpenses = totalRecurringExpenses;
+
+  // Sync computed values when data loads (only if using computed values and not loading a scenario)
+  useEffect(() => {
+    if (useComputedIncome && computedAnnualIncome > 0 && !currentScenarioId) {
+      setConfig(prev => ({ ...prev, annual_salary: computedAnnualIncome }));
+    }
+  }, [computedAnnualIncome, useComputedIncome, currentScenarioId]);
+
+  useEffect(() => {
+    if (useComputedExpenses && computedMonthlyExpenses > 0 && !currentScenarioId) {
+      setConfig(prev => ({ ...prev, monthly_expenses: computedMonthlyExpenses }));
+    }
+  }, [computedMonthlyExpenses, useComputedExpenses, currentScenarioId]);
+
+  useEffect(() => {
+    if (taxConfig && !currentScenarioId) {
+      setConfig(prev => ({
+        ...prev,
+        federal_tax_brackets: syncedFederalBrackets,
+        provincial_tax_brackets: syncedProvincialBrackets,
+      }));
+    }
+  }, [syncedFederalBrackets, syncedProvincialBrackets, taxConfig, currentScenarioId]);
 
   const handleCalculate = () => {
     calculateMutation.mutate();
@@ -1055,16 +1106,36 @@ export function Projections() {
             <CardContent className="space-y-8">
               {/* Income Section */}
               <div className="space-y-4">
-                <h4 className="text-sm font-medium border-b pb-2">Income & Salary</h4>
+                <h4 className="text-sm font-medium border-b pb-2">Income</h4>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>Annual Salary</Label>
+                    <Label>Annual Income</Label>
                     <CurrencyInput
                       value={config.annual_salary}
-                      onChange={(value) => setConfig({ ...config, annual_salary: value })}
+                      onChange={(value) => {
+                        setUseComputedIncome(false);
+                        setConfig({ ...config, annual_salary: value });
+                      }}
                       step={1000}
-                      onAnalyze={() => openSensitivityAnalysis('annual_salary', 'Annual Salary', config.annual_salary)}
+                      onAnalyze={() => openSensitivityAnalysis('annual_salary', 'Annual Income', config.annual_salary)}
                     />
+                    {computedAnnualIncome > 0 && (
+                      config.annual_salary !== computedAnnualIncome ? (
+                        <button
+                          type="button"
+                          className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+                          onClick={() => {
+                            setUseComputedIncome(true);
+                            setConfig(prev => ({ ...prev, annual_salary: computedAnnualIncome }));
+                          }}
+                        >
+                          <IconRefresh className="h-3 w-3" />
+                          Use tracked: ${Math.round(computedAnnualIncome).toLocaleString()}
+                        </button>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">Using tracked income</p>
+                      )
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label className="flex items-center gap-1.5">
@@ -1098,13 +1169,28 @@ export function Projections() {
                     <Label>Monthly Expenses</Label>
                     <CurrencyInput
                       value={config.monthly_expenses}
-                      onChange={(value) => setConfig({ ...config, monthly_expenses: value })}
+                      onChange={(value) => {
+                        setUseComputedExpenses(false);
+                        setConfig({ ...config, monthly_expenses: value });
+                      }}
                       onAnalyze={() => openSensitivityAnalysis('monthly_expenses', 'Monthly Expenses', config.monthly_expenses)}
                     />
-                    {totalRecurringExpenses > 0 && (
-                      <p className="text-xs text-muted-foreground">
-                        + {Math.round(totalRecurringExpenses).toLocaleString()} CAD/mo from tracked expenses
-                      </p>
+                    {computedMonthlyExpenses > 0 && (
+                      config.monthly_expenses !== computedMonthlyExpenses ? (
+                        <button
+                          type="button"
+                          className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+                          onClick={() => {
+                            setUseComputedExpenses(true);
+                            setConfig(prev => ({ ...prev, monthly_expenses: computedMonthlyExpenses }));
+                          }}
+                        >
+                          <IconRefresh className="h-3 w-3" />
+                          Use tracked: ${Math.round(computedMonthlyExpenses).toLocaleString()}/mo
+                        </button>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">Using tracked expenses</p>
+                      )
                     )}
                   </div>
                   <div className="space-y-2">
@@ -1221,162 +1307,43 @@ export function Projections() {
                 </div>
               </div>
 
-              {/* Tax Brackets Section */}
-              <div className="space-y-4">
-                <button
-                  type="button"
-                  onClick={() => setTaxBracketsOpen(!taxBracketsOpen)}
-                  className="flex items-center justify-between w-full text-sm font-medium border-b pb-2 hover:text-foreground/80"
-                >
-                  <span className="flex items-center gap-2">
-                    Tax Brackets
-                    <span className="text-xs font-normal text-muted-foreground">
-                      ({(federalRate * 100).toFixed(1)}% fed + {(provincialRate * 100).toFixed(1)}% prov = {((federalRate + provincialRate) * 100).toFixed(1)}%)
-                    </span>
-                  </span>
-                  <IconChevronDown className={`h-4 w-4 transition-transform ${taxBracketsOpen ? 'rotate-180' : ''}`} />
-                </button>
-                {taxBracketsOpen && <div className="grid gap-4 md:grid-cols-2">
-                  {/* Federal */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs">Federal</Label>
-                      <div className="flex gap-1">
-                        <Button type="button" variant="outline" size="sm" className="h-6 text-xs px-1.5"
-                          onClick={() => setConfig({
-                            ...config,
-                            federal_tax_brackets: [
-                              { up_to_income: 55867, rate: 0.15 },
-                              { up_to_income: 111733, rate: 0.205 },
-                              { up_to_income: 173205, rate: 0.26 },
-                              { up_to_income: 246752, rate: 0.29 },
-                              { up_to_income: 0, rate: 0.33 },
-                            ]
-                          })}>CA</Button>
-                        <Button type="button" variant="outline" size="sm" className="h-6 w-6 p-0"
-                          onClick={() => {
-                            const newBrackets = [...config.federal_tax_brackets];
-                            const lastBracket = newBrackets[newBrackets.length - 1];
-                            if (lastBracket.up_to_income === 0) {
-                              newBrackets.splice(newBrackets.length - 1, 0, { up_to_income: 50000, rate: 0.15 });
-                            } else {
-                              newBrackets.push({ up_to_income: 50000, rate: 0.15 });
-                            }
-                            setConfig({ ...config, federal_tax_brackets: newBrackets });
-                          }}><IconPlus className="h-3 w-3" /></Button>
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      {config.federal_tax_brackets.map((bracket, idx) => (
-                        <div key={idx} className="flex items-center gap-1">
-                          <Input type="number" min={0} step={1000}
-                            value={bracket.up_to_income === 0 ? '' : bracket.up_to_income}
-                            onChange={(e) => {
-                              const newBrackets = [...config.federal_tax_brackets];
-                              newBrackets[idx] = { ...bracket, up_to_income: e.target.value === '' ? 0 : Math.round(parseFloat(e.target.value)) };
-                              setConfig({ ...config, federal_tax_brackets: newBrackets });
-                            }}
-                            placeholder={bracket.up_to_income === 0 ? '∞' : 'Up to $'}
-                            disabled={bracket.up_to_income === 0}
-                            className="h-7 text-xs flex-1" />
-                          <div className="relative w-16">
-                            <Input type="number" min={0} max={100} step={0.1}
-                              value={Math.round(bracket.rate * 10000) / 100}
-                              onChange={(e) => {
-                                const newBrackets = [...config.federal_tax_brackets];
-                                newBrackets[idx] = { ...bracket, rate: Math.round(parseFloat(e.target.value) * 100) / 10000 };
-                                setConfig({ ...config, federal_tax_brackets: newBrackets });
-                              }}
-                              className="h-7 text-xs pr-4" />
-                            <span className="absolute right-1 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
-                          </div>
-                          {config.federal_tax_brackets.length > 1 && (
-                            <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0"
-                              onClick={() => setConfig({ ...config, federal_tax_brackets: config.federal_tax_brackets.filter((_, i) => i !== idx) })}>
-                              <IconTrash className="h-3 w-3 text-destructive" />
-                            </Button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
+              {/* Tax Rate Display */}
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium border-b pb-2">Taxes</h4>
+                <div className="flex items-center justify-between py-2">
+                  <div>
+                    <p className="text-sm">
+                      Marginal Rate: <span className="font-medium">{((federalRate + provincialRate) * 100).toFixed(1)}%</span>
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {(federalRate * 100).toFixed(1)}% federal + {(provincialRate * 100).toFixed(1)}% {taxConfig?.province || 'provincial'}
+                    </p>
                   </div>
-                  {/* Provincial */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs">Provincial</Label>
-                      <div className="flex gap-1">
-                        <Button type="button" variant="outline" size="sm" className="h-6 text-xs px-1.5"
-                          onClick={() => setConfig({
-                            ...config,
-                            provincial_tax_brackets: [
-                              { up_to_income: 47937, rate: 0.0506 },
-                              { up_to_income: 95875, rate: 0.077 },
-                              { up_to_income: 110076, rate: 0.105 },
-                              { up_to_income: 133664, rate: 0.1229 },
-                              { up_to_income: 181232, rate: 0.147 },
-                              { up_to_income: 252752, rate: 0.168 },
-                              { up_to_income: 0, rate: 0.205 },
-                            ]
-                          })}>BC</Button>
-                        <Button type="button" variant="outline" size="sm" className="h-6 w-6 p-0"
-                          onClick={() => {
-                            const newBrackets = [...config.provincial_tax_brackets];
-                            const lastBracket = newBrackets[newBrackets.length - 1];
-                            if (lastBracket.up_to_income === 0) {
-                              newBrackets.splice(newBrackets.length - 1, 0, { up_to_income: 50000, rate: 0.05 });
-                            } else {
-                              newBrackets.push({ up_to_income: 50000, rate: 0.05 });
-                            }
-                            setConfig({ ...config, provincial_tax_brackets: newBrackets });
-                          }}><IconPlus className="h-3 w-3" /></Button>
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      {config.provincial_tax_brackets.map((bracket, idx) => (
-                        <div key={idx} className="flex items-center gap-1">
-                          <Input type="number" min={0} step={1000}
-                            value={bracket.up_to_income === 0 ? '' : bracket.up_to_income}
-                            onChange={(e) => {
-                              const newBrackets = [...config.provincial_tax_brackets];
-                              newBrackets[idx] = { ...bracket, up_to_income: e.target.value === '' ? 0 : Math.round(parseFloat(e.target.value)) };
-                              setConfig({ ...config, provincial_tax_brackets: newBrackets });
-                            }}
-                            placeholder={bracket.up_to_income === 0 ? '∞' : 'Up to $'}
-                            disabled={bracket.up_to_income === 0}
-                            className="h-7 text-xs flex-1" />
-                          <div className="relative w-16">
-                            <Input type="number" min={0} max={100} step={0.1}
-                              value={Math.round(bracket.rate * 10000) / 100}
-                              onChange={(e) => {
-                                const newBrackets = [...config.provincial_tax_brackets];
-                                newBrackets[idx] = { ...bracket, rate: Math.round(parseFloat(e.target.value) * 100) / 10000 };
-                                setConfig({ ...config, provincial_tax_brackets: newBrackets });
-                              }}
-                              className="h-7 text-xs pr-4" />
-                            <span className="absolute right-1 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
-                          </div>
-                          {config.provincial_tax_brackets.length > 1 && (
-                            <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0"
-                              onClick={() => setConfig({ ...config, provincial_tax_brackets: config.provincial_tax_brackets.filter((_, i) => i !== idx) })}>
-                              <IconTrash className="h-3 w-3 text-destructive" />
-                            </Button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>}
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+                    onClick={() => navigate('/income-taxes')}
+                  >
+                    <IconLink className="h-3 w-3" />
+                    Configure
+                  </button>
+                </div>
               </div>
 
               {/* Actions */}
-              <div className="flex justify-between pt-4 border-t">
-                <Button onClick={handleCalculate} variant="outline">
+              <div className="pt-4 border-t">
+                <Button
+                  onClick={() => {
+                    handleCalculate();
+                    if (currentScenarioId) {
+                      handleSaveScenario();
+                    }
+                  }}
+                  className="w-full"
+                  disabled={calculateMutation.isPending || saveMutation.isPending}
+                >
                   <IconCalculator className="h-4 w-4 mr-2" />
-                  Recalculate
-                </Button>
-                <Button onClick={handleSaveScenario} disabled={saveMutation.isPending}>
-                  <IconDeviceFloppy className="h-4 w-4 mr-2" />
-                  {saveMutation.isPending ? 'Saving...' : currentScenarioId ? 'Save' : 'Save Scenario'}
+                  {calculateMutation.isPending ? 'Calculating...' : saveMutation.isPending ? 'Saving...' : 'Recalculate'}
                 </Button>
               </div>
             </CardContent>

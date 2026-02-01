@@ -1,25 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useIncomeTaxConfig, useSaveIncomeTaxConfig } from '@/hooks/use-income';
-import { useAPIKeyStatus } from '@/hooks/use-api-keys';
+import { useAPIKeyStatus, useFetchTaxBrackets } from '@/hooks/use-api-keys';
 import type { IncomeTaxBracket } from '@/lib/api-client';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import {
   Select,
   SelectContent,
@@ -27,16 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { IconEdit, IconLoader2, IconDownload, IconPlus, IconTrash } from '@tabler/icons-react';
-import { FetchTaxBracketsDialog } from './FetchTaxBracketsDialog';
+import { IconLoader2, IconDownload, IconPlus, IconTrash } from '@tabler/icons-react';
 
 interface TaxConfigurationCardProps {
   selectedYear: number;
@@ -58,50 +35,56 @@ const PROVINCES = [
   { value: 'NU', label: 'Nunavut' },
 ];
 
-const formatPercent = (rate: number) => {
-  return (rate * 100).toFixed(2) + '%';
-};
-
-const formatCurrency = (amount: number) => {
-  if (amount === 0) return 'Unlimited';
-  return new Intl.NumberFormat('en-CA', {
-    style: 'currency',
-    currency: 'CAD',
-    maximumFractionDigits: 0,
-  }).format(amount);
-};
-
 export function TaxConfigurationCard({ selectedYear }: TaxConfigurationCardProps) {
   const { data: taxConfig, isLoading } = useIncomeTaxConfig(selectedYear);
   const { data: apiKeyStatus } = useAPIKeyStatus('moneyy');
   const saveTaxConfig = useSaveIncomeTaxConfig();
+  const fetchTaxBrackets = useFetchTaxBrackets();
 
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [fetchDialogOpen, setFetchDialogOpen] = useState(false);
-  const [editProvince, setEditProvince] = useState('');
-  const [editFederalBrackets, setEditFederalBrackets] = useState<IncomeTaxBracket[]>([]);
-  const [editProvincialBrackets, setEditProvincialBrackets] = useState<IncomeTaxBracket[]>([]);
+  const [province, setProvince] = useState(taxConfig?.province || 'ON');
+  const [federalBrackets, setFederalBrackets] = useState<IncomeTaxBracket[]>(taxConfig?.federal_brackets || []);
+  const [provincialBrackets, setProvincialBrackets] = useState<IncomeTaxBracket[]>(taxConfig?.provincial_brackets || []);
+  const [cppRate, setCppRate] = useState(taxConfig?.cpp_rate || 0);
+  const [cppMaxPensionable, setCppMaxPensionable] = useState(taxConfig?.cpp_max_pensionable_earnings || 0);
+  const [cppBasicExemption, setCppBasicExemption] = useState(taxConfig?.cpp_basic_exemption || 0);
+  const [eiRate, setEiRate] = useState(taxConfig?.ei_rate || 0);
+  const [eiMaxInsurable, setEiMaxInsurable] = useState(taxConfig?.ei_max_insurable_earnings || 0);
+  const [basicPersonalAmount, setBasicPersonalAmount] = useState(taxConfig?.basic_personal_amount || 0);
+  const [hasChanges, setHasChanges] = useState(false);
 
   const isMoneyApiConfigured = apiKeyStatus?.is_configured ?? false;
 
-  const handleOpenEdit = () => {
+  // Sync state when taxConfig loads
+  useEffect(() => {
     if (taxConfig) {
-      setEditProvince(taxConfig.province);
-      setEditFederalBrackets([...taxConfig.federal_brackets]);
-      setEditProvincialBrackets([...taxConfig.provincial_brackets]);
+      setProvince(taxConfig.province);
+      setFederalBrackets(taxConfig.federal_brackets);
+      setProvincialBrackets(taxConfig.provincial_brackets);
+      setCppRate(taxConfig.cpp_rate);
+      setCppMaxPensionable(taxConfig.cpp_max_pensionable_earnings);
+      setCppBasicExemption(taxConfig.cpp_basic_exemption);
+      setEiRate(taxConfig.ei_rate);
+      setEiMaxInsurable(taxConfig.ei_max_insurable_earnings);
+      setBasicPersonalAmount(taxConfig.basic_personal_amount);
+      setHasChanges(false);
     }
-    setEditDialogOpen(true);
-  };
+  }, [taxConfig]);
 
   const handleSave = async () => {
     try {
       await saveTaxConfig.mutateAsync({
         tax_year: selectedYear,
-        province: editProvince,
-        federal_brackets: editFederalBrackets,
-        provincial_brackets: editProvincialBrackets,
+        province,
+        federal_brackets: federalBrackets,
+        provincial_brackets: provincialBrackets,
+        cpp_rate: cppRate,
+        cpp_max_pensionable_earnings: cppMaxPensionable,
+        cpp_basic_exemption: cppBasicExemption,
+        ei_rate: eiRate,
+        ei_max_insurable_earnings: eiMaxInsurable,
+        basic_personal_amount: basicPersonalAmount,
       });
-      setEditDialogOpen(false);
+      setHasChanges(false);
     } catch (error) {
       console.error('Failed to save tax config:', error);
     }
@@ -121,13 +104,21 @@ export function TaxConfigurationCard({ selectedYear }: TaxConfigurationCardProps
       newBrackets[index] = { ...newBrackets[index], rate: parseFloat(value) / 100 || 0 };
     }
     setBrackets(newBrackets);
+    setHasChanges(true);
   };
 
   const addBracket = (
     brackets: IncomeTaxBracket[],
     setBrackets: (b: IncomeTaxBracket[]) => void
   ) => {
-    setBrackets([...brackets, { up_to_income: 0, rate: 0 }]);
+    const lastBracket = brackets[brackets.length - 1];
+    if (lastBracket?.up_to_income === 0) {
+      // Insert before the unlimited bracket
+      setBrackets([...brackets.slice(0, -1), { up_to_income: 50000, rate: 0.15 }, lastBracket]);
+    } else {
+      setBrackets([...brackets, { up_to_income: 0, rate: 0.15 }]);
+    }
+    setHasChanges(true);
   };
 
   const removeBracket = (
@@ -136,6 +127,7 @@ export function TaxConfigurationCard({ selectedYear }: TaxConfigurationCardProps
     index: number
   ) => {
     setBrackets(brackets.filter((_, i) => i !== index));
+    setHasChanges(true);
   };
 
   if (isLoading) {
@@ -151,272 +143,305 @@ export function TaxConfigurationCard({ selectedYear }: TaxConfigurationCardProps
   }
 
   return (
-    <>
-      <div className="space-y-6">
-        {/* Actions */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-medium">Tax Configuration for {selectedYear}</h3>
-            <p className="text-sm text-muted-foreground">
-              Province: {PROVINCES.find(p => p.value === taxConfig?.province)?.label || taxConfig?.province || 'Not set'}
-            </p>
-          </div>
-          <div className="flex gap-2">
-            {isMoneyApiConfigured && (
-              <Button variant="outline" onClick={() => setFetchDialogOpen(true)}>
-                <IconDownload className="h-4 w-4 mr-2" />
-                Fetch from API
-              </Button>
-            )}
-            <Button variant="outline" onClick={handleOpenEdit}>
-              <IconEdit className="h-4 w-4 mr-2" />
-              Edit Brackets
-            </Button>
-          </div>
+    <div className="space-y-4">
+      {/* Header with actions */}
+      <div className="flex items-center justify-between">
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Province</Label>
+          <Select
+            value={province}
+            onValueChange={(v) => {
+              setProvince(v);
+              setHasChanges(true);
+            }}
+          >
+            <SelectTrigger className="w-[180px] h-8">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PROVINCES.map((p) => (
+                <SelectItem key={p.value} value={p.value}>
+                  {p.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-
-        {/* Federal and Provincial Brackets - Side by Side */}
-        <div className="grid gap-6 md:grid-cols-2">
-          {/* Federal Brackets */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Federal Tax Brackets</CardTitle>
-              <CardDescription>Canadian federal income tax rates</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <BracketsTable brackets={taxConfig?.federal_brackets || []} />
-            </CardContent>
-          </Card>
-
-          {/* Provincial Brackets */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">
-                Provincial Tax Brackets ({taxConfig?.province || 'ON'})
-              </CardTitle>
-              <CardDescription>Provincial/territorial income tax rates</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <BracketsTable brackets={taxConfig?.provincial_brackets || []} />
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Other Tax Parameters */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Other Tax Parameters</CardTitle>
-            <CardDescription>CPP, EI, and other deduction rates</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              <div>
-                <p className="text-sm text-muted-foreground">CPP Rate</p>
-                <p className="font-medium">{formatPercent(taxConfig?.cpp_rate || 0)}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">CPP Max Pensionable</p>
-                <p className="font-medium">{formatCurrency(taxConfig?.cpp_max_pensionable_earnings || 0)}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">CPP Basic Exemption</p>
-                <p className="font-medium">{formatCurrency(taxConfig?.cpp_basic_exemption || 0)}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">EI Rate</p>
-                <p className="font-medium">{formatPercent(taxConfig?.ei_rate || 0)}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">EI Max Insurable</p>
-                <p className="font-medium">{formatCurrency(taxConfig?.ei_max_insurable_earnings || 0)}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Basic Personal Amount</p>
-                <p className="font-medium">{formatCurrency(taxConfig?.basic_personal_amount || 0)}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Edit Dialog */}
-      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Edit Tax Configuration</DialogTitle>
-            <DialogDescription>
-              Modify tax brackets for {selectedYear}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-6 py-4">
-            {/* Province Selection */}
-            <div className="space-y-2">
-              <Label>Province/Territory</Label>
-              <Select value={editProvince} onValueChange={setEditProvince}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select province" />
-                </SelectTrigger>
-                <SelectContent>
-                  {PROVINCES.map((p) => (
-                    <SelectItem key={p.value} value={p.value}>
-                      {p.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Federal Brackets Editor */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Federal Tax Brackets</Label>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => addBracket(editFederalBrackets, setEditFederalBrackets)}
-                >
-                  <IconPlus className="h-4 w-4 mr-1" />
-                  Add
-                </Button>
-              </div>
-              <BracketsEditor
-                brackets={editFederalBrackets}
-                setBrackets={setEditFederalBrackets}
-                onUpdate={updateBracket}
-                onRemove={removeBracket}
-              />
-            </div>
-
-            {/* Provincial Brackets Editor */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Provincial Tax Brackets</Label>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => addBracket(editProvincialBrackets, setEditProvincialBrackets)}
-                >
-                  <IconPlus className="h-4 w-4 mr-1" />
-                  Add
-                </Button>
-              </div>
-              <BracketsEditor
-                brackets={editProvincialBrackets}
-                setBrackets={setEditProvincialBrackets}
-                onUpdate={updateBracket}
-                onRemove={removeBracket}
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSave} disabled={saveTaxConfig.isPending}>
-              {saveTaxConfig.isPending ? (
-                <>
-                  <IconLoader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Saving...
-                </>
+        <div className="flex gap-2">
+          {isMoneyApiConfigured && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={fetchTaxBrackets.isPending}
+              onClick={() => {
+                fetchTaxBrackets.mutate(
+                  { country: 'CA', year: selectedYear, region: province },
+                  {
+                    onSuccess: (data) => {
+                      if (data.federal_brackets?.length) {
+                        setFederalBrackets(data.federal_brackets);
+                      }
+                      if (data.provincial_brackets?.length) {
+                        setProvincialBrackets(data.provincial_brackets);
+                      }
+                      setHasChanges(true);
+                    },
+                  }
+                );
+              }}
+            >
+              {fetchTaxBrackets.isPending ? (
+                <IconLoader2 className="h-4 w-4 mr-1 animate-spin" />
               ) : (
-                'Save Changes'
+                <IconDownload className="h-4 w-4 mr-1" />
+              )}
+              Fetch
+            </Button>
+          )}
+          {hasChanges && (
+            <Button size="sm" onClick={handleSave} disabled={saveTaxConfig.isPending}>
+              {saveTaxConfig.isPending ? (
+                <IconLoader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                'Save'
               )}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Fetch Dialog */}
-      <FetchTaxBracketsDialog
-        open={fetchDialogOpen}
-        onOpenChange={setFetchDialogOpen}
-        selectedYear={selectedYear}
-      />
-    </>
-  );
-}
-
-function BracketsTable({ brackets }: { brackets: IncomeTaxBracket[] }) {
-  if (brackets.length === 0) {
-    return <p className="text-sm text-muted-foreground">No brackets configured</p>;
-  }
-
-  return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Income Up To</TableHead>
-          <TableHead className="text-right">Tax Rate</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {brackets.map((bracket, index) => (
-          <TableRow key={index}>
-            <TableCell>{formatCurrency(bracket.up_to_income)}</TableCell>
-            <TableCell className="text-right font-medium">
-              {formatPercent(bracket.rate)}
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  );
-}
-
-function BracketsEditor({
-  brackets,
-  setBrackets,
-  onUpdate,
-  onRemove,
-}: {
-  brackets: IncomeTaxBracket[];
-  setBrackets: (b: IncomeTaxBracket[]) => void;
-  onUpdate: (
-    brackets: IncomeTaxBracket[],
-    setBrackets: (b: IncomeTaxBracket[]) => void,
-    index: number,
-    field: 'up_to_income' | 'rate',
-    value: string
-  ) => void;
-  onRemove: (
-    brackets: IncomeTaxBracket[],
-    setBrackets: (b: IncomeTaxBracket[]) => void,
-    index: number
-  ) => void;
-}) {
-  return (
-    <div className="space-y-2">
-      {brackets.map((bracket, index) => (
-        <div key={index} className="flex items-center gap-2">
-          <div className="flex-1">
-            <Input
-              type="number"
-              placeholder="Income up to (0 = unlimited)"
-              value={bracket.up_to_income || ''}
-              onChange={(e) => onUpdate(brackets, setBrackets, index, 'up_to_income', e.target.value)}
-            />
-          </div>
-          <div className="w-24">
-            <Input
-              type="number"
-              step="0.01"
-              placeholder="Rate %"
-              value={(bracket.rate * 100).toFixed(2)}
-              onChange={(e) => onUpdate(brackets, setBrackets, index, 'rate', e.target.value)}
-            />
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => onRemove(brackets, setBrackets, index)}
-            className="text-destructive hover:text-destructive"
-          >
-            <IconTrash className="h-4 w-4" />
-          </Button>
+          )}
         </div>
-      ))}
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* Tax Brackets Card */}
+        <Card>
+          <CardHeader className="pb-4">
+            <CardTitle className="text-base">Tax Brackets</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-6 md:grid-cols-2">
+            {/* Federal */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">Federal</Label>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0"
+                  onClick={() => addBracket(federalBrackets, setFederalBrackets)}
+                >
+                  <IconPlus className="h-3 w-3" />
+                </Button>
+              </div>
+              <div className="space-y-1">
+                {federalBrackets.map((bracket, idx) => (
+                  <div key={idx} className="flex items-center gap-1">
+                    <Input
+                      type="number"
+                      min={0}
+                      step={1000}
+                      value={bracket.up_to_income === 0 ? '' : bracket.up_to_income}
+                      onChange={(e) => updateBracket(federalBrackets, setFederalBrackets, idx, 'up_to_income', e.target.value)}
+                      placeholder={bracket.up_to_income === 0 ? '∞' : 'Up to $'}
+                      disabled={bracket.up_to_income === 0}
+                      className="h-7 text-xs flex-1"
+                    />
+                    <div className="relative w-16">
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={0.1}
+                        value={Math.round(bracket.rate * 10000) / 100}
+                        onChange={(e) => updateBracket(federalBrackets, setFederalBrackets, idx, 'rate', e.target.value)}
+                        className="h-7 text-xs pr-4"
+                      />
+                      <span className="absolute right-1 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
+                    </div>
+                    {federalBrackets.length > 1 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0"
+                        onClick={() => removeBracket(federalBrackets, setFederalBrackets, idx)}
+                      >
+                        <IconTrash className="h-3 w-3 text-destructive" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Provincial */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">Provincial ({province})</Label>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0"
+                  onClick={() => addBracket(provincialBrackets, setProvincialBrackets)}
+                >
+                  <IconPlus className="h-3 w-3" />
+                </Button>
+              </div>
+              <div className="space-y-1">
+                {provincialBrackets.map((bracket, idx) => (
+                  <div key={idx} className="flex items-center gap-1">
+                    <Input
+                      type="number"
+                      min={0}
+                      step={1000}
+                      value={bracket.up_to_income === 0 ? '' : bracket.up_to_income}
+                      onChange={(e) => updateBracket(provincialBrackets, setProvincialBrackets, idx, 'up_to_income', e.target.value)}
+                      placeholder={bracket.up_to_income === 0 ? '∞' : 'Up to $'}
+                      disabled={bracket.up_to_income === 0}
+                      className="h-7 text-xs flex-1"
+                    />
+                    <div className="relative w-16">
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={0.1}
+                        value={Math.round(bracket.rate * 10000) / 100}
+                        onChange={(e) => updateBracket(provincialBrackets, setProvincialBrackets, idx, 'rate', e.target.value)}
+                        className="h-7 text-xs pr-4"
+                      />
+                      <span className="absolute right-1 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
+                    </div>
+                    {provincialBrackets.length > 1 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0"
+                        onClick={() => removeBracket(provincialBrackets, setProvincialBrackets, idx)}
+                      >
+                        <IconTrash className="h-3 w-3 text-destructive" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          </CardContent>
+        </Card>
+
+        {/* Other Tax Parameters Card */}
+        <Card>
+          <CardHeader className="pb-4">
+            <CardTitle className="text-base">Other Parameters</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">CPP Rate (%)</Label>
+              <div className="relative">
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={0.01}
+                  value={Math.round(cppRate * 10000) / 100}
+                  onChange={(e) => {
+                    setCppRate(parseFloat(e.target.value) / 100 || 0);
+                    setHasChanges(true);
+                  }}
+                  className="h-8 text-sm pr-6"
+                />
+                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">CPP Max Pensionable</Label>
+              <div className="relative">
+                <Input
+                  type="number"
+                  min={0}
+                  step={1000}
+                  value={cppMaxPensionable || ''}
+                  onChange={(e) => {
+                    setCppMaxPensionable(parseFloat(e.target.value) || 0);
+                    setHasChanges(true);
+                  }}
+                  className="h-8 text-sm pl-6"
+                />
+                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">CPP Basic Exemption</Label>
+              <div className="relative">
+                <Input
+                  type="number"
+                  min={0}
+                  step={100}
+                  value={cppBasicExemption || ''}
+                  onChange={(e) => {
+                    setCppBasicExemption(parseFloat(e.target.value) || 0);
+                    setHasChanges(true);
+                  }}
+                  className="h-8 text-sm pl-6"
+                />
+                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">EI Rate (%)</Label>
+              <div className="relative">
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={0.01}
+                  value={Math.round(eiRate * 10000) / 100}
+                  onChange={(e) => {
+                    setEiRate(parseFloat(e.target.value) / 100 || 0);
+                    setHasChanges(true);
+                  }}
+                  className="h-8 text-sm pr-6"
+                />
+                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">EI Max Insurable</Label>
+              <div className="relative">
+                <Input
+                  type="number"
+                  min={0}
+                  step={1000}
+                  value={eiMaxInsurable || ''}
+                  onChange={(e) => {
+                    setEiMaxInsurable(parseFloat(e.target.value) || 0);
+                    setHasChanges(true);
+                  }}
+                  className="h-8 text-sm pl-6"
+                />
+                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Basic Personal Amount</Label>
+              <div className="relative">
+                <Input
+                  type="number"
+                  min={0}
+                  step={1000}
+                  value={basicPersonalAmount || ''}
+                  onChange={(e) => {
+                    setBasicPersonalAmount(parseFloat(e.target.value) || 0);
+                    setHasChanges(true);
+                  }}
+                  className="h-8 text-sm pl-6"
+                />
+                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+      </div>
     </div>
   );
 }
