@@ -289,3 +289,72 @@ type SyncedAccount struct {
 	CreatedAt         time.Time  `json:"created_at"`
 	UpdatedAt         time.Time  `json:"updated_at"`
 }
+
+// EquityGrant represents an equity grant record
+type EquityGrant struct {
+	ID             string     `json:"id"`
+	AccountID      string     `json:"account_id"`
+	GrantType      string     `json:"grant_type"`
+	GrantDate      string     `json:"grant_date"`
+	Quantity       int        `json:"quantity"`
+	StrikePrice    *float64   `json:"strike_price"`
+	FMVAtGrant     float64    `json:"fmv_at_grant"`
+	Currency       string     `json:"currency"`
+	ExpirationDate *string    `json:"expiration_date"`
+	CompanyName    *string    `json:"company_name"`
+	GrantNumber    *string    `json:"grant_number"`
+	Notes          *string    `json:"notes"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+}
+
+// VestingSchedule represents a vesting schedule record
+type VestingSchedule struct {
+	ID                   string    `json:"id"`
+	GrantID              string    `json:"grant_id"`
+	ScheduleType         string    `json:"schedule_type"`
+	CliffMonths          *int      `json:"cliff_months"`
+	TotalVestingMonths   *int      `json:"total_vesting_months"`
+	VestingFrequency     *string   `json:"vesting_frequency"`
+	MilestoneDescription *string   `json:"milestone_description"`
+	CreatedAt            time.Time `json:"created_at"`
+}
+
+// FMVHistory represents a fair market value history record
+type FMVHistory struct {
+	ID            string    `json:"id"`
+	AccountID     string    `json:"account_id"`
+	Currency      string    `json:"currency"`
+	EffectiveDate string    `json:"effective_date"`
+	FMVPerShare   float64   `json:"fmv_per_share"`
+	Notes         *string   `json:"notes"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
+// EquityExercise represents an equity exercise record
+type EquityExercise struct {
+	ID            string    `json:"id"`
+	GrantID       string    `json:"grant_id"`
+	ExerciseDate  string    `json:"exercise_date"`
+	Quantity      int       `json:"quantity"`
+	FMVAtExercise float64   `json:"fmv_at_exercise"`
+	CostBasis     float64   `json:"cost_basis"`
+	ExerciseType  string    `json:"exercise_type"`
+	Notes         *string   `json:"notes"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
+// EquitySale represents an equity sale record
+type EquitySale struct {
+	ID            string    `json:"id"`
+	GrantID       string    `json:"grant_id"`
+	ExerciseID    *string   `json:"exercise_id"`
+	SaleDate      string    `json:"sale_date"`
+	Quantity      int       `json:"quantity"`
+	SalePrice     float64   `json:"sale_price"`
+	TotalProceeds float64   `json:"total_proceeds"`
+	GainLoss      float64   `json:"gain_loss"`
+	SaleType      string    `json:"sale_type"`
+	Notes         *string   `json:"notes"`
+	CreatedAt     time.Time `json:"created_at"`
+}

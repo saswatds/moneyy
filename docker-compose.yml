@@ -3,26 +3,6 @@
 # (not docker-compose - that's the old V1 tool)
 
 services:
-  # PostgreSQL Database
-  postgres:
-    image: postgres:16-alpine
-    container_name: moneyy-postgres
-    environment:
-      POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
-      POSTGRES_DB: ${DB_NAME:-moneyy}
-    ports:
-      - "${DB_PORT:-5432}:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    networks:
-      - moneyy-network
-
   # API Server (Development with hot reload)
   api:
     build:
@@ -32,12 +12,8 @@ services:
     ports:
       - "4000:4000"
     environment:
-      # Database
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_NAME=${DB_NAME:-moneyy}
-      - DB_USER=${DB_USER:-postgres}
-      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      # Database (SQLite)
+      - DB_PATH=/app/data/moneyy.db
       # Encryption
       - ENC_MASTER_KEY=${ENC_MASTER_KEY:-nChSLfEzS8Rl7MSHKN8EPU1Rk8Pqc9dGLowhSj9uKsQ=}
       # Server
@@ -56,49 +32,14 @@ services:
       - go_modules:/go/pkg/mod
       # Cache build artifacts
       - go_build_cache:/root/.cache/go-build
-    depends_on:
-      postgres:
-        condition: service_healthy
+      # Persistent SQLite storage
+      - sqlite_data:/app/data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:4000/api/health"]
       interval: 10s
       timeout: 5s
       retries: 3
       start_period: 10s
-    networks:
-      - moneyy-network
-    restart: unless-stopped
-
-  # Migration Watcher (continuously watches migration files)
-  migrate:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-    container_name: moneyy-migrate
-    command: go run ./cmd/migrate --watch
-    environment:
-      # Database
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_NAME=${DB_NAME:-moneyy}
-      - DB_USER=${DB_USER:-postgres}
-      - DB_PASSWORD=${DB_PASSWORD:-postgres}
-      # Encryption
-      - ENC_MASTER_KEY=${ENC_MASTER_KEY:-nChSLfEzS8Rl7MSHKN8EPU1Rk8Pqc9dGLowhSj9uKsQ=}
-      # Server (needed by some env loading)
-      - SERVER_PORT=4000
-      - LOG_LEVEL=info
-      - LOG_FORMAT=json
-      # Authentication (not strictly needed for migrations, but keeps env consistent)
-      - JWT_SECRET=${JWT_SECRET:-dev-secret-min-32-characters-long-change-in-production}
-      - WEBAUTHN_RP_ID=${WEBAUTHN_RP_ID:-localhost}
-      - WEBAUTHN_RP_ORIGIN=${WEBAUTHN_RP_ORIGIN:-http://localhost:4000}
-    volumes:
-      - ./:/app
-      - go_modules:/go/pkg/mod
-    depends_on:
-      postgres:
-        condition: service_healthy
     networks:
       - moneyy-network
     restart: unless-stopped
@@ -128,6 +69,6 @@ networks:
     driver: bridge
 
 volumes:
-  postgres_data:
+  sqlite_data:
   go_modules:
   go_build_cache:

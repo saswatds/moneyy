@@ -190,7 +190,7 @@ func (s *Service) CreateMortgageDetails(ctx context.Context, accountID string, r
 	id := uuid.New().String()
 	now := time.Now()
 
-	err := s.db.QueryRowContext(ctx, `
+	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO mortgage_details (
 			id, account_id, original_amount, interest_rate, rate_type,
 			start_date, term_months, amortization_months,
@@ -208,28 +208,13 @@ func (s *Service) CreateMortgageDetails(ctx context.Context, accountID string, r
 			$19, $20, $21,
 			$22, $23
 		)
-		RETURNING id, account_id, original_amount, interest_rate, rate_type,
-			start_date, term_months, amortization_months,
-			payment_amount, payment_frequency, payment_day,
-			property_address, property_city, property_province, property_postal_code, property_value,
-			renewal_date, maturity_date,
-			lender, mortgage_number, notes,
-			created_at, updated_at
 	`, id, accountID, req.OriginalAmount, req.InterestRate, req.RateType,
 		req.StartDate, req.TermMonths, req.AmortizationMonths,
 		req.PaymentAmount, req.PaymentFrequency, req.PaymentDay,
 		req.PropertyAddress, req.PropertyCity, req.PropertyProvince, req.PropertyPostalCode, req.PropertyValue,
 		req.RenewalDate, maturityDate,
 		req.Lender, req.MortgageNumber, req.Notes,
-		now, now).Scan(
-		&id, &accountID, &req.OriginalAmount, &req.InterestRate, &req.RateType,
-		&req.StartDate, &req.TermMonths, &req.AmortizationMonths,
-		&req.PaymentAmount, &req.PaymentFrequency, &req.PaymentDay,
-		&req.PropertyAddress, &req.PropertyCity, &req.PropertyProvince, &req.PropertyPostalCode, &req.PropertyValue,
-		&req.RenewalDate, &maturityDate,
-		&req.Lender, &req.MortgageNumber, &req.Notes,
-		&now, &now,
-	)
+		now, now)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create mortgage details: %w", err)
@@ -433,26 +418,31 @@ func (s *Service) RecordMortgagePayment(ctx context.Context, accountID string, r
 	id := uuid.New().String()
 	now := time.Now()
 
-	var payment MortgagePayment
-	err = s.db.QueryRowContext(ctx, `
+	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO mortgage_payments (
 			id, account_id, payment_date,
 			payment_amount, principal_amount, interest_amount, extra_payment,
 			balance_after, notes, created_at
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-		RETURNING id, account_id, payment_date,
-			payment_amount, principal_amount, interest_amount, extra_payment,
-			balance_after, notes, created_at
 	`, id, accountID, req.PaymentDate,
 		req.PaymentAmount, req.PrincipalAmount, req.InterestAmount, req.ExtraPayment,
-		balanceAfter, req.Notes, now).Scan(
-		&payment.ID, &payment.AccountID, &payment.PaymentDate,
-		&payment.PaymentAmount, &payment.PrincipalAmount, &payment.InterestAmount, &payment.ExtraPayment,
-		&payment.BalanceAfter, &payment.Notes, &payment.CreatedAt,
-	)
+		balanceAfter, req.Notes, now)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to record payment: %w", err)
+	}
+
+	payment := &MortgagePayment{
+		ID:              id,
+		AccountID:       accountID,
+		PaymentDate:     req.PaymentDate,
+		PaymentAmount:   req.PaymentAmount,
+		PrincipalAmount: req.PrincipalAmount,
+		InterestAmount:  req.InterestAmount,
+		ExtraPayment:    req.ExtraPayment,
+		BalanceAfter:    balanceAfter,
+		Notes:           req.Notes,
+		CreatedAt:       now,
 	}
 
 	// Also create a balance entry so the mortgage balance appears in the accounts list
@@ -467,7 +457,7 @@ func (s *Service) RecordMortgagePayment(ctx context.Context, accountID string, r
 		fmt.Printf("Warning: failed to create balance entry: %v\n", err)
 	}
 
-	return &payment, nil
+	return payment, nil
 }
 
 // SyncMortgageBalance syncs the mortgage balance to the balance service

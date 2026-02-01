@@ -776,6 +776,10 @@ export interface IncomeTaxBracket {
   rate: number;
 }
 
+export type FieldSource = 'api' | 'manual';
+
+export type FieldSources = Record<string, FieldSource>;
+
 export interface TaxConfiguration {
   id?: string;
   user_id?: string;
@@ -789,6 +793,7 @@ export interface TaxConfiguration {
   ei_rate: number;
   ei_max_insurable_earnings: number;
   basic_personal_amount: number;
+  field_sources?: FieldSources;
   created_at?: string;
   updated_at?: string;
 }
@@ -874,6 +879,60 @@ export interface SaveTaxConfigRequest {
   ei_rate?: number;
   ei_max_insurable_earnings?: number;
   basic_personal_amount?: number;
+  field_sources?: FieldSources;
+}
+
+// Tax Simulator Types
+export interface CalculateExerciseTaxRequest {
+  quantity: number;
+  strike_price: number;
+  fmv_at_exercise: number;
+  marginal_rate: number;
+}
+
+export interface ExerciseTaxResult {
+  quantity: number;
+  strike_price: number;
+  fmv_at_exercise: number;
+  exercise_cost: number;
+  taxable_benefit: number;
+  stock_option_deduction: number;
+  net_taxable: number;
+  estimated_tax: number;
+}
+
+export interface CalculateSaleTaxRequest {
+  quantity: number;
+  sale_price: number;
+  cost_basis: number;
+  acquisition_date: string;
+  sale_date: string;
+  marginal_rate: number;
+}
+
+export interface SaleTaxResult {
+  quantity: number;
+  sale_price: number;
+  cost_basis: number;
+  total_proceeds: number;
+  capital_gain: number;
+  holding_period_days: number;
+  taxable_gain: number;
+  estimated_tax: number;
+}
+
+export interface BatchTaxCalculationRequest {
+  exercises: CalculateExerciseTaxRequest[];
+  sales: CalculateSaleTaxRequest[];
+  marginal_rate: number;
+}
+
+export interface BatchTaxCalculationResult {
+  exercises: ExerciseTaxResult[];
+  sales: SaleTaxResult[];
+  total_exercise_tax: number;
+  total_sale_tax: number;
+  total_tax: number;
 }
 
 // API Keys Types
@@ -897,6 +956,20 @@ export interface TransformedTaxBrackets {
   region: string;
   federal_brackets: IncomeTaxBracket[];
   provincial_brackets: IncomeTaxBracket[];
+}
+
+export interface TransformedTaxParams {
+  country: string;
+  year: number;
+  region: string;
+  cpp_rate: number;
+  cpp_max_pensionable_earnings: number;
+  cpp_basic_exemption: number;
+  ei_rate: number;
+  ei_max_insurable_earnings: number;
+  basic_personal_amount: number;
+  rrsp_limit: number;
+  tfsa_limit: number;
 }
 
 class ApiClient {
@@ -1544,6 +1617,29 @@ class ApiClient {
     });
   }
 
+  // Tax Simulator endpoints
+
+  async calculateExerciseTax(data: CalculateExerciseTaxRequest): Promise<ExerciseTaxResult> {
+    return this.request('/income/tax-simulator/exercise', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async calculateSaleTax(data: CalculateSaleTaxRequest): Promise<SaleTaxResult> {
+    return this.request('/income/tax-simulator/sale', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async calculateBatchTax(data: BatchTaxCalculationRequest): Promise<BatchTaxCalculationResult> {
+    return this.request('/income/tax-simulator/batch', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
   // API Keys endpoints
 
   async getAPIKeyStatus(provider: string): Promise<APIKeyStatus> {
@@ -1567,6 +1663,10 @@ class ApiClient {
 
   async fetchTaxBracketsFromAPI(country: string, year: number, region: string): Promise<TransformedTaxBrackets> {
     return this.request(`/moneyy/tax-brackets/${country}/${year}/${region}`);
+  }
+
+  async fetchTaxParamsFromAPI(country: string, year: number, region: string): Promise<TransformedTaxParams> {
+    return this.request(`/moneyy/tax-params/${country}/${year}/${region}`);
   }
 }
 

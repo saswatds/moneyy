@@ -124,26 +124,34 @@ func (s *Service) CreateAssetDetails(ctx context.Context, accountID string, req 
 	id := uuid.New().String()
 	now := time.Now()
 
-	var details AssetDetails
-	err := s.db.QueryRowContext(ctx, `
+	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO asset_details (
 			id, account_id, asset_type, purchase_price, purchase_date,
 			depreciation_method, useful_life_years, salvage_value, depreciation_rate,
 			type_specific_data, notes, created_at, updated_at
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-		RETURNING id, account_id, asset_type, purchase_price, purchase_date,
-			depreciation_method, useful_life_years, salvage_value, depreciation_rate,
-			type_specific_data, notes, created_at, updated_at
 	`, id, accountID, req.AssetType, req.PurchasePrice, req.PurchaseDate,
 		req.DepreciationMethod, req.UsefulLifeYears, req.SalvageValue, req.DepreciationRate,
-		req.TypeSpecificData, req.Notes, now, now).Scan(
-		&details.ID, &details.AccountID, &details.AssetType, &details.PurchasePrice, &details.PurchaseDate,
-		&details.DepreciationMethod, &details.UsefulLifeYears, &details.SalvageValue, &details.DepreciationRate,
-		&details.TypeSpecificData, &details.Notes, &details.CreatedAt, &details.UpdatedAt,
-	)
+		req.TypeSpecificData, req.Notes, now, now)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create asset details: %w", err)
+	}
+
+	details := &AssetDetails{
+		ID:                 id,
+		AccountID:          accountID,
+		AssetType:          req.AssetType,
+		PurchasePrice:      req.PurchasePrice,
+		PurchaseDate:       req.PurchaseDate,
+		DepreciationMethod: req.DepreciationMethod,
+		UsefulLifeYears:    req.UsefulLifeYears,
+		SalvageValue:       req.SalvageValue,
+		DepreciationRate:   req.DepreciationRate,
+		TypeSpecificData:   req.TypeSpecificData,
+		Notes:              req.Notes,
+		CreatedAt:          now,
+		UpdatedAt:          now,
 	}
 
 	// Create initial balance entry for the asset
@@ -158,7 +166,7 @@ func (s *Service) CreateAssetDetails(ctx context.Context, accountID string, req 
 		fmt.Printf("Warning: failed to create initial balance entry: %v\n", err)
 	}
 
-	return &details, nil
+	return details, nil
 }
 
 // GetAssetDetails retrieves asset details for an account
@@ -204,29 +212,22 @@ func (s *Service) UpdateAssetDetails(ctx context.Context, accountID string, req 
 
 	now := time.Now()
 
-	var details AssetDetails
-	err := s.db.QueryRowContext(ctx, `
+	_, err := s.db.ExecContext(ctx, `
 		UPDATE asset_details
 		SET asset_type = $2, purchase_price = $3, purchase_date = $4,
 			depreciation_method = $5, useful_life_years = $6, salvage_value = $7,
 			depreciation_rate = $8, type_specific_data = $9, notes = $10, updated_at = $11
 		WHERE account_id = $1
-		RETURNING id, account_id, asset_type, purchase_price, purchase_date,
-			depreciation_method, useful_life_years, salvage_value, depreciation_rate,
-			type_specific_data, notes, created_at, updated_at
 	`, accountID, req.AssetType, req.PurchasePrice, req.PurchaseDate,
 		req.DepreciationMethod, req.UsefulLifeYears, req.SalvageValue,
-		req.DepreciationRate, req.TypeSpecificData, req.Notes, now).Scan(
-		&details.ID, &details.AccountID, &details.AssetType, &details.PurchasePrice, &details.PurchaseDate,
-		&details.DepreciationMethod, &details.UsefulLifeYears, &details.SalvageValue, &details.DepreciationRate,
-		&details.TypeSpecificData, &details.Notes, &details.CreatedAt, &details.UpdatedAt,
-	)
+		req.DepreciationRate, req.TypeSpecificData, req.Notes, now)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to update asset details: %w", err)
 	}
 
-	return &details, nil
+	// Fetch and return the updated details
+	return s.GetAssetDetails(ctx, accountID)
 }
 
 // GetAssetValuation retrieves asset details with calculated current value
@@ -277,13 +278,25 @@ func (s *Service) GetAssetsSummary(ctx context.Context) (*AssetsSummaryResponse,
 
 	for rows.Next() {
 		var details AssetDetails
+		var salvageValue sql.NullFloat64
+		var typeSpecificData []byte
+		var notes sql.NullString
 		err := rows.Scan(
 			&details.ID, &details.AccountID, &details.AssetType, &details.PurchasePrice, &details.PurchaseDate,
-			&details.DepreciationMethod, &details.UsefulLifeYears, &details.SalvageValue, &details.DepreciationRate,
-			&details.TypeSpecificData, &details.Notes, &details.CreatedAt, &details.UpdatedAt,
+			&details.DepreciationMethod, &details.UsefulLifeYears, &salvageValue, &details.DepreciationRate,
+			&typeSpecificData, &notes, &details.CreatedAt, &details.UpdatedAt,
 		)
 		if err != nil {
 			continue
+		}
+		if salvageValue.Valid {
+			details.SalvageValue = salvageValue.Float64
+		}
+		if typeSpecificData != nil {
+			details.TypeSpecificData = typeSpecificData
+		}
+		if notes.Valid {
+			details.Notes = notes.String
 		}
 
 		currentValue, accumulatedDepreciation, err := s.calculateCurrentValue(ctx, &details, asOfDate)
@@ -326,22 +339,25 @@ func (s *Service) RecordDepreciation(ctx context.Context, accountID string, req 
 	id := uuid.New().String()
 	now := time.Now()
 
-	var entry DepreciationEntry
-	err = s.db.QueryRowContext(ctx, `
+	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO asset_depreciation_entries (
 			id, account_id, entry_date, current_value, accumulated_depreciation, notes, created_at
 		) VALUES ($1, $2, $3, $4, $5, $6, $7)
-		RETURNING id, account_id, entry_date, current_value, accumulated_depreciation, notes, created_at
-	`, id, accountID, req.EntryDate, req.CurrentValue, accumulatedDepreciation, req.Notes, now).Scan(
-		&entry.ID, &entry.AccountID, &entry.EntryDate, &entry.CurrentValue,
-		&entry.AccumulatedDepreciation, &entry.Notes, &entry.CreatedAt,
-	)
+	`, id, accountID, req.EntryDate, req.CurrentValue, accumulatedDepreciation, req.Notes, now)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to record depreciation: %w", err)
 	}
 
-	return &entry, nil
+	return &DepreciationEntry{
+		ID:                      id,
+		AccountID:               accountID,
+		EntryDate:               req.EntryDate,
+		CurrentValue:            req.CurrentValue,
+		AccumulatedDepreciation: accumulatedDepreciation,
+		Notes:                   req.Notes,
+		CreatedAt:               now,
+	}, nil
 }
 
 // GetDepreciationHistory retrieves all depreciation entries for an asset
@@ -441,7 +457,7 @@ func (s *Service) calculateCurrentValue(ctx context.Context, asset *AssetDetails
 	case "declining_balance":
 		return calculateDecliningBalance(asset, asOfDate)
 	case "manual":
-		return s.getLatestManualValue(ctx, asset.AccountID, asOfDate)
+		return s.getLatestManualValue(ctx, asset, asOfDate)
 	default:
 		return 0, 0, fmt.Errorf("unknown depreciation method: %s", asset.DepreciationMethod)
 	}
@@ -503,7 +519,7 @@ func calculateDecliningBalance(asset *AssetDetails, asOfDate time.Time) (float64
 }
 
 // getLatestManualValue retrieves the latest manual depreciation entry
-func (s *Service) getLatestManualValue(ctx context.Context, accountID string, asOfDate time.Time) (float64, float64, error) {
+func (s *Service) getLatestManualValue(ctx context.Context, asset *AssetDetails, asOfDate time.Time) (float64, float64, error) {
 	var currentValue, accumulatedDepreciation float64
 
 	err := s.db.QueryRowContext(ctx, `
@@ -512,22 +528,13 @@ func (s *Service) getLatestManualValue(ctx context.Context, accountID string, as
 		WHERE account_id = $1 AND entry_date <= $2
 		ORDER BY entry_date DESC
 		LIMIT 1
-	`, accountID, asOfDate).Scan(&currentValue, &accumulatedDepreciation)
+	`, asset.AccountID, asOfDate).Scan(&currentValue, &accumulatedDepreciation)
 
 	if err != nil {
 		// Check if no rows found using errors.Is for wrapped errors
 		if errors.Is(err, sql.ErrNoRows) {
-			// No manual entries yet, return purchase price
-			var purchasePrice float64
-			err = s.db.QueryRowContext(ctx, `
-				SELECT purchase_price
-				FROM asset_details
-				WHERE account_id = $1
-			`, accountID).Scan(&purchasePrice)
-			if err != nil {
-				return 0, 0, fmt.Errorf("failed to get purchase price: %w", err)
-			}
-			return purchasePrice, 0, nil
+			// No manual entries yet, return purchase price (we already have it)
+			return asset.PurchasePrice, 0, nil
 		}
 		return 0, 0, fmt.Errorf("failed to get latest manual value: %w", err)
 	}

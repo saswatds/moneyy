@@ -7,6 +7,8 @@ import (
 	"encoding/hex"
 	"fmt"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // Session represents a user session
@@ -39,21 +41,28 @@ func HashToken(token string) string {
 
 // Create creates a new session
 func (r *SessionRepository) Create(ctx context.Context, session *Session) error {
+	now := time.Now()
+	session.ID = uuid.New().String()
+	session.CreatedAt = now
+	session.LastActivity = now
+
 	query := `
-		INSERT INTO sessions (user_id, token_hash, expires_at, created_at, last_activity, ip_address, user_agent)
-		VALUES ($1, $2, $3, NOW(), NOW(), $4, $5)
-		RETURNING id, created_at, last_activity
+		INSERT INTO sessions (id, user_id, token_hash, expires_at, created_at, last_activity, ip_address, user_agent)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 	`
 
-	err := r.db.QueryRowContext(
+	_, err := r.db.ExecContext(
 		ctx,
 		query,
+		session.ID,
 		session.UserID,
 		session.TokenHash,
 		session.ExpiresAt,
+		session.CreatedAt,
+		session.LastActivity,
 		session.IPAddress,
 		session.UserAgent,
-	).Scan(&session.ID, &session.CreatedAt, &session.LastActivity)
+	)
 
 	if err != nil {
 		return fmt.Errorf("failed to create session: %w", err)
@@ -67,7 +76,7 @@ func (r *SessionRepository) GetByTokenHash(ctx context.Context, tokenHash string
 	query := `
 		SELECT id, user_id, token_hash, expires_at, created_at, last_activity, ip_address, user_agent
 		FROM sessions
-		WHERE token_hash = $1 AND expires_at > NOW()
+		WHERE token_hash = $1 AND expires_at > datetime('now')
 	`
 
 	var session Session
@@ -105,11 +114,11 @@ func (r *SessionRepository) GetByTokenHash(ctx context.Context, tokenHash string
 func (r *SessionRepository) UpdateActivity(ctx context.Context, id string) error {
 	query := `
 		UPDATE sessions
-		SET last_activity = NOW()
+		SET last_activity = $2
 		WHERE id = $1
 	`
 
-	_, err := r.db.ExecContext(ctx, query, id)
+	_, err := r.db.ExecContext(ctx, query, id, time.Now())
 	if err != nil {
 		return fmt.Errorf("failed to update session activity: %w", err)
 	}
@@ -131,7 +140,7 @@ func (r *SessionRepository) Delete(ctx context.Context, tokenHash string) error 
 
 // DeleteExpired deletes all expired sessions
 func (r *SessionRepository) DeleteExpired(ctx context.Context) error {
-	query := `DELETE FROM sessions WHERE expires_at <= NOW()`
+	query := `DELETE FROM sessions WHERE expires_at <= datetime('now')`
 
 	_, err := r.db.ExecContext(ctx, query)
 	if err != nil {
@@ -146,7 +155,7 @@ func (r *SessionRepository) GetByUserID(ctx context.Context, userID string) ([]*
 	query := `
 		SELECT id, user_id, token_hash, expires_at, created_at, last_activity, ip_address, user_agent
 		FROM sessions
-		WHERE user_id = $1 AND expires_at > NOW()
+		WHERE user_id = $1 AND expires_at > datetime('now')
 		ORDER BY last_activity DESC
 	`
 

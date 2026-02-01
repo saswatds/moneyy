@@ -336,29 +336,36 @@ func (s *Service) CreateEquityGrant(ctx context.Context, accountID string, req *
 		currency = "USD"
 	}
 
-	var grant EquityGrant
-	err := s.db.QueryRowContext(ctx, `
+	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO equity_grants (
 			id, account_id, grant_type, grant_date, quantity, strike_price,
 			fmv_at_grant, expiration_date, company_name, currency, grant_number, notes,
 			created_at, updated_at
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-		RETURNING id, account_id, grant_type, grant_date, quantity, strike_price,
-			fmv_at_grant, expiration_date, company_name, currency, grant_number, notes,
-			created_at, updated_at
 	`, id, accountID, req.GrantType, req.GrantDate, req.Quantity, req.StrikePrice,
 		req.FMVAtGrant, req.ExpirationDate, req.CompanyName, currency, req.GrantNumber, req.Notes,
-		now, now).Scan(
-		&grant.ID, &grant.AccountID, &grant.GrantType, &grant.GrantDate, &grant.Quantity,
-		&grant.StrikePrice, &grant.FMVAtGrant, &grant.ExpirationDate, &grant.CompanyName,
-		&grant.Currency, &grant.GrantNumber, &grant.Notes, &grant.CreatedAt, &grant.UpdatedAt,
-	)
+		now, now)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create equity grant: %w", err)
 	}
 
-	return &grant, nil
+	return &EquityGrant{
+		ID:             id,
+		AccountID:      accountID,
+		GrantType:      req.GrantType,
+		GrantDate:      req.GrantDate,
+		Quantity:       req.Quantity,
+		StrikePrice:    req.StrikePrice,
+		FMVAtGrant:     req.FMVAtGrant,
+		ExpirationDate: req.ExpirationDate,
+		CompanyName:    req.CompanyName,
+		Currency:       currency,
+		GrantNumber:    req.GrantNumber,
+		Notes:          req.Notes,
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}, nil
 }
 
 // GetEquityGrants retrieves all grants for an account
@@ -529,32 +536,41 @@ func (s *Service) SetVestingSchedule(ctx context.Context, grantID string, req *S
 	id := uuid.New().String()
 	now := time.Now()
 
-	var schedule VestingSchedule
-	err = s.db.QueryRowContext(ctx, `
+	// Check if schedule exists
+	var existingID string
+	existingErr := s.db.QueryRowContext(ctx, `SELECT id FROM vesting_schedules WHERE grant_id = $1`, grantID).Scan(&existingID)
+	if existingErr == nil {
+		id = existingID // Use existing ID for update
+	}
+
+	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO vesting_schedules (
 			id, grant_id, schedule_type, cliff_months, total_vesting_months,
 			vesting_frequency, milestone_description, created_at
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		ON CONFLICT (grant_id) DO UPDATE SET
-			schedule_type = EXCLUDED.schedule_type,
-			cliff_months = EXCLUDED.cliff_months,
-			total_vesting_months = EXCLUDED.total_vesting_months,
-			vesting_frequency = EXCLUDED.vesting_frequency,
-			milestone_description = EXCLUDED.milestone_description
-		RETURNING id, grant_id, schedule_type, cliff_months, total_vesting_months,
-			vesting_frequency, milestone_description, created_at
+			schedule_type = excluded.schedule_type,
+			cliff_months = excluded.cliff_months,
+			total_vesting_months = excluded.total_vesting_months,
+			vesting_frequency = excluded.vesting_frequency,
+			milestone_description = excluded.milestone_description
 	`, id, grantID, req.ScheduleType, req.CliffMonths, req.TotalVestingMonths,
-		req.VestingFrequency, req.MilestoneDescription, now).Scan(
-		&schedule.ID, &schedule.GrantID, &schedule.ScheduleType, &schedule.CliffMonths,
-		&schedule.TotalVestingMonths, &schedule.VestingFrequency, &schedule.MilestoneDescription,
-		&schedule.CreatedAt,
-	)
+		req.VestingFrequency, req.MilestoneDescription, now)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to set vesting schedule: %w", err)
 	}
 
-	return &schedule, nil
+	return &VestingSchedule{
+		ID:                   id,
+		GrantID:              grantID,
+		ScheduleType:         req.ScheduleType,
+		CliffMonths:          req.CliffMonths,
+		TotalVestingMonths:   req.TotalVestingMonths,
+		VestingFrequency:     req.VestingFrequency,
+		MilestoneDescription: req.MilestoneDescription,
+		CreatedAt:            now,
+	}, nil
 }
 
 // GetVestingSchedule retrieves the vesting schedule for a grant
@@ -787,26 +803,31 @@ func (s *Service) RecordExercise(ctx context.Context, grantID string, req *Recor
 	id := uuid.New().String()
 	now := time.Now()
 
-	var exercise EquityExercise
-	err = s.db.QueryRowContext(ctx, `
+	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO equity_exercises (
 			id, grant_id, exercise_date, quantity, strike_price, fmv_at_exercise,
 			exercise_cost, taxable_benefit, exercise_method, notes, created_at
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-		RETURNING id, grant_id, exercise_date, quantity, strike_price, fmv_at_exercise,
-			exercise_cost, taxable_benefit, exercise_method, notes, created_at
 	`, id, grantID, req.ExerciseDate, req.Quantity, *grant.StrikePrice, req.FMVAtExercise,
-		exerciseCost, taxableBenefit, req.ExerciseMethod, req.Notes, now).Scan(
-		&exercise.ID, &exercise.GrantID, &exercise.ExerciseDate, &exercise.Quantity,
-		&exercise.StrikePrice, &exercise.FMVAtExercise, &exercise.ExerciseCost,
-		&exercise.TaxableBenefit, &exercise.ExerciseMethod, &exercise.Notes, &exercise.CreatedAt,
-	)
+		exerciseCost, taxableBenefit, req.ExerciseMethod, req.Notes, now)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to record exercise: %w", err)
 	}
 
-	return &exercise, nil
+	return &EquityExercise{
+		ID:             id,
+		GrantID:        grantID,
+		ExerciseDate:   req.ExerciseDate,
+		Quantity:       req.Quantity,
+		StrikePrice:    *grant.StrikePrice,
+		FMVAtExercise:  req.FMVAtExercise,
+		ExerciseCost:   exerciseCost,
+		TaxableBenefit: taxableBenefit,
+		ExerciseMethod: req.ExerciseMethod,
+		Notes:          req.Notes,
+		CreatedAt:      now,
+	}, nil
 }
 
 // GetExercises retrieves all exercises for a grant
@@ -1008,26 +1029,34 @@ func (s *Service) RecordSale(ctx context.Context, accountID string, req *RecordS
 	id := uuid.New().String()
 	now := time.Now()
 
-	var sale EquitySale
-	err := s.db.QueryRowContext(ctx, `
+	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO equity_sales (
 			id, account_id, grant_id, exercise_id, sale_date, quantity, sale_price,
 			total_proceeds, cost_basis, capital_gain, holding_period_days, is_qualified, notes, created_at
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-		RETURNING id, account_id, grant_id, exercise_id, sale_date, quantity, sale_price,
-			total_proceeds, cost_basis, capital_gain, holding_period_days, is_qualified, notes, created_at
 	`, id, accountID, req.GrantID, req.ExerciseID, req.SaleDate, req.Quantity, req.SalePrice,
-		totalProceeds, req.CostBasis, capitalGain, holdingPeriodDays, isQualified, req.Notes, now).Scan(
-		&sale.ID, &sale.AccountID, &sale.GrantID, &sale.ExerciseID, &sale.SaleDate, &sale.Quantity,
-		&sale.SalePrice, &sale.TotalProceeds, &sale.CostBasis, &sale.CapitalGain,
-		&sale.HoldingPeriodDays, &sale.IsQualified, &sale.Notes, &sale.CreatedAt,
-	)
+		totalProceeds, req.CostBasis, capitalGain, holdingPeriodDays, isQualified, req.Notes, now)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to record sale: %w", err)
 	}
 
-	return &sale, nil
+	return &EquitySale{
+		ID:                id,
+		AccountID:         accountID,
+		GrantID:           req.GrantID,
+		ExerciseID:        req.ExerciseID,
+		SaleDate:          req.SaleDate,
+		Quantity:          req.Quantity,
+		SalePrice:         req.SalePrice,
+		TotalProceeds:     totalProceeds,
+		CostBasis:         req.CostBasis,
+		CapitalGain:       capitalGain,
+		HoldingPeriodDays: holdingPeriodDays,
+		IsQualified:       isQualified,
+		Notes:             req.Notes,
+		CreatedAt:         now,
+	}, nil
 }
 
 // GetSales retrieves all sales for an account
@@ -1171,23 +1200,36 @@ func (s *Service) RecordFMV(ctx context.Context, accountID string, req *RecordFM
 		currency = "USD"
 	}
 
-	var entry FMVEntry
-	err := s.db.QueryRowContext(ctx, `
+	// Check if entry already exists
+	var existingID string
+	existingErr := s.db.QueryRowContext(ctx, `
+		SELECT id FROM fmv_history WHERE account_id = $1 AND currency = $2 AND effective_date = $3
+	`, accountID, currency, req.EffectiveDate).Scan(&existingID)
+	if existingErr == nil {
+		id = existingID // Use existing ID for update
+	}
+
+	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO fmv_history (id, account_id, currency, effective_date, fmv_per_share, notes, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		ON CONFLICT (account_id, currency, effective_date) DO UPDATE SET
-			fmv_per_share = EXCLUDED.fmv_per_share,
-			notes = EXCLUDED.notes
-		RETURNING id, account_id, currency, effective_date, fmv_per_share, notes, created_at
-	`, id, accountID, currency, req.EffectiveDate, req.FMVPerShare, req.Notes, now).Scan(
-		&entry.ID, &entry.AccountID, &entry.Currency, &entry.EffectiveDate, &entry.FMVPerShare, &entry.Notes, &entry.CreatedAt,
-	)
+			fmv_per_share = excluded.fmv_per_share,
+			notes = excluded.notes
+	`, id, accountID, currency, req.EffectiveDate, req.FMVPerShare, req.Notes, now)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to record FMV: %w", err)
 	}
 
-	return &entry, nil
+	return &FMVEntry{
+		ID:            id,
+		AccountID:     accountID,
+		Currency:      currency,
+		EffectiveDate: req.EffectiveDate,
+		FMVPerShare:   req.FMVPerShare,
+		Notes:         req.Notes,
+		CreatedAt:     now,
+	}, nil
 }
 
 // GetFMVHistory retrieves all FMV entries for an account
@@ -1460,8 +1502,8 @@ func (s *Service) GetTaxSummary(ctx context.Context, accountID string, year int)
 		FROM equity_exercises ee
 		JOIN equity_grants eg ON ee.grant_id = eg.id
 		WHERE eg.account_id = $1
-		AND EXTRACT(YEAR FROM ee.exercise_date) = $2
-	`, accountID, year)
+		AND strftime('%Y', ee.exercise_date) = $2
+	`, accountID, fmt.Sprintf("%d", year))
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get exercises: %w", err)
@@ -1489,8 +1531,8 @@ func (s *Service) GetTaxSummary(ctx context.Context, accountID string, year int)
 		FROM equity_sales es
 		LEFT JOIN equity_grants eg ON es.grant_id = eg.id
 		WHERE es.account_id = $1
-		AND EXTRACT(YEAR FROM es.sale_date) = $2
-	`, accountID, year)
+		AND strftime('%Y', es.sale_date) = $2
+	`, accountID, fmt.Sprintf("%d", year))
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get sales: %w", err)

@@ -43,8 +43,7 @@ func (h *DemoHandler) HandleSeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Always seed demo data for demo-user, not the authenticated user
-	// This ensures demo mode works correctly
+	// Always seed demo data for demo-user
 	const demoUserID = "demo-user"
 	err := h.demoService.SeedDemoData(ctx, demoUserID)
 	if err != nil {

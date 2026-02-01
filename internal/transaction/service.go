@@ -103,30 +103,36 @@ func (s *Service) CreateRecurringExpense(ctx context.Context, req *CreateRecurri
 	}
 
 	id := generateID()
+	now := time.Now()
 
-	var expense RecurringExpense
-	err := s.db.QueryRowContext(ctx, `
+	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO recurring_expenses (
 			id, user_id, name, description, amount, currency, category, account_id,
-			frequency, day_of_month, day_of_week, is_active
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true)
-		RETURNING id, user_id, name, description, amount, currency, category, account_id,
-		          frequency, day_of_month, day_of_week,
-		          is_active, created_at, updated_at
+			frequency, day_of_month, day_of_week, is_active, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true, $12, $13)
 	`, id, userID, req.Name, req.Description, req.Amount, req.Currency, req.Category, req.AccountID,
-		req.Frequency, req.DayOfMonth, req.DayOfWeek,
-	).Scan(
-		&expense.ID, &expense.UserID, &expense.Name, &expense.Description,
-		&expense.Amount, &expense.Currency, &expense.Category, &expense.AccountID, &expense.Frequency,
-		&expense.DayOfMonth, &expense.DayOfWeek,
-		&expense.IsActive, &expense.CreatedAt, &expense.UpdatedAt,
-	)
+		req.Frequency, req.DayOfMonth, req.DayOfWeek, now, now)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create recurring expense: %w", err)
 	}
 
-	return &expense, nil
+	return &RecurringExpense{
+		ID:          id,
+		UserID:      userID,
+		Name:        req.Name,
+		Description: req.Description,
+		Amount:      req.Amount,
+		Currency:    req.Currency,
+		Category:    req.Category,
+		AccountID:   req.AccountID,
+		Frequency:   req.Frequency,
+		DayOfMonth:  req.DayOfMonth,
+		DayOfWeek:   req.DayOfWeek,
+		IsActive:    true,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}, nil
 }
 
 // ListRecurringExpenses lists all recurring expenses for the authenticated user
@@ -341,10 +347,12 @@ func (s *Service) UpdateRecurringExpense(ctx context.Context, id string, req *Up
 		return nil, fmt.Errorf("user not authenticated")
 	}
 
+	now := time.Now()
+
 	// Build dynamic update query
-	query := `UPDATE recurring_expenses SET updated_at = NOW()`
-	args := []any{id, userID}
-	argIdx := 3
+	query := `UPDATE recurring_expenses SET updated_at = $3`
+	args := []any{id, userID, now}
+	argIdx := 4
 
 	if req.Name != nil {
 		query += fmt.Sprintf(`, name = $%d`, argIdx)
@@ -397,24 +405,15 @@ func (s *Service) UpdateRecurringExpense(ctx context.Context, id string, req *Up
 		argIdx++
 	}
 
-	query += ` WHERE id = $1 AND user_id = $2
-		RETURNING id, user_id, name, description, amount, currency, category, account_id,
-		          frequency, day_of_month, day_of_week,
-		          is_active, created_at, updated_at`
+	query += ` WHERE id = $1 AND user_id = $2`
 
-	var expense RecurringExpense
-	err := s.db.QueryRowContext(ctx, query, args...).Scan(
-		&expense.ID, &expense.UserID, &expense.Name, &expense.Description,
-		&expense.Amount, &expense.Currency, &expense.Category, &expense.AccountID, &expense.Frequency,
-		&expense.DayOfMonth, &expense.DayOfWeek,
-		&expense.IsActive, &expense.CreatedAt, &expense.UpdatedAt,
-	)
-
+	_, err := s.db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update recurring expense: %w", err)
 	}
 
-	return &expense, nil
+	// Fetch and return the updated expense
+	return s.GetRecurringExpense(ctx, id)
 }
 
 // DeleteRecurringExpense deletes a recurring expense

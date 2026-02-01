@@ -29,10 +29,13 @@ func NewUserRepository(db *sql.DB) *UserRepository {
 
 // Create creates a new user
 func (r *UserRepository) Create(ctx context.Context, user *User) error {
+	now := time.Now()
+	user.CreatedAt = now
+	user.UpdatedAt = now
+
 	query := `
 		INSERT INTO users (id, email, name, clerk_user_id, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, NOW(), NOW())
-		RETURNING id, created_at, updated_at
+		VALUES ($1, $2, $3, $4, $5, $6)
 	`
 
 	var clerkUserID *string
@@ -40,8 +43,7 @@ func (r *UserRepository) Create(ctx context.Context, user *User) error {
 		clerkUserID = &user.ClerkUserID
 	}
 
-	err := r.db.QueryRowContext(ctx, query, user.ID, user.Email, user.Name, clerkUserID).
-		Scan(&user.ID, &user.CreatedAt, &user.UpdatedAt)
+	_, err := r.db.ExecContext(ctx, query, user.ID, user.Email, user.Name, clerkUserID, user.CreatedAt, user.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("failed to create user: %w", err)
 	}
@@ -132,15 +134,15 @@ func (r *UserRepository) GetByClerkID(ctx context.Context, clerkUserID string) (
 
 // Update updates a user
 func (r *UserRepository) Update(ctx context.Context, user *User) error {
+	user.UpdatedAt = time.Now()
+
 	query := `
 		UPDATE users
-		SET email = $2, name = $3, updated_at = NOW()
+		SET email = $2, name = $3, updated_at = $4
 		WHERE id = $1
-		RETURNING updated_at
 	`
 
-	err := r.db.QueryRowContext(ctx, query, user.ID, user.Email, user.Name).
-		Scan(&user.UpdatedAt)
+	_, err := r.db.ExecContext(ctx, query, user.ID, user.Email, user.Name, user.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("failed to update user: %w", err)
 	}

@@ -37,6 +37,11 @@ func (h *IncomeHandler) RegisterRoutes(r chi.Router) {
 
 		r.Get("/tax-config/{year}", h.GetTaxConfig)
 		r.Post("/tax-config", h.SaveTaxConfig)
+
+		// Tax simulation endpoints
+		r.Post("/tax-simulator/exercise", h.CalculateExerciseTax)
+		r.Post("/tax-simulator/sale", h.CalculateSaleTax)
+		r.Post("/tax-simulator/batch", h.CalculateBatchTax)
 	})
 }
 
@@ -258,4 +263,91 @@ func (h *IncomeHandler) SaveTaxConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	server.RespondJSON(w, http.StatusCreated, config)
+}
+
+// CalculateExerciseTax calculates tax for a stock option exercise
+func (h *IncomeHandler) CalculateExerciseTax(w http.ResponseWriter, r *http.Request) {
+	var req income.CalculateExerciseTaxRequest
+	if err := server.ParseJSON(r, &req); err != nil {
+		server.RespondError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err))
+		return
+	}
+
+	// Validate inputs
+	if req.Quantity <= 0 {
+		server.RespondError(w, http.StatusBadRequest, fmt.Errorf("quantity must be positive"))
+		return
+	}
+	if req.StrikePrice < 0 {
+		server.RespondError(w, http.StatusBadRequest, fmt.Errorf("strike price cannot be negative"))
+		return
+	}
+	if req.FMVAtExercise < 0 {
+		server.RespondError(w, http.StatusBadRequest, fmt.Errorf("FMV cannot be negative"))
+		return
+	}
+	if req.MarginalRate < 0 || req.MarginalRate > 1 {
+		server.RespondError(w, http.StatusBadRequest, fmt.Errorf("marginal rate must be between 0 and 1"))
+		return
+	}
+
+	result := h.service.CalculateExerciseTax(&req)
+	server.RespondJSON(w, http.StatusOK, result)
+}
+
+// CalculateSaleTax calculates capital gains tax for a stock sale
+func (h *IncomeHandler) CalculateSaleTax(w http.ResponseWriter, r *http.Request) {
+	var req income.CalculateSaleTaxRequest
+	if err := server.ParseJSON(r, &req); err != nil {
+		server.RespondError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err))
+		return
+	}
+
+	// Validate inputs
+	if req.Quantity <= 0 {
+		server.RespondError(w, http.StatusBadRequest, fmt.Errorf("quantity must be positive"))
+		return
+	}
+	if req.SalePrice < 0 {
+		server.RespondError(w, http.StatusBadRequest, fmt.Errorf("sale price cannot be negative"))
+		return
+	}
+	if req.CostBasis < 0 {
+		server.RespondError(w, http.StatusBadRequest, fmt.Errorf("cost basis cannot be negative"))
+		return
+	}
+	if req.MarginalRate < 0 || req.MarginalRate > 1 {
+		server.RespondError(w, http.StatusBadRequest, fmt.Errorf("marginal rate must be between 0 and 1"))
+		return
+	}
+
+	result, err := h.service.CalculateSaleTax(&req)
+	if err != nil {
+		server.RespondError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	server.RespondJSON(w, http.StatusOK, result)
+}
+
+// CalculateBatchTax calculates tax for multiple exercises and sales
+func (h *IncomeHandler) CalculateBatchTax(w http.ResponseWriter, r *http.Request) {
+	var req income.BatchTaxCalculationRequest
+	if err := server.ParseJSON(r, &req); err != nil {
+		server.RespondError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err))
+		return
+	}
+
+	if req.MarginalRate < 0 || req.MarginalRate > 1 {
+		server.RespondError(w, http.StatusBadRequest, fmt.Errorf("marginal rate must be between 0 and 1"))
+		return
+	}
+
+	result, err := h.service.CalculateBatchTax(&req)
+	if err != nil {
+		server.RespondError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	server.RespondJSON(w, http.StatusOK, result)
 }

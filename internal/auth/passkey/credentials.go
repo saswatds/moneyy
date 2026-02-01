@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
+	"github.com/google/uuid"
 )
 
 // Credential represents a WebAuthn credential in the database
@@ -37,15 +38,18 @@ func NewCredentialRepository(db *sql.DB) *CredentialRepository {
 
 // Create creates a new credential
 func (r *CredentialRepository) Create(ctx context.Context, cred *Credential) error {
+	cred.ID = uuid.New().String()
+	cred.CreatedAt = time.Now()
+
 	query := `
-		INSERT INTO webauthn_credentials (user_id, credential_id, public_key, aaguid, sign_count, backup_eligible, backup_state, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
-		RETURNING id, created_at
+		INSERT INTO webauthn_credentials (id, user_id, credential_id, public_key, aaguid, sign_count, backup_eligible, backup_state, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	`
 
-	err := r.db.QueryRowContext(
+	_, err := r.db.ExecContext(
 		ctx,
 		query,
+		cred.ID,
 		cred.UserID,
 		cred.CredentialID,
 		cred.PublicKey,
@@ -53,7 +57,8 @@ func (r *CredentialRepository) Create(ctx context.Context, cred *Credential) err
 		cred.SignCount,
 		cred.BackupEligible,
 		cred.BackupState,
-	).Scan(&cred.ID, &cred.CreatedAt)
+		cred.CreatedAt,
+	)
 
 	if err != nil {
 		return fmt.Errorf("failed to create credential: %w", err)
@@ -152,11 +157,11 @@ func (r *CredentialRepository) GetByUserID(ctx context.Context, userID string) (
 func (r *CredentialRepository) UpdateSignCount(ctx context.Context, credentialID []byte, signCount uint32) error {
 	query := `
 		UPDATE webauthn_credentials
-		SET sign_count = $2, last_used_at = NOW()
+		SET sign_count = $2, last_used_at = $3
 		WHERE credential_id = $1
 	`
 
-	_, err := r.db.ExecContext(ctx, query, credentialID, signCount)
+	_, err := r.db.ExecContext(ctx, query, credentialID, signCount, time.Now())
 	if err != nil {
 		return fmt.Errorf("failed to update sign count: %w", err)
 	}

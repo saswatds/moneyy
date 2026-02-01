@@ -38,6 +38,7 @@ func (h *APIKeysHandler) RegisterRoutes(r chi.Router) {
 	// Moneyy API routes
 	r.Route("/moneyy", func(r chi.Router) {
 		r.Get("/tax-brackets/{country}/{year}/{region}", h.FetchTaxBrackets)
+		r.Get("/tax-params/{country}/{year}/{region}", h.FetchTaxParams)
 	})
 }
 
@@ -124,4 +125,38 @@ func (h *APIKeysHandler) FetchTaxBrackets(w http.ResponseWriter, r *http.Request
 	}
 
 	server.RespondJSON(w, http.StatusOK, brackets)
+}
+
+// FetchTaxParams fetches tax parameters from the Moneyy API
+func (h *APIKeysHandler) FetchTaxParams(w http.ResponseWriter, r *http.Request) {
+	country := chi.URLParam(r, "country")
+	yearStr := chi.URLParam(r, "year")
+	region := chi.URLParam(r, "region")
+
+	if country == "" {
+		server.RespondError(w, http.StatusBadRequest, fmt.Errorf("country is required"))
+		return
+	}
+	if yearStr == "" {
+		server.RespondError(w, http.StatusBadRequest, fmt.Errorf("year is required"))
+		return
+	}
+	if region == "" {
+		server.RespondError(w, http.StatusBadRequest, fmt.Errorf("region is required"))
+		return
+	}
+
+	year, err := strconv.Atoi(yearStr)
+	if err != nil {
+		server.RespondError(w, http.StatusBadRequest, fmt.Errorf("invalid year: %w", err))
+		return
+	}
+
+	params, err := h.moneySvc.FetchTaxParams(r.Context(), country, year, region)
+	if err != nil {
+		server.RespondError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	server.RespondJSON(w, http.StatusOK, params)
 }

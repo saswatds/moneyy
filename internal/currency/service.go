@@ -79,11 +79,15 @@ func (s *Service) GetLatestRates(ctx context.Context) (*LatestRatesResponse, err
 		_ = s.syncRates(ctx)
 	}
 
+	// SQLite compatible: using subquery instead of DISTINCT ON
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT DISTINCT ON (from_currency, to_currency)
-			from_currency, to_currency, rate, date
-		FROM exchange_rates
-		ORDER BY from_currency, to_currency, date DESC
+		SELECT e1.from_currency, e1.to_currency, e1.rate, e1.date
+		FROM exchange_rates e1
+		WHERE e1.date = (
+			SELECT MAX(e2.date) FROM exchange_rates e2
+			WHERE e2.from_currency = e1.from_currency AND e2.to_currency = e1.to_currency
+		)
+		ORDER BY e1.from_currency, e1.to_currency
 	`)
 	if err != nil {
 		return nil, err
@@ -194,14 +198,14 @@ func (s *Service) syncRates(ctx context.Context) error {
 		_, _ = s.db.ExecContext(ctx, `
 			INSERT INTO exchange_rates (from_currency, to_currency, rate, date, created_at)
 			VALUES ($1, $2, $3, $4, $5)
-			ON CONFLICT (from_currency, to_currency, date) DO UPDATE SET rate = EXCLUDED.rate
+			ON CONFLICT (from_currency, to_currency, date) DO UPDATE SET rate = excluded.rate
 		`, "USD", "CAD", usdToCAD, today, time.Now())
 
 		// CAD -> USD (inverse)
 		_, _ = s.db.ExecContext(ctx, `
 			INSERT INTO exchange_rates (from_currency, to_currency, rate, date, created_at)
 			VALUES ($1, $2, $3, $4, $5)
-			ON CONFLICT (from_currency, to_currency, date) DO UPDATE SET rate = EXCLUDED.rate
+			ON CONFLICT (from_currency, to_currency, date) DO UPDATE SET rate = excluded.rate
 		`, "CAD", "USD", 1/usdToCAD, today, time.Now())
 	}
 
@@ -211,14 +215,14 @@ func (s *Service) syncRates(ctx context.Context) error {
 		_, _ = s.db.ExecContext(ctx, `
 			INSERT INTO exchange_rates (from_currency, to_currency, rate, date, created_at)
 			VALUES ($1, $2, $3, $4, $5)
-			ON CONFLICT (from_currency, to_currency, date) DO UPDATE SET rate = EXCLUDED.rate
+			ON CONFLICT (from_currency, to_currency, date) DO UPDATE SET rate = excluded.rate
 		`, "INR", "CAD", inrToCAD, today, time.Now())
 
 		// CAD -> INR (inverse)
 		_, _ = s.db.ExecContext(ctx, `
 			INSERT INTO exchange_rates (from_currency, to_currency, rate, date, created_at)
 			VALUES ($1, $2, $3, $4, $5)
-			ON CONFLICT (from_currency, to_currency, date) DO UPDATE SET rate = EXCLUDED.rate
+			ON CONFLICT (from_currency, to_currency, date) DO UPDATE SET rate = excluded.rate
 		`, "CAD", "INR", 1/inrToCAD, today, time.Now())
 	}
 
@@ -232,14 +236,14 @@ func (s *Service) syncRates(ctx context.Context) error {
 		_, _ = s.db.ExecContext(ctx, `
 			INSERT INTO exchange_rates (from_currency, to_currency, rate, date, created_at)
 			VALUES ($1, $2, $3, $4, $5)
-			ON CONFLICT (from_currency, to_currency, date) DO UPDATE SET rate = EXCLUDED.rate
+			ON CONFLICT (from_currency, to_currency, date) DO UPDATE SET rate = excluded.rate
 		`, "USD", "INR", usdToINR, today, time.Now())
 
 		// INR -> USD (inverse)
 		_, _ = s.db.ExecContext(ctx, `
 			INSERT INTO exchange_rates (from_currency, to_currency, rate, date, created_at)
 			VALUES ($1, $2, $3, $4, $5)
-			ON CONFLICT (from_currency, to_currency, date) DO UPDATE SET rate = EXCLUDED.rate
+			ON CONFLICT (from_currency, to_currency, date) DO UPDATE SET rate = excluded.rate
 		`, "INR", "USD", 1/usdToINR, today, time.Now())
 	}
 

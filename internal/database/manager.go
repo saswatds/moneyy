@@ -4,15 +4,17 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"money/internal/env"
 	"money/internal/logger"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/golang-migrate/migrate/v4"
-	"github.com/golang-migrate/migrate/v4/database/postgres"
+	"github.com/golang-migrate/migrate/v4/database/sqlite3"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	_ "modernc.org/sqlite"
 )
 
 // Manager manages the database connection
@@ -22,29 +24,35 @@ type Manager struct {
 
 // NewManager creates a new database manager from environment variables
 func NewManager() (*Manager, error) {
-	// Build connection string from environment
-	host := env.Get("DB_HOST", "localhost")
-	port := env.GetInt("DB_PORT", 5432)
-	name := env.Get("DB_NAME", "money")
-	user := env.Get("DB_USER", "postgres")
-	password := env.MustGet("DB_PASSWORD")
+	// Get database path from environment
+	dbPath := env.Get("DB_PATH", "data/moneyy.db")
 
-	dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
-		host, port, user, password, name)
+	// Ensure the directory exists
+	dir := filepath.Dir(dbPath)
+	if dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return nil, fmt.Errorf("failed to create database directory: %w", err)
+		}
+	}
 
-	db, err := sql.Open("pgx", dsn)
+	// Build SQLite connection string with pragmas for better performance
+	dsn := fmt.Sprintf("%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(ON)", dbPath)
+
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database connection: %w", err)
 	}
 
-	// Configure connection pool
-	maxOpenConns := env.GetInt("DB_MAX_OPEN_CONNS", 25)
+	// Configure connection pool (SQLite with WAL can handle concurrent readers)
+	maxOpenConns := env.GetInt("DB_MAX_OPEN_CONNS", 10)
 	maxIdleConns := env.GetInt("DB_MAX_IDLE_CONNS", 5)
-	connMaxLifetime := time.Duration(env.GetInt("DB_CONN_MAX_LIFETIME_MINUTES", 5)) * time.Minute
+	connMaxLifetime := time.Duration(env.GetInt("DB_CONN_MAX_LIFETIME_MINUTES", 0)) * time.Minute
 
 	db.SetMaxOpenConns(maxOpenConns)
 	db.SetMaxIdleConns(maxIdleConns)
-	db.SetConnMaxLifetime(connMaxLifetime)
+	if connMaxLifetime > 0 {
+		db.SetConnMaxLifetime(connMaxLifetime)
+	}
 
 	// Verify connection
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -56,7 +64,7 @@ func NewManager() (*Manager, error) {
 	}
 
 	m := &Manager{db: db}
-	logger.Info("Connected to database", "name", name, "host", host)
+	logger.Info("Connected to database", "path", dbPath)
 
 	return m, nil
 }
@@ -88,18 +96,16 @@ func (m *Manager) HealthCheck(ctx context.Context) error {
 func (m *Manager) Migrate() error {
 	migrationPath := "file://migrations"
 
-	// Create postgres driver instance
-	driver, err := postgres.WithInstance(m.db, &postgres.Config{})
+	// Create sqlite3 driver instance
+	driver, err := sqlite3.WithInstance(m.db, &sqlite3.Config{})
 	if err != nil {
 		return fmt.Errorf("failed to create migration driver: %w", err)
 	}
 
-	dbName := env.Get("DB_NAME", "money")
-
 	// Create migrate instance
 	migrator, err := migrate.NewWithDatabaseInstance(
 		migrationPath,
-		dbName,
+		"sqlite3",
 		driver,
 	)
 	if err != nil {
@@ -120,16 +126,14 @@ func (m *Manager) Migrate() error {
 func (m *Manager) MigrateDown(steps int) error {
 	migrationPath := "file://migrations"
 
-	driver, err := postgres.WithInstance(m.db, &postgres.Config{})
+	driver, err := sqlite3.WithInstance(m.db, &sqlite3.Config{})
 	if err != nil {
 		return fmt.Errorf("failed to create migration driver: %w", err)
 	}
 
-	dbName := env.Get("DB_NAME", "money")
-
 	migrator, err := migrate.NewWithDatabaseInstance(
 		migrationPath,
-		dbName,
+		"sqlite3",
 		driver,
 	)
 	if err != nil {

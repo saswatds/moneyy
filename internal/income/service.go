@@ -8,6 +8,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/google/uuid"
 	"money/internal/auth"
 )
 
@@ -69,21 +70,33 @@ func (s *Service) CreateIncomeRecord(ctx context.Context, req *CreateIncomeRecor
 		isTaxable = *req.IsTaxable
 	}
 
-	record := &IncomeRecord{}
-	err := s.db.QueryRowContext(ctx, `
-		INSERT INTO income_records (user_id, source, category, amount, currency, frequency, tax_year, date_received, description, is_taxable)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-		RETURNING id, user_id, source, category, amount, currency, frequency, tax_year, date_received, description, is_taxable, created_at, updated_at
-	`, userID, req.Source, req.Category, req.Amount, req.Currency, req.Frequency, req.TaxYear, req.DateReceived, req.Description, isTaxable,
-	).Scan(&record.ID, &record.UserID, &record.Source, &record.Category, &record.Amount, &record.Currency,
-		&record.Frequency, &record.TaxYear, &record.DateReceived, &record.Description, &record.IsTaxable,
-		&record.CreatedAt, &record.UpdatedAt)
+	id := uuid.New().String()
+	now := time.Now()
+
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO income_records (id, user_id, source, category, amount, currency, frequency, tax_year, date_received, description, is_taxable, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+	`, id, userID, req.Source, req.Category, req.Amount, req.Currency, req.Frequency, req.TaxYear, req.DateReceived, req.Description, isTaxable, now, now)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create income record: %w", err)
 	}
 
-	return record, nil
+	return &IncomeRecord{
+		ID:           id,
+		UserID:       userID,
+		Source:       req.Source,
+		Category:     req.Category,
+		Amount:       req.Amount,
+		Currency:     req.Currency,
+		Frequency:    req.Frequency,
+		TaxYear:      req.TaxYear,
+		DateReceived: req.DateReceived,
+		Description:  req.Description,
+		IsTaxable:    isTaxable,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}, nil
 }
 
 // GetIncomeRecord retrieves a single income record
@@ -220,25 +233,25 @@ func (s *Service) UpdateIncomeRecord(ctx context.Context, id string, req *Update
 		argCount++
 	}
 
-	query += fmt.Sprintf(` WHERE id = $%d AND user_id = $%d
-		RETURNING id, user_id, source, category, amount, currency, frequency, tax_year, date_received, description, is_taxable, created_at, updated_at`,
-		argCount, argCount+1)
+	query += fmt.Sprintf(` WHERE id = $%d AND user_id = $%d`, argCount, argCount+1)
 	args = append(args, id, userID)
 
-	record := &IncomeRecord{}
-	err := s.db.QueryRowContext(ctx, query, args...).Scan(
-		&record.ID, &record.UserID, &record.Source, &record.Category, &record.Amount, &record.Currency,
-		&record.Frequency, &record.TaxYear, &record.DateReceived, &record.Description, &record.IsTaxable,
-		&record.CreatedAt, &record.UpdatedAt)
-
-	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("income record not found")
-	}
+	result, err := s.db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update income record: %w", err)
 	}
 
-	return record, nil
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return nil, fmt.Errorf("failed to check rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return nil, fmt.Errorf("income record not found")
+	}
+
+	// Fetch the updated record
+	return s.GetIncomeRecord(ctx, id)
 }
 
 // DeleteIncomeRecord deletes an income record
@@ -393,12 +406,13 @@ func (s *Service) GetTaxConfig(ctx context.Context, year int) (*TaxConfiguration
 
 	config := &TaxConfiguration{}
 	var federalBracketsJSON, provincialBracketsJSON []byte
+	var fieldSourcesJSON sql.NullString
 
 	err := s.db.QueryRowContext(ctx, `
 		SELECT id, user_id, tax_year, province, federal_brackets, provincial_brackets,
 			cpp_rate, cpp_max_pensionable_earnings, cpp_basic_exemption,
 			ei_rate, ei_max_insurable_earnings, basic_personal_amount,
-			created_at, updated_at
+			field_sources, created_at, updated_at
 		FROM tax_configurations
 		WHERE user_id = $1 AND tax_year = $2
 	`, userID, year).Scan(
@@ -406,7 +420,7 @@ func (s *Service) GetTaxConfig(ctx context.Context, year int) (*TaxConfiguration
 		&federalBracketsJSON, &provincialBracketsJSON,
 		&config.CPPRate, &config.CPPMaxPensionableEarnings, &config.CPPBasicExemption,
 		&config.EIRate, &config.EIMaxInsurableEarnings, &config.BasicPersonalAmount,
-		&config.CreatedAt, &config.UpdatedAt)
+		&fieldSourcesJSON, &config.CreatedAt, &config.UpdatedAt)
 
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("tax configuration not found for year %d", year)
@@ -421,6 +435,15 @@ func (s *Service) GetTaxConfig(ctx context.Context, year int) (*TaxConfiguration
 	}
 	if err := json.Unmarshal(provincialBracketsJSON, &config.ProvincialBrackets); err != nil {
 		return nil, fmt.Errorf("failed to parse provincial brackets: %w", err)
+	}
+
+	// Parse field sources (default to empty map if null or invalid)
+	config.FieldSources = make(FieldSources)
+	if fieldSourcesJSON.Valid && fieldSourcesJSON.String != "" {
+		if err := json.Unmarshal([]byte(fieldSourcesJSON.String), &config.FieldSources); err != nil {
+			// Log error but don't fail - just use empty map
+			config.FieldSources = make(FieldSources)
+		}
 	}
 
 	return config, nil
@@ -469,51 +492,45 @@ func (s *Service) SaveTaxConfig(ctx context.Context, req *SaveTaxConfigRequest) 
 		basicPersonalAmount = *req.BasicPersonalAmount
 	}
 
-	config := &TaxConfiguration{}
-	var fedJSON, provJSON []byte
+	// Handle field sources - merge with existing if present
+	fieldSources := make(FieldSources)
+	if req.FieldSources != nil {
+		fieldSources = req.FieldSources
+	}
+	fieldSourcesJSON, err := json.Marshal(fieldSources)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal field sources: %w", err)
+	}
 
-	err = s.db.QueryRowContext(ctx, `
-		INSERT INTO tax_configurations (user_id, tax_year, province, federal_brackets, provincial_brackets,
+	now := time.Now()
+	newID := uuid.New().String()
+
+	_, err = s.db.ExecContext(ctx, `
+		INSERT INTO tax_configurations (id, user_id, tax_year, province, federal_brackets, provincial_brackets,
 			cpp_rate, cpp_max_pensionable_earnings, cpp_basic_exemption,
-			ei_rate, ei_max_insurable_earnings, basic_personal_amount)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+			ei_rate, ei_max_insurable_earnings, basic_personal_amount, field_sources, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 		ON CONFLICT (user_id, tax_year) DO UPDATE SET
-			province = EXCLUDED.province,
-			federal_brackets = EXCLUDED.federal_brackets,
-			provincial_brackets = EXCLUDED.provincial_brackets,
-			cpp_rate = EXCLUDED.cpp_rate,
-			cpp_max_pensionable_earnings = EXCLUDED.cpp_max_pensionable_earnings,
-			cpp_basic_exemption = EXCLUDED.cpp_basic_exemption,
-			ei_rate = EXCLUDED.ei_rate,
-			ei_max_insurable_earnings = EXCLUDED.ei_max_insurable_earnings,
-			basic_personal_amount = EXCLUDED.basic_personal_amount,
-			updated_at = NOW()
-		RETURNING id, user_id, tax_year, province, federal_brackets, provincial_brackets,
-			cpp_rate, cpp_max_pensionable_earnings, cpp_basic_exemption,
-			ei_rate, ei_max_insurable_earnings, basic_personal_amount,
-			created_at, updated_at
-	`, userID, req.TaxYear, req.Province, federalBracketsJSON, provincialBracketsJSON,
-		cppRate, cppMaxPensionable, cppBasicExemption, eiRate, eiMaxInsurable, basicPersonalAmount,
-	).Scan(
-		&config.ID, &config.UserID, &config.TaxYear, &config.Province,
-		&fedJSON, &provJSON,
-		&config.CPPRate, &config.CPPMaxPensionableEarnings, &config.CPPBasicExemption,
-		&config.EIRate, &config.EIMaxInsurableEarnings, &config.BasicPersonalAmount,
-		&config.CreatedAt, &config.UpdatedAt)
+			province = excluded.province,
+			federal_brackets = excluded.federal_brackets,
+			provincial_brackets = excluded.provincial_brackets,
+			cpp_rate = excluded.cpp_rate,
+			cpp_max_pensionable_earnings = excluded.cpp_max_pensionable_earnings,
+			cpp_basic_exemption = excluded.cpp_basic_exemption,
+			ei_rate = excluded.ei_rate,
+			ei_max_insurable_earnings = excluded.ei_max_insurable_earnings,
+			basic_personal_amount = excluded.basic_personal_amount,
+			field_sources = excluded.field_sources,
+			updated_at = $15
+	`, newID, userID, req.TaxYear, req.Province, federalBracketsJSON, provincialBracketsJSON,
+		cppRate, cppMaxPensionable, cppBasicExemption, eiRate, eiMaxInsurable, basicPersonalAmount, fieldSourcesJSON, now, now)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to save tax configuration: %w", err)
 	}
 
-	// Parse JSON brackets back
-	if err := json.Unmarshal(fedJSON, &config.FederalBrackets); err != nil {
-		return nil, fmt.Errorf("failed to parse federal brackets: %w", err)
-	}
-	if err := json.Unmarshal(provJSON, &config.ProvincialBrackets); err != nil {
-		return nil, fmt.Errorf("failed to parse provincial brackets: %w", err)
-	}
-
-	return config, nil
+	// Fetch the saved/updated config
+	return s.GetTaxConfig(ctx, req.TaxYear)
 }
 
 // Helper functions
@@ -540,8 +557,8 @@ func (s *Service) getStockOptionsBenefit(ctx context.Context, userID string, yea
 		FROM equity_exercises ee
 		JOIN equity_grants eg ON ee.grant_id = eg.id
 		JOIN accounts a ON eg.account_id = a.id
-		WHERE a.user_id = $1 AND EXTRACT(YEAR FROM ee.exercise_date) = $2
-	`, userID, year).Scan(&benefit)
+		WHERE a.user_id = $1 AND strftime('%Y', ee.exercise_date) = $2
+	`, userID, fmt.Sprintf("%d", year)).Scan(&benefit)
 
 	if err != nil {
 		return 0
@@ -561,6 +578,7 @@ func (s *Service) getDefaultTaxConfig(year int) *TaxConfiguration {
 		EIRate:                    0.0163,
 		EIMaxInsurableEarnings:    63200,
 		BasicPersonalAmount:       15705,
+		FieldSources:              make(FieldSources),
 	}
 }
 
@@ -662,4 +680,138 @@ func (s *Service) getMarginalRate(income float64, brackets []TaxBracket) float64
 	}
 
 	return brackets[len(brackets)-1].Rate
+}
+
+// Tax Simulation Calculations
+
+// Canadian tax constants for stock options
+const (
+	// 50% of capital gains are taxable in Canada
+	CapitalGainsInclusionRate = 0.5
+	// Stock option deduction rate (50% for eligible options)
+	StockOptionDeductionRate = 0.5
+)
+
+// CalculateExerciseTax calculates the tax impact of exercising stock options
+// This uses proper decimal arithmetic by working with integers where possible
+func (s *Service) CalculateExerciseTax(req *CalculateExerciseTaxRequest) *ExerciseTaxResult {
+	// Exercise cost = quantity * strike price
+	exerciseCost := float64(req.Quantity) * req.StrikePrice
+
+	// Taxable benefit = quantity * (FMV - strike price)
+	spread := req.FMVAtExercise - req.StrikePrice
+	if spread < 0 {
+		spread = 0
+	}
+	taxableBenefit := float64(req.Quantity) * spread
+
+	// Stock option deduction (50% for eligible Canadian stock options)
+	stockOptionDeduction := taxableBenefit * StockOptionDeductionRate
+
+	// Net taxable amount
+	netTaxable := taxableBenefit - stockOptionDeduction
+
+	// Estimated tax = net taxable * marginal rate
+	estimatedTax := netTaxable * req.MarginalRate
+
+	// Round to 2 decimal places for currency
+	return &ExerciseTaxResult{
+		Quantity:             req.Quantity,
+		StrikePrice:          req.StrikePrice,
+		FMVAtExercise:        req.FMVAtExercise,
+		ExerciseCost:         math.Round(exerciseCost*100) / 100,
+		TaxableBenefit:       math.Round(taxableBenefit*100) / 100,
+		StockOptionDeduction: math.Round(stockOptionDeduction*100) / 100,
+		NetTaxable:           math.Round(netTaxable*100) / 100,
+		EstimatedTax:         math.Round(estimatedTax*100) / 100,
+	}
+}
+
+// CalculateSaleTax calculates the capital gains tax from selling shares
+func (s *Service) CalculateSaleTax(req *CalculateSaleTaxRequest) (*SaleTaxResult, error) {
+	// Parse dates
+	acquisitionDate, err := time.Parse("2006-01-02", req.AcquisitionDate)
+	if err != nil {
+		return nil, fmt.Errorf("invalid acquisition date: %w", err)
+	}
+	saleDate, err := time.Parse("2006-01-02", req.SaleDate)
+	if err != nil {
+		return nil, fmt.Errorf("invalid sale date: %w", err)
+	}
+
+	// Calculate holding period in days
+	holdingPeriodDays := int(saleDate.Sub(acquisitionDate).Hours() / 24)
+	if holdingPeriodDays < 0 {
+		holdingPeriodDays = 0
+	}
+
+	// Total proceeds = quantity * sale price
+	totalProceeds := float64(req.Quantity) * req.SalePrice
+
+	// Total cost = quantity * cost basis
+	totalCost := float64(req.Quantity) * req.CostBasis
+
+	// Capital gain (can be negative for a loss)
+	capitalGain := totalProceeds - totalCost
+
+	// In Canada, 50% of capital gains are taxable (regardless of holding period)
+	taxableGain := capitalGain * CapitalGainsInclusionRate
+
+	// If it's a loss, taxable gain is the loss (can offset other gains)
+	// For estimation, we calculate tax on positive gains only
+	estimatedTax := 0.0
+	if taxableGain > 0 {
+		estimatedTax = taxableGain * req.MarginalRate
+	}
+
+	// Round to 2 decimal places for currency
+	return &SaleTaxResult{
+		Quantity:          req.Quantity,
+		SalePrice:         req.SalePrice,
+		CostBasis:         req.CostBasis,
+		TotalProceeds:     math.Round(totalProceeds*100) / 100,
+		CapitalGain:       math.Round(capitalGain*100) / 100,
+		HoldingPeriodDays: holdingPeriodDays,
+		TaxableGain:       math.Round(taxableGain*100) / 100,
+		EstimatedTax:      math.Round(estimatedTax*100) / 100,
+	}, nil
+}
+
+// CalculateBatchTax calculates tax for multiple exercises and sales
+func (s *Service) CalculateBatchTax(req *BatchTaxCalculationRequest) (*BatchTaxCalculationResult, error) {
+	result := &BatchTaxCalculationResult{
+		Exercises: make([]ExerciseTaxResult, 0, len(req.Exercises)),
+		Sales:     make([]SaleTaxResult, 0, len(req.Sales)),
+	}
+
+	// Calculate exercise taxes
+	for _, exercise := range req.Exercises {
+		// Use request-level marginal rate if not specified per exercise
+		if exercise.MarginalRate == 0 {
+			exercise.MarginalRate = req.MarginalRate
+		}
+		exerciseResult := s.CalculateExerciseTax(&exercise)
+		result.Exercises = append(result.Exercises, *exerciseResult)
+		result.TotalExerciseTax += exerciseResult.EstimatedTax
+	}
+
+	// Calculate sale taxes
+	for _, sale := range req.Sales {
+		// Use request-level marginal rate if not specified per sale
+		if sale.MarginalRate == 0 {
+			sale.MarginalRate = req.MarginalRate
+		}
+		saleResult, err := s.CalculateSaleTax(&sale)
+		if err != nil {
+			return nil, err
+		}
+		result.Sales = append(result.Sales, *saleResult)
+		result.TotalSaleTax += saleResult.EstimatedTax
+	}
+
+	result.TotalTax = math.Round((result.TotalExerciseTax+result.TotalSaleTax)*100) / 100
+	result.TotalExerciseTax = math.Round(result.TotalExerciseTax*100) / 100
+	result.TotalSaleTax = math.Round(result.TotalSaleTax*100) / 100
+
+	return result, nil
 }

@@ -1,0 +1,4 @@
+id,grant_id,schedule_type,cliff_months,total_vesting_months,vesting_frequency,milestone_description,created_at
+demo-vest-sched-1,demo-grant-iso-1,time_based,12,48,monthly,,2022-03-15T00:00:00Z
+demo-vest-sched-2,demo-grant-rsu-1,time_based,12,48,quarterly,,2023-01-15T00:00:00Z
+demo-vest-sched-3,demo-grant-iso-2,time_based,12,48,monthly,,2024-03-01T00:00:00Z

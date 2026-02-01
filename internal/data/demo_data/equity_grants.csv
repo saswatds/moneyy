@@ -1,0 +1,4 @@
+id,account_id,grant_type,grant_date,quantity,strike_price,fmv_at_grant,currency,expiration_date,company_name,grant_number,notes,created_at,updated_at
+demo-grant-iso-1,demo-acc-techcorp-options,iso,2022-03-15,10000,15.00,15.00,USD,2032-03-15,TechCorp Inc,ISO-2022-001,Initial hire grant,2022-03-15T00:00:00Z,2026-01-26T00:00:00Z
+demo-grant-rsu-1,demo-acc-techcorp-options,rsu,2023-01-15,2000,,25.00,USD,,TechCorp Inc,RSU-2023-001,Annual refresh grant,2023-01-15T00:00:00Z,2026-01-26T00:00:00Z
+demo-grant-iso-2,demo-acc-techcorp-options,iso,2024-03-01,5000,30.00,30.00,USD,2034-03-01,TechCorp Inc,ISO-2024-001,Promotion grant,2024-03-01T00:00:00Z,2026-01-26T00:00:00Z

@@ -6,6 +6,8 @@ import (
 	"database/sql"
 	"log"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // Service provides balance management functionality
@@ -169,14 +171,22 @@ func (s *Service) Create(ctx context.Context, req *CreateBalanceRequest) (*Creat
 		wasUpdate = true
 	}
 
-	err := s.db.QueryRowContext(ctx, `
-		INSERT INTO balances (account_id, amount, date, notes, created_at)
-		VALUES ($1, $2, $3, $4, $5)
+	// Generate UUID for new balance entry
+	newID := uuid.New().String()
+
+	// SQLite-compatible upsert: INSERT with ON CONFLICT
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO balances (id, account_id, amount, date, notes, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		ON CONFLICT (account_id, date) DO UPDATE SET
-			amount = EXCLUDED.amount,
-			notes = EXCLUDED.notes
-		RETURNING id, amount
-	`, req.AccountID, req.Amount, req.Date, req.Notes, balance.CreatedAt).Scan(&balance.ID, &balance.Amount)
+			amount = excluded.amount,
+			notes = excluded.notes
+	`, newID, req.AccountID, req.Amount, req.Date, req.Notes, balance.CreatedAt)
+
+	if err == nil {
+		// Fetch the actual ID (might be the existing one if it was an update)
+		s.db.QueryRowContext(ctx, `SELECT id FROM balances WHERE account_id = $1 AND date = $2`, req.AccountID, req.Date).Scan(&balance.ID)
+	}
 
 	if err != nil {
 		log.Printf("ERROR: failed to insert/update balance: account_id=%s date=%v amount=%f error=%v",

@@ -1,16 +1,16 @@
--- Rollback initial schema
+-- Rollback initial schema (SQLite)
 
-DROP TABLE IF EXISTS recurring_expenses CASCADE;
-DROP TABLE IF EXISTS projection_scenarios CASCADE;
-DROP TABLE IF EXISTS market_data CASCADE;
-DROP TABLE IF EXISTS holding_transactions CASCADE;
-DROP TABLE IF EXISTS holdings CASCADE;
-DROP TABLE IF EXISTS exchange_rates CASCADE;
-DROP TABLE IF EXISTS asset_depreciation_entries CASCADE;
-DROP TABLE IF EXISTS asset_details CASCADE;
-DROP TABLE IF EXISTS loan_payments CASCADE;
-DROP TABLE IF EXISTS loan_details CASCADE;
-DROP TABLE IF EXISTS mortgage_payments CASCADE;
-DROP TABLE IF EXISTS mortgage_details CASCADE;
-DROP TABLE IF EXISTS balances CASCADE;
-DROP TABLE IF EXISTS accounts CASCADE;
+DROP TABLE IF EXISTS recurring_expenses;
+DROP TABLE IF EXISTS projection_scenarios;
+DROP TABLE IF EXISTS market_data;
+DROP TABLE IF EXISTS holding_transactions;
+DROP TABLE IF EXISTS holdings;
+DROP TABLE IF EXISTS exchange_rates;
+DROP TABLE IF EXISTS asset_depreciation_entries;
+DROP TABLE IF EXISTS asset_details;
+DROP TABLE IF EXISTS loan_payments;
+DROP TABLE IF EXISTS loan_details;
+DROP TABLE IF EXISTS mortgage_payments;
+DROP TABLE IF EXISTS mortgage_details;
+DROP TABLE IF EXISTS balances;
+DROP TABLE IF EXISTS accounts;

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"money/internal/auth"
 	"money/internal/sync/encryption"
 )
@@ -59,31 +60,25 @@ func (s *Service) SaveAPIKey(ctx context.Context, req *SaveAPIKeyRequest) (*APIK
 	}
 
 	// Upsert the API key
-	var apiKey APIKey
-	err = s.db.QueryRowContext(ctx, `
-		INSERT INTO api_keys (user_id, provider, encrypted_api_key, name)
-		VALUES ($1, $2, $3, $4)
+	now := time.Now()
+	newID := uuid.New().String()
+
+	_, err = s.db.ExecContext(ctx, `
+		INSERT INTO api_keys (id, user_id, provider, encrypted_api_key, name, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		ON CONFLICT (user_id, provider) DO UPDATE SET
-			encrypted_api_key = EXCLUDED.encrypted_api_key,
-			name = EXCLUDED.name,
-			is_active = true,
-			updated_at = NOW()
-		RETURNING id, user_id, provider, name, is_active, last_used_at, created_at, updated_at
-	`, userID, req.Provider, encryptedKey, name).Scan(
-		&apiKey.ID, &apiKey.UserID, &apiKey.Provider, &apiKey.Name,
-		&apiKey.IsActive, &apiKey.LastUsedAt, &apiKey.CreatedAt, &apiKey.UpdatedAt)
+			encrypted_api_key = excluded.encrypted_api_key,
+			name = excluded.name,
+			is_active = 1,
+			updated_at = $7
+	`, newID, userID, req.Provider, encryptedKey, name, now, now)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to save API key: %w", err)
 	}
 
-	return &APIKeyStatusResponse{
-		Provider:     apiKey.Provider,
-		IsConfigured: true,
-		Name:         &apiKey.Name,
-		LastUsedAt:   apiKey.LastUsedAt,
-		IsActive:     &apiKey.IsActive,
-	}, nil
+	// Fetch the saved/updated API key status
+	return s.GetAPIKeyStatus(ctx, req.Provider)
 }
 
 // GetAPIKeyStatus returns the status of an API key for a provider

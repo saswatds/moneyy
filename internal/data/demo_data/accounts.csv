@@ -1,0 +1,13 @@
+id,name,type,currency,institution,is_asset,is_active,created_at,updated_at
+demo-acc-td-checking,TD Checking Account,checking,CAD,TD Bank,true,true,2025-01-26T00:00:00Z,2026-01-26T00:00:00Z
+demo-acc-tangerine-savings,Tangerine Savings Account,savings,CAD,Tangerine,true,true,2025-01-26T00:00:00Z,2026-01-26T00:00:00Z
+demo-acc-td-usd,TD USD Account,checking,USD,TD Bank,true,true,2025-01-26T00:00:00Z,2026-01-26T00:00:00Z
+demo-acc-wealthsimple-tfsa,Wealthsimple TFSA,tfsa,CAD,Wealthsimple,true,true,2025-01-26T00:00:00Z,2026-01-26T00:00:00Z
+demo-acc-questrade-rrsp,Questrade RRSP,rrsp,CAD,Questrade,true,true,2025-01-26T00:00:00Z,2026-01-26T00:00:00Z
+demo-acc-coinbase,Coinbase Crypto,crypto,CAD,Coinbase,true,true,2025-01-26T00:00:00Z,2026-01-26T00:00:00Z
+demo-acc-techcorp-options,TechCorp Stock Options,stock_options,USD,TechCorp Inc,true,true,2022-03-15T00:00:00Z,2026-01-26T00:00:00Z
+demo-acc-toronto-condo,Toronto Condo,real_estate,CAD,,true,true,2023-06-01T00:00:00Z,2026-01-26T00:00:00Z
+demo-acc-honda-civic,Honda Civic 2020,vehicle,CAD,,true,true,2020-07-01T00:00:00Z,2026-01-26T00:00:00Z
+demo-acc-td-mortgage,TD Mortgage,mortgage,CAD,TD Bank,false,true,2023-06-01T00:00:00Z,2026-01-26T00:00:00Z
+demo-acc-td-credit-card,TD Credit Card,credit_card,CAD,TD Bank,false,true,2025-01-26T00:00:00Z,2026-01-26T00:00:00Z
+demo-acc-student-loan,Student Loan,loan,CAD,National Student Loans Service Centre,false,true,2020-09-01T00:00:00Z,2026-01-26T00:00:00Z

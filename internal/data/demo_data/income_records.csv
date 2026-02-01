@@ -1,0 +1,3 @@
+id,source,category,amount,currency,frequency,tax_year,date_received,description,is_taxable,created_at,updated_at
+demo-income-001,TechCorp Inc,employment,120000,CAD,annually,2026,,Annual salary - Senior Software Engineer,true,2026-01-01T10:00:00Z,2026-01-01T10:00:00Z
+demo-income-002,TechCorp Inc,employment,110000,CAD,annually,2025,,Annual salary - Software Engineer,true,2025-01-01T10:00:00Z,2025-01-01T10:00:00Z

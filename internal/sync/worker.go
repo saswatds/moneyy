@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/google/uuid"
 	"money/internal/account"
 	"money/internal/balance"
 	"money/internal/holdings"
@@ -168,13 +169,14 @@ func (s *Service) performInitialSync(ctx context.Context, userID, connectionID s
 			localAccountID = createdAccount.ID
 
 			// Create synced account record and get its ID
-			err = s.db.QueryRowContext(ctx, `
+			syncedAccountID = uuid.New().String()
+			now := time.Now()
+			_, err = s.db.ExecContext(ctx, `
 				INSERT INTO synced_accounts (
-					credential_id, local_account_id, provider_account_id,
+					id, credential_id, local_account_id, provider_account_id,
 					created_at, updated_at
-				) VALUES ($1, $2, $3, $4, $5)
-				RETURNING id
-			`, connectionID, localAccountID, providerAccountID, time.Now(), time.Now()).Scan(&syncedAccountID)
+				) VALUES ($1, $2, $3, $4, $5, $6)
+			`, syncedAccountID, connectionID, localAccountID, providerAccountID, now, now)
 
 			if err != nil {
 				log.Printf("ERROR: failed to create synced account: provider_account_id=%s error=%v",
@@ -727,15 +729,14 @@ func getMapKeys(m map[string]interface{}) []string {
 
 // createSyncJob creates a new sync job and marks it as running
 func (s *Service) createSyncJob(ctx context.Context, syncedAccountID string, jobType SyncJobType) (string, error) {
-	var jobID string
+	jobID := uuid.New().String()
 	now := time.Now()
 
-	err := s.db.QueryRowContext(ctx, `
+	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO sync_jobs (
-			synced_account_id, type, status, started_at, created_at
-		) VALUES ($1, $2, $3, $4, $5)
-		RETURNING id
-	`, syncedAccountID, jobType, SyncJobStatusRunning, now, now).Scan(&jobID)
+			id, synced_account_id, type, status, started_at, created_at
+		) VALUES ($1, $2, $3, $4, $5, $6)
+	`, jobID, syncedAccountID, jobType, SyncJobStatusRunning, now, now)
 
 	if err != nil {
 		return "", fmt.Errorf("failed to create sync job: %w", err)

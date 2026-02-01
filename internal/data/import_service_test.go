@@ -8,8 +8,6 @@ import (
 	"fmt"
 	"testing"
 	"time"
-
-	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 // TestValidateArchive_ValidArchive tests validation of a valid archive
@@ -461,6 +459,8 @@ func createArchiveMissingFile(t *testing.T, missingFile string) []byte {
 		"loan_details", "loan_payments",
 		"asset_details", "asset_depreciation_entries",
 		"recurring_expenses", "projection_scenarios",
+		"equity_grants", "vesting_schedules", "fmv_history",
+		"equity_exercises", "equity_sales",
 	}
 
 	for _, table := range requiredTables {
@@ -493,6 +493,8 @@ func createArchiveWithInvalidJSON(t *testing.T, fileName string) []byte {
 		"loan_details", "loan_payments",
 		"asset_details", "asset_depreciation_entries",
 		"recurring_expenses", "projection_scenarios",
+		"equity_grants", "vesting_schedules", "fmv_history",
+		"equity_exercises", "equity_sales",
 	}
 
 	tableName := fileName[:len(fileName)-5] // Remove .json extension
@@ -544,6 +546,8 @@ func createArchiveWithBadChecksum(t *testing.T) []byte {
 		"loan_details", "loan_payments",
 		"asset_details", "asset_depreciation_entries",
 		"recurring_expenses", "projection_scenarios",
+		"equity_grants", "vesting_schedules", "fmv_history",
+		"equity_exercises", "equity_sales",
 	}
 
 	for _, table := range requiredTables {
@@ -581,6 +585,8 @@ func createArchiveWithAccount(t *testing.T, accountID, name string) []byte {
 		"asset_details", "asset_depreciation_entries",
 		"recurring_expenses", "projection_scenarios",
 		"sync_credentials", "synced_accounts",
+		"equity_grants", "vesting_schedules", "fmv_history",
+		"equity_exercises", "equity_sales",
 	}
 
 	for _, table := range requiredTables {
@@ -621,6 +627,8 @@ func createArchiveWithUserID(t *testing.T, userID string) []byte {
 		"asset_details", "asset_depreciation_entries",
 		"recurring_expenses", "projection_scenarios",
 		"sync_credentials", "synced_accounts",
+		"equity_grants", "vesting_schedules", "fmv_history",
+		"equity_exercises", "equity_sales",
 	}
 
 	for _, table := range requiredTables {
@@ -659,6 +667,8 @@ func createArchiveWithInvalidReferences(t *testing.T) []byte {
 		"asset_details", "asset_depreciation_entries",
 		"recurring_expenses", "projection_scenarios",
 		"sync_credentials", "synced_accounts",
+		"equity_grants", "vesting_schedules", "fmv_history",
+		"equity_exercises", "equity_sales",
 	}
 
 	for _, table := range requiredTables {
@@ -706,6 +716,8 @@ func createArchiveWithSyncCredentialsCustomID(t *testing.T, status, credID, user
 		"loan_details", "loan_payments",
 		"asset_details", "asset_depreciation_entries",
 		"recurring_expenses", "projection_scenarios",
+		"equity_grants", "vesting_schedules", "fmv_history",
+		"equity_exercises", "equity_sales",
 	}
 
 	for _, table := range requiredTables {

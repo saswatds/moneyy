@@ -5,6 +5,8 @@ import (
 	"context"
 	"database/sql"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // Service provides holdings management functionality
@@ -114,6 +116,7 @@ func (s *Service) Create(ctx context.Context, req *CreateHoldingRequest) (*Creat
 		notes = &req.Notes
 	}
 	holding := &Holding{
+		ID:        uuid.New().String(),
 		AccountID: req.AccountID,
 		Type:      req.Type,
 		Symbol:    req.Symbol,
@@ -150,24 +153,24 @@ func (s *Service) Create(ctx context.Context, req *CreateHoldingRequest) (*Creat
 		`, req.AccountID, req.Symbol).Scan(&existingID)
 		if existingErr == nil {
 			wasUpdate = true
+			holding.ID = existingID // Use existing ID for update
 		}
 	}
 
-	err := s.db.QueryRowContext(ctx, `
+	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO holdings (
-			account_id, type, symbol, quantity, cost_basis,
+			id, account_id, type, symbol, quantity, cost_basis,
 			currency, amount, purchase_date, notes, created_at, updated_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		ON CONFLICT (account_id, symbol) DO UPDATE SET
-			quantity = EXCLUDED.quantity,
-			cost_basis = EXCLUDED.cost_basis,
-			notes = EXCLUDED.notes,
-			updated_at = EXCLUDED.updated_at
-		RETURNING id
-	`, req.AccountID, req.Type, req.Symbol, req.Quantity, req.CostBasis,
+			quantity = excluded.quantity,
+			cost_basis = excluded.cost_basis,
+			notes = excluded.notes,
+			updated_at = excluded.updated_at
+	`, holding.ID, req.AccountID, req.Type, req.Symbol, req.Quantity, req.CostBasis,
 		holding.Currency, req.Amount, purchaseDate, req.Notes,
-		holding.CreatedAt, holding.UpdatedAt).Scan(&holding.ID)
+		holding.CreatedAt, holding.UpdatedAt)
 
 	if err != nil {
 		return nil, err
