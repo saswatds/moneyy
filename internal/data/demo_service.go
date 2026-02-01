@@ -104,6 +104,12 @@ func (s *DemoService) SeedDemoData(ctx context.Context, userID string) error {
 	if err := s.importEquitySales(ctx, tx); err != nil {
 		return fmt.Errorf("equity_sales: %w", err)
 	}
+	if err := s.importIncomeRecords(ctx, tx, userID); err != nil {
+		return fmt.Errorf("income_records: %w", err)
+	}
+	if err := s.importTaxConfigurations(ctx, tx, userID); err != nil {
+		return fmt.Errorf("tax_configurations: %w", err)
+	}
 
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit: %w", err)
@@ -126,6 +132,9 @@ func (s *DemoService) ResetDemoData(ctx context.Context, userID string) error {
 		name  string
 		query string
 	}{
+		{"income_records", "DELETE FROM income_records WHERE user_id = $1 OR id LIKE 'demo-income-%'"},
+		{"tax_configurations", "DELETE FROM tax_configurations WHERE user_id = $1 OR id LIKE 'demo-taxconfig-%'"},
+		{"annual_income_summaries", "DELETE FROM annual_income_summaries WHERE user_id = $1"},
 		{"equity_sales", "DELETE FROM equity_sales WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1) OR id LIKE 'demo-sale-%' OR account_id LIKE 'demo-acc-%'"},
 		{"equity_exercises", "DELETE FROM equity_exercises WHERE grant_id IN (SELECT id FROM equity_grants WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1)) OR id LIKE 'demo-exercise-%'"},
 		{"vesting_schedules", "DELETE FROM vesting_schedules WHERE grant_id IN (SELECT id FROM equity_grants WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1)) OR id LIKE 'demo-vest-%'"},
@@ -535,6 +544,43 @@ func (s *DemoService) importEquitySales(ctx context.Context, tx *sql.Tx) error {
 			INSERT INTO equity_sales (id, account_id, grant_id, exercise_id, sale_date, quantity, sale_price, total_proceeds, cost_basis, capital_gain, holding_period_days, is_qualified, notes, created_at)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
 			r[0], r[1], nullStr(r[2]), nullStr(r[3]), r[4], parseInt(r[5]), parseFloat(r[6]), parseFloat(r[7]), parseFloat(r[8]), parseFloat(r[9]), nullInt(r[10]), nullInt(r[11]), nullStr(r[12]), parseTime(r[13]))
+		if err != nil {
+			return fmt.Errorf("row %v: %w", r[0], err)
+		}
+	}
+	return nil
+}
+
+func (s *DemoService) importIncomeRecords(ctx context.Context, tx *sql.Tx, userID string) error {
+	rows, err := s.readCSV("income_records.csv")
+	if err != nil || rows == nil {
+		return err
+	}
+	for _, r := range rows {
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO income_records (id, user_id, source, category, amount, currency, frequency, tax_year, date_received, description, is_taxable, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+			r[0], userID, r[1], r[2], parseFloat(r[3]), r[4], r[5], parseInt(r[6]), nullStr(r[7]), nullStr(r[8]), parseBool(r[9]), parseTime(r[10]), parseTime(r[11]))
+		if err != nil {
+			return fmt.Errorf("row %v: %w", r[0], err)
+		}
+	}
+	return nil
+}
+
+func (s *DemoService) importTaxConfigurations(ctx context.Context, tx *sql.Tx, userID string) error {
+	rows, err := s.readCSV("tax_configurations.csv")
+	if err != nil || rows == nil {
+		return err
+	}
+	for _, r := range rows {
+		// Unescape CSV-escaped quotes in JSON fields
+		federalBrackets := strings.ReplaceAll(r[3], `""`, `"`)
+		provincialBrackets := strings.ReplaceAll(r[4], `""`, `"`)
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO tax_configurations (id, user_id, tax_year, province, federal_brackets, provincial_brackets, cpp_rate, cpp_max_pensionable_earnings, cpp_basic_exemption, ei_rate, ei_max_insurable_earnings, basic_personal_amount, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+			r[0], userID, parseInt(r[1]), r[2], federalBrackets, provincialBrackets, parseFloat(r[5]), parseFloat(r[6]), parseFloat(r[7]), parseFloat(r[8]), parseFloat(r[9]), parseFloat(r[10]), parseTime(r[11]), parseTime(r[12]))
 		if err != nil {
 			return fmt.Errorf("row %v: %w", r[0], err)
 		}
