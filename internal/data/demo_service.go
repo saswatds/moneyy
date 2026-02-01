@@ -7,7 +7,6 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
-	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -44,7 +43,6 @@ func (s *DemoService) SeedDemoData(ctx context.Context, userID string) error {
 		return err
 	}
 	if hasData {
-		log.Printf("Demo data already exists for user %s, skipping seed", userID)
 		return nil
 	}
 
@@ -111,7 +109,6 @@ func (s *DemoService) SeedDemoData(ctx context.Context, userID string) error {
 		return fmt.Errorf("failed to commit: %w", err)
 	}
 
-	log.Printf("Demo data seeded successfully for user %s", userID)
 	return nil
 }
 
@@ -123,32 +120,37 @@ func (s *DemoService) ResetDemoData(ctx context.Context, userID string) error {
 	}
 	defer tx.Rollback()
 
-	// Delete in dependency order
-	deletes := []string{
-		"DELETE FROM equity_sales WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1)",
-		"DELETE FROM equity_exercises WHERE grant_id IN (SELECT id FROM equity_grants WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1))",
-		"DELETE FROM vesting_schedules WHERE grant_id IN (SELECT id FROM equity_grants WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1))",
-		"DELETE FROM fmv_history WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1)",
-		"DELETE FROM equity_grants WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1)",
-		"DELETE FROM asset_depreciation_entries WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1)",
-		"DELETE FROM asset_details WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1)",
-		"DELETE FROM loan_payments WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1)",
-		"DELETE FROM loan_details WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1)",
-		"DELETE FROM mortgage_payments WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1)",
-		"DELETE FROM mortgage_details WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1)",
-		"DELETE FROM holding_transactions WHERE holding_id IN (SELECT id FROM holdings WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1))",
-		"DELETE FROM holdings WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1)",
-		"DELETE FROM synced_accounts WHERE credential_id IN (SELECT id FROM sync_credentials WHERE user_id = $1)",
-		"DELETE FROM sync_credentials WHERE user_id = $1",
-		"DELETE FROM balances WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1)",
-		"DELETE FROM accounts WHERE user_id = $1",
-		"DELETE FROM projection_scenarios WHERE user_id = $1",
-		"DELETE FROM recurring_expenses WHERE user_id = $1",
+	// Delete by user_id OR by demo ID pattern (to clean up orphaned data from wrong user)
+	// Demo IDs start with "demo-acc-", "demo-hold-", "demo-grant-", etc.
+	deletes := []struct {
+		name  string
+		query string
+	}{
+		{"equity_sales", "DELETE FROM equity_sales WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1) OR id LIKE 'demo-sale-%' OR account_id LIKE 'demo-acc-%'"},
+		{"equity_exercises", "DELETE FROM equity_exercises WHERE grant_id IN (SELECT id FROM equity_grants WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1)) OR id LIKE 'demo-exercise-%'"},
+		{"vesting_schedules", "DELETE FROM vesting_schedules WHERE grant_id IN (SELECT id FROM equity_grants WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1)) OR id LIKE 'demo-vest-%'"},
+		{"fmv_history", "DELETE FROM fmv_history WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1) OR id LIKE 'demo-fmv-%' OR account_id LIKE 'demo-acc-%'"},
+		{"equity_grants", "DELETE FROM equity_grants WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1) OR id LIKE 'demo-grant-%' OR account_id LIKE 'demo-acc-%'"},
+		{"asset_depreciation_entries", "DELETE FROM asset_depreciation_entries WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1) OR id LIKE 'demo-depreciation-%' OR account_id LIKE 'demo-acc-%'"},
+		{"asset_details", "DELETE FROM asset_details WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1) OR id LIKE 'demo-asset-%' OR account_id LIKE 'demo-acc-%'"},
+		{"loan_payments", "DELETE FROM loan_payments WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1) OR id LIKE 'demo-loan-payment-%' OR account_id LIKE 'demo-acc-%'"},
+		{"loan_details", "DELETE FROM loan_details WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1) OR id LIKE 'demo-loan-%' OR account_id LIKE 'demo-acc-%'"},
+		{"mortgage_payments", "DELETE FROM mortgage_payments WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1) OR id LIKE 'demo-mortgage-payment-%' OR account_id LIKE 'demo-acc-%'"},
+		{"mortgage_details", "DELETE FROM mortgage_details WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1) OR id LIKE 'demo-mortgage-%' OR account_id LIKE 'demo-acc-%'"},
+		{"holding_transactions", "DELETE FROM holding_transactions WHERE holding_id IN (SELECT id FROM holdings WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1)) OR holding_id LIKE 'demo-hold-%'"},
+		{"holdings", "DELETE FROM holdings WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1) OR id LIKE 'demo-hold-%' OR account_id LIKE 'demo-acc-%'"},
+		{"synced_accounts", "DELETE FROM synced_accounts WHERE credential_id IN (SELECT id FROM sync_credentials WHERE user_id = $1)"},
+		{"sync_credentials", "DELETE FROM sync_credentials WHERE user_id = $1"},
+		{"balances", "DELETE FROM balances WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1) OR id LIKE 'demo-bal-%' OR account_id LIKE 'demo-acc-%'"},
+		{"accounts", "DELETE FROM accounts WHERE user_id = $1 OR id LIKE 'demo-acc-%'"},
+		{"projection_scenarios", "DELETE FROM projection_scenarios WHERE user_id = $1 OR id LIKE 'demo-scenario-%'"},
+		{"recurring_expenses", "DELETE FROM recurring_expenses WHERE user_id = $1 OR id LIKE 'demo-expense-%'"},
 	}
 
-	for _, query := range deletes {
-		if _, err := tx.ExecContext(ctx, query, userID); err != nil {
-			return fmt.Errorf("delete failed: %w", err)
+	for _, d := range deletes {
+		_, err := tx.ExecContext(ctx, d.query, userID)
+		if err != nil {
+			return fmt.Errorf("delete %s failed: %w", d.name, err)
 		}
 	}
 
@@ -156,7 +158,6 @@ func (s *DemoService) ResetDemoData(ctx context.Context, userID string) error {
 		return fmt.Errorf("failed to commit deletes: %w", err)
 	}
 
-	log.Printf("Deleted all data for user %s", userID)
 	return s.SeedDemoData(ctx, userID)
 }
 
@@ -242,8 +243,11 @@ func nullFloat(s string) *float64 {
 // Import functions
 func (s *DemoService) importAccounts(ctx context.Context, tx *sql.Tx, userID string) error {
 	rows, err := s.readCSV("accounts.csv")
-	if err != nil || rows == nil {
+	if err != nil {
 		return err
+	}
+	if rows == nil {
+		return nil
 	}
 	for _, r := range rows {
 		_, err := tx.ExecContext(ctx, `
@@ -276,8 +280,11 @@ func (s *DemoService) importBalances(ctx context.Context, tx *sql.Tx) error {
 
 func (s *DemoService) importHoldings(ctx context.Context, tx *sql.Tx) error {
 	rows, err := s.readCSV("holdings.csv")
-	if err != nil || rows == nil {
+	if err != nil {
 		return err
+	}
+	if rows == nil {
+		return nil
 	}
 	for _, r := range rows {
 		_, err := tx.ExecContext(ctx, `
@@ -378,8 +385,11 @@ func (s *DemoService) importLoanPayments(ctx context.Context, tx *sql.Tx) error 
 
 func (s *DemoService) importAssetDetails(ctx context.Context, tx *sql.Tx) error {
 	rows, err := s.readCSV("asset_details.csv")
-	if err != nil || rows == nil {
+	if err != nil {
 		return err
+	}
+	if rows == nil {
+		return nil
 	}
 	for _, r := range rows {
 		_, err := tx.ExecContext(ctx, `

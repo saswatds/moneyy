@@ -278,13 +278,25 @@ func (s *Service) GetAssetsSummary(ctx context.Context) (*AssetsSummaryResponse,
 
 	for rows.Next() {
 		var details AssetDetails
+		var salvageValue sql.NullFloat64
+		var typeSpecificData []byte
+		var notes sql.NullString
 		err := rows.Scan(
 			&details.ID, &details.AccountID, &details.AssetType, &details.PurchasePrice, &details.PurchaseDate,
-			&details.DepreciationMethod, &details.UsefulLifeYears, &details.SalvageValue, &details.DepreciationRate,
-			&details.TypeSpecificData, &details.Notes, &details.CreatedAt, &details.UpdatedAt,
+			&details.DepreciationMethod, &details.UsefulLifeYears, &salvageValue, &details.DepreciationRate,
+			&typeSpecificData, &notes, &details.CreatedAt, &details.UpdatedAt,
 		)
 		if err != nil {
 			continue
+		}
+		if salvageValue.Valid {
+			details.SalvageValue = salvageValue.Float64
+		}
+		if typeSpecificData != nil {
+			details.TypeSpecificData = typeSpecificData
+		}
+		if notes.Valid {
+			details.Notes = notes.String
 		}
 
 		currentValue, accumulatedDepreciation, err := s.calculateCurrentValue(ctx, &details, asOfDate)
@@ -445,7 +457,7 @@ func (s *Service) calculateCurrentValue(ctx context.Context, asset *AssetDetails
 	case "declining_balance":
 		return calculateDecliningBalance(asset, asOfDate)
 	case "manual":
-		return s.getLatestManualValue(ctx, asset.AccountID, asOfDate)
+		return s.getLatestManualValue(ctx, asset, asOfDate)
 	default:
 		return 0, 0, fmt.Errorf("unknown depreciation method: %s", asset.DepreciationMethod)
 	}
@@ -507,7 +519,7 @@ func calculateDecliningBalance(asset *AssetDetails, asOfDate time.Time) (float64
 }
 
 // getLatestManualValue retrieves the latest manual depreciation entry
-func (s *Service) getLatestManualValue(ctx context.Context, accountID string, asOfDate time.Time) (float64, float64, error) {
+func (s *Service) getLatestManualValue(ctx context.Context, asset *AssetDetails, asOfDate time.Time) (float64, float64, error) {
 	var currentValue, accumulatedDepreciation float64
 
 	err := s.db.QueryRowContext(ctx, `
@@ -516,22 +528,13 @@ func (s *Service) getLatestManualValue(ctx context.Context, accountID string, as
 		WHERE account_id = $1 AND entry_date <= $2
 		ORDER BY entry_date DESC
 		LIMIT 1
-	`, accountID, asOfDate).Scan(&currentValue, &accumulatedDepreciation)
+	`, asset.AccountID, asOfDate).Scan(&currentValue, &accumulatedDepreciation)
 
 	if err != nil {
 		// Check if no rows found using errors.Is for wrapped errors
 		if errors.Is(err, sql.ErrNoRows) {
-			// No manual entries yet, return purchase price
-			var purchasePrice float64
-			err = s.db.QueryRowContext(ctx, `
-				SELECT purchase_price
-				FROM asset_details
-				WHERE account_id = $1
-			`, accountID).Scan(&purchasePrice)
-			if err != nil {
-				return 0, 0, fmt.Errorf("failed to get purchase price: %w", err)
-			}
-			return purchasePrice, 0, nil
+			// No manual entries yet, return purchase price (we already have it)
+			return asset.PurchasePrice, 0, nil
 		}
 		return 0, 0, fmt.Errorf("failed to get latest manual value: %w", err)
 	}

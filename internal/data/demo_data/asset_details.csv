@@ -1,3 +1,3 @@
 id,account_id,asset_type,purchase_price,purchase_date,depreciation_method,useful_life_years,salvage_value,depreciation_rate,type_specific_data,notes,created_at,updated_at
-demo-asset-details-condo,demo-acc-toronto-condo,real_estate,650000.00,2023-06-01,manual,,,0,"{""property_type"": ""condo"", ""square_feet"": 850, ""bedrooms"": 2, ""bathrooms"": 1}",Downtown Toronto condo,2023-06-01T00:00:00Z,2026-01-26T00:00:00Z
-demo-asset-details-car,demo-acc-honda-civic,vehicle,28000.00,2020-07-01,declining_balance,10,5000.00,0.20,"{""make"": ""Honda"", ""model"": ""Civic"", ""year"": 2020, ""vin"": ""1HGBH41JXMN109186""}",Daily commute vehicle,2020-07-01T00:00:00Z,2026-01-26T00:00:00Z
+demo-asset-details-condo,demo-acc-toronto-condo,real_estate,650000.00,2023-06-01,manual,,,,,Downtown Toronto condo,2023-06-01T00:00:00Z,2026-01-26T00:00:00Z
+demo-asset-details-car,demo-acc-honda-civic,vehicle,28000.00,2020-07-01,declining_balance,10,5000.00,0.20,,Daily commute vehicle,2020-07-01T00:00:00Z,2026-01-26T00:00:00Z

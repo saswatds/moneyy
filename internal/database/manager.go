@@ -43,9 +43,9 @@ func NewManager() (*Manager, error) {
 		return nil, fmt.Errorf("failed to open database connection: %w", err)
 	}
 
-	// Configure connection pool (SQLite benefits from limited concurrency)
-	maxOpenConns := env.GetInt("DB_MAX_OPEN_CONNS", 1)
-	maxIdleConns := env.GetInt("DB_MAX_IDLE_CONNS", 1)
+	// Configure connection pool (SQLite with WAL can handle concurrent readers)
+	maxOpenConns := env.GetInt("DB_MAX_OPEN_CONNS", 10)
+	maxIdleConns := env.GetInt("DB_MAX_IDLE_CONNS", 5)
 	connMaxLifetime := time.Duration(env.GetInt("DB_CONN_MAX_LIFETIME_MINUTES", 0)) * time.Minute
 
 	db.SetMaxOpenConns(maxOpenConns)

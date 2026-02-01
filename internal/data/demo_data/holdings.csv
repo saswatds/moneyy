@@ -1,9 +1,7 @@
 id,account_id,type,symbol,quantity,cost_basis,currency,amount,purchase_date,notes,created_at,updated_at
 demo-hold-tfsa-1,demo-acc-wealthsimple-tfsa,etf,VFV.TO,150,18000.00,CAD,,2024-01-15,,2024-01-15T00:00:00Z,2026-01-26T00:00:00Z
 demo-hold-tfsa-2,demo-acc-wealthsimple-tfsa,etf,XIC.TO,200,8000.00,CAD,,2024-03-01,,2024-03-01T00:00:00Z,2026-01-26T00:00:00Z
-demo-hold-tfsa-3,demo-acc-wealthsimple-tfsa,cash,,,,CAD,5000.00,,,2024-01-01T00:00:00Z,2026-01-26T00:00:00Z
 demo-hold-rrsp-1,demo-acc-questrade-rrsp,etf,VUN.TO,300,35000.00,CAD,,2023-06-01,,2023-06-01T00:00:00Z,2026-01-26T00:00:00Z
 demo-hold-rrsp-2,demo-acc-questrade-rrsp,etf,VAB.TO,400,20000.00,CAD,,2023-06-01,,2023-06-01T00:00:00Z,2026-01-26T00:00:00Z
-demo-hold-rrsp-3,demo-acc-questrade-rrsp,cash,,,,CAD,8500.00,,,2023-06-01T00:00:00Z,2026-01-26T00:00:00Z
 demo-hold-crypto-1,demo-acc-coinbase,crypto,BTC,0.15,5000.00,CAD,,2023-01-15,,2023-01-15T00:00:00Z,2026-01-26T00:00:00Z
 demo-hold-crypto-2,demo-acc-coinbase,crypto,ETH,2.5,3000.00,CAD,,2023-03-01,,2023-03-01T00:00:00Z,2026-01-26T00:00:00Z
