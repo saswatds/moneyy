@@ -8,6 +8,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/google/uuid"
 	"money/internal/auth"
 )
 
@@ -469,51 +470,34 @@ func (s *Service) SaveTaxConfig(ctx context.Context, req *SaveTaxConfigRequest) 
 		basicPersonalAmount = *req.BasicPersonalAmount
 	}
 
-	config := &TaxConfiguration{}
-	var fedJSON, provJSON []byte
+	now := time.Now()
+	newID := uuid.New().String()
 
-	err = s.db.QueryRowContext(ctx, `
-		INSERT INTO tax_configurations (user_id, tax_year, province, federal_brackets, provincial_brackets,
+	_, err = s.db.ExecContext(ctx, `
+		INSERT INTO tax_configurations (id, user_id, tax_year, province, federal_brackets, provincial_brackets,
 			cpp_rate, cpp_max_pensionable_earnings, cpp_basic_exemption,
-			ei_rate, ei_max_insurable_earnings, basic_personal_amount)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+			ei_rate, ei_max_insurable_earnings, basic_personal_amount, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		ON CONFLICT (user_id, tax_year) DO UPDATE SET
-			province = EXCLUDED.province,
-			federal_brackets = EXCLUDED.federal_brackets,
-			provincial_brackets = EXCLUDED.provincial_brackets,
-			cpp_rate = EXCLUDED.cpp_rate,
-			cpp_max_pensionable_earnings = EXCLUDED.cpp_max_pensionable_earnings,
-			cpp_basic_exemption = EXCLUDED.cpp_basic_exemption,
-			ei_rate = EXCLUDED.ei_rate,
-			ei_max_insurable_earnings = EXCLUDED.ei_max_insurable_earnings,
-			basic_personal_amount = EXCLUDED.basic_personal_amount,
-			updated_at = NOW()
-		RETURNING id, user_id, tax_year, province, federal_brackets, provincial_brackets,
-			cpp_rate, cpp_max_pensionable_earnings, cpp_basic_exemption,
-			ei_rate, ei_max_insurable_earnings, basic_personal_amount,
-			created_at, updated_at
-	`, userID, req.TaxYear, req.Province, federalBracketsJSON, provincialBracketsJSON,
-		cppRate, cppMaxPensionable, cppBasicExemption, eiRate, eiMaxInsurable, basicPersonalAmount,
-	).Scan(
-		&config.ID, &config.UserID, &config.TaxYear, &config.Province,
-		&fedJSON, &provJSON,
-		&config.CPPRate, &config.CPPMaxPensionableEarnings, &config.CPPBasicExemption,
-		&config.EIRate, &config.EIMaxInsurableEarnings, &config.BasicPersonalAmount,
-		&config.CreatedAt, &config.UpdatedAt)
+			province = excluded.province,
+			federal_brackets = excluded.federal_brackets,
+			provincial_brackets = excluded.provincial_brackets,
+			cpp_rate = excluded.cpp_rate,
+			cpp_max_pensionable_earnings = excluded.cpp_max_pensionable_earnings,
+			cpp_basic_exemption = excluded.cpp_basic_exemption,
+			ei_rate = excluded.ei_rate,
+			ei_max_insurable_earnings = excluded.ei_max_insurable_earnings,
+			basic_personal_amount = excluded.basic_personal_amount,
+			updated_at = $14
+	`, newID, userID, req.TaxYear, req.Province, federalBracketsJSON, provincialBracketsJSON,
+		cppRate, cppMaxPensionable, cppBasicExemption, eiRate, eiMaxInsurable, basicPersonalAmount, now, now)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to save tax configuration: %w", err)
 	}
 
-	// Parse JSON brackets back
-	if err := json.Unmarshal(fedJSON, &config.FederalBrackets); err != nil {
-		return nil, fmt.Errorf("failed to parse federal brackets: %w", err)
-	}
-	if err := json.Unmarshal(provJSON, &config.ProvincialBrackets); err != nil {
-		return nil, fmt.Errorf("failed to parse provincial brackets: %w", err)
-	}
-
-	return config, nil
+	// Fetch the saved/updated config
+	return s.GetTaxConfig(ctx, req.TaxYear)
 }
 
 // Helper functions

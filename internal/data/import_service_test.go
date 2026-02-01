@@ -8,8 +8,6 @@ import (
 	"fmt"
 	"testing"
 	"time"
-
-	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 // TestValidateArchive_ValidArchive tests validation of a valid archive

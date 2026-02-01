@@ -618,7 +618,7 @@ func (s *Service) GetConnectionSyncStatus(ctx context.Context, id string) (*Conn
 		JOIN synced_accounts sa ON sa.id = sj.synced_account_id
 		LEFT JOIN accounts a ON a.id = sa.local_account_id
 		WHERE sa.credential_id = $1
-		  AND sj.created_at > NOW() - INTERVAL '24 hours'
+		  AND sj.created_at > datetime('now', '-24 hours')
 		ORDER BY sj.created_at DESC
 		LIMIT 100
 	`, id)

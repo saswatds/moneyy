@@ -4,98 +4,80 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/golang-migrate/migrate/v4"
-	"github.com/golang-migrate/migrate/v4/database/postgres"
+	"github.com/golang-migrate/migrate/v4/database/sqlite3"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
-	"github.com/testcontainers/testcontainers-go"
-	testpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
+	_ "modernc.org/sqlite"
 
 	"money/internal/auth"
 	"money/internal/balance"
 )
 
 var (
-	sharedContainer     *TestContainer
-	sharedContainerOnce sync.Once
-	sharedContainerErr  error
+	sharedDB     *sql.DB
+	sharedDBOnce sync.Once
+	sharedDBErr  error
+	tempDir      string
 )
 
-// TestContainer holds the test container and connection info
-type TestContainer struct {
-	Container  *testpostgres.PostgresContainer
-	ConnString string
-}
-
-// GetSharedContainer returns a shared test container across all tests
-func GetSharedContainer(t *testing.T) *TestContainer {
+// GetSharedDB returns a shared test database across all tests
+func GetSharedDB(t *testing.T) *sql.DB {
 	t.Helper()
 
-	sharedContainerOnce.Do(func() {
-		ctx := context.Background()
-
-		container, err := testpostgres.Run(ctx,
-			"postgres:15-alpine",
-			testpostgres.WithDatabase("testdb"),
-			testpostgres.WithUsername("testuser"),
-			testpostgres.WithPassword("testpass"),
-			testcontainers.WithWaitStrategy(
-				wait.ForLog("database system is ready to accept connections").
-					WithOccurrence(2).
-					WithStartupTimeout(5*time.Minute)),
-		)
-
+	sharedDBOnce.Do(func() {
+		// Create a temporary directory for the test database
+		var err error
+		tempDir, err = os.MkdirTemp("", "moneyy-account-test-*")
 		if err != nil {
-			sharedContainerErr = fmt.Errorf("failed to start container: %w", err)
+			sharedDBErr = fmt.Errorf("failed to create temp dir: %w", err)
 			return
 		}
 
-		connStr, err := container.ConnectionString(ctx, "sslmode=disable")
+		dbPath := filepath.Join(tempDir, "test.db")
+		dsn := fmt.Sprintf("%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(ON)", dbPath)
+
+		db, err := sql.Open("sqlite", dsn)
 		if err != nil {
-			sharedContainerErr = fmt.Errorf("failed to get connection string: %w", err)
+			sharedDBErr = fmt.Errorf("failed to open database: %w", err)
 			return
 		}
 
-		sharedContainer = &TestContainer{
-			Container:  container,
-			ConnString: connStr,
-		}
+		// SQLite works better with limited concurrency
+		db.SetMaxOpenConns(1)
+		db.SetMaxIdleConns(1)
 
-		// Run migrations on shared container
-		if err := runMigrations(connStr); err != nil {
-			sharedContainerErr = fmt.Errorf("failed to run migrations: %w", err)
+		if err := db.Ping(); err != nil {
+			sharedDBErr = fmt.Errorf("failed to ping database: %w", err)
 			return
 		}
+
+		// Run migrations on shared database
+		if err := runMigrations(db); err != nil {
+			db.Close()
+			sharedDBErr = fmt.Errorf("failed to run migrations: %w", err)
+			return
+		}
+
+		sharedDB = db
 	})
 
-	if sharedContainerErr != nil {
-		t.Fatalf("Failed to setup shared container: %v", sharedContainerErr)
+	if sharedDBErr != nil {
+		t.Fatalf("Failed to setup shared database: %v", sharedDBErr)
 	}
 
-	return sharedContainer
+	return sharedDB
 }
 
 // SetupTestDB sets up a test database connection
 func SetupTestDB(t *testing.T) *sql.DB {
 	t.Helper()
-
-	container := GetSharedContainer(t)
-
-	db, err := sql.Open("postgres", container.ConnString)
-	if err != nil {
-		t.Fatalf("Failed to open database: %v", err)
-	}
-
-	if err := db.Ping(); err != nil {
-		t.Fatalf("Failed to ping database: %v", err)
-	}
-
-	return db
+	return GetSharedDB(t)
 }
 
 // CleanupTestDB cleans up test data after tests
@@ -129,22 +111,16 @@ func CleanupTestDB(t *testing.T, db *sql.DB) {
 			query = fmt.Sprintf("DELETE FROM %s WHERE id LIKE 'test-%%'", table)
 		}
 
-		// Silently ignore cleanup errors - test containers are ephemeral
+		// Silently ignore cleanup errors
 		_, _ = db.Exec(query)
 	}
 
-	db.Close()
+	// Note: Don't close the shared database
 }
 
 // runMigrations runs database migrations
-func runMigrations(connStr string) error {
-	db, err := sql.Open("postgres", connStr)
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-
-	driver, err := postgres.WithInstance(db, &postgres.Config{})
+func runMigrations(db *sql.DB) error {
+	driver, err := sqlite3.WithInstance(db, &sqlite3.Config{})
 	if err != nil {
 		return err
 	}
@@ -157,7 +133,7 @@ func runMigrations(connStr string) error {
 
 	m, err := migrate.NewWithDatabaseInstance(
 		fmt.Sprintf("file://%s", migrationsPath),
-		"postgres", driver)
+		"sqlite3", driver)
 	if err != nil {
 		return err
 	}
@@ -185,7 +161,7 @@ func findMigrationsDir() (string, error) {
 		}
 
 		// Check for go.mod to find project root
-		if _, err := filepath.Abs(filepath.Join(currentDir, "go.mod")); err == nil {
+		if _, err := os.Stat(filepath.Join(currentDir, "go.mod")); err == nil {
 			migrationsPath := filepath.Join(currentDir, "migrations")
 			files, _ := filepath.Glob(filepath.Join(migrationsPath, "*.sql"))
 			if len(files) > 0 {
@@ -229,11 +205,17 @@ func CreateTestAccount(t *testing.T, db *sql.DB, userID string, accountType Acco
 		accountType == AccountTypeVehicle ||
 		accountType == AccountTypeCollectible
 
+	// SQLite uses 1/0 for boolean
+	isAssetInt := 0
+	if isAsset {
+		isAssetInt = 1
+	}
+
 	accountID := fmt.Sprintf("test-account-%d", time.Now().UnixNano())
 	_, err := db.Exec(`
 		INSERT INTO accounts (id, user_id, name, type, currency, is_asset, is_active, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-	`, accountID, userID, "Test Account", accountType, "CAD", isAsset, true, time.Now(), time.Now())
+	`, accountID, userID, "Test Account", accountType, "CAD", isAssetInt, 1, time.Now(), time.Now())
 
 	if err != nil {
 		t.Fatalf("Failed to create test account: %v", err)
@@ -267,4 +249,15 @@ func SetupAccountService(t *testing.T, db *sql.DB) *Service {
 
 	balanceSvc := balance.NewService(db)
 	return NewService(db, db, balanceSvc)
+}
+
+// Legacy types for backwards compatibility
+type TestContainer struct {
+	DB *sql.DB
+}
+
+// GetSharedContainer is an alias for GetSharedDB for backwards compatibility
+func GetSharedContainer(t *testing.T) *TestContainer {
+	db := GetSharedDB(t)
+	return &TestContainer{DB: db}
 }

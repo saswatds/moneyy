@@ -1,3 +1,5 @@
+-- Drop income and tax tables (SQLite)
+
 -- Drop indexes first
 DROP INDEX IF EXISTS idx_annual_income_summaries_user_year;
 DROP INDEX IF EXISTS idx_annual_income_summaries_user;

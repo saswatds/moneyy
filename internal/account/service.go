@@ -5,10 +5,10 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
-	"github.com/lib/pq"
-
+	"github.com/google/uuid"
 	"money/internal/auth"
 	"money/internal/balance"
 )
@@ -161,6 +161,7 @@ func (s *Service) Create(ctx context.Context, req *CreateAccountRequest) (*Accou
 	}
 
 	account := &Account{
+		ID:           uuid.New().String(),
 		UserID:       userID,
 		Name:         req.Name,
 		Type:         req.Type,
@@ -174,11 +175,10 @@ func (s *Service) Create(ctx context.Context, req *CreateAccountRequest) (*Accou
 		UpdatedAt:    time.Now(),
 	}
 
-	err := s.db.QueryRowContext(ctx, `
-		INSERT INTO accounts (user_id, name, type, currency, institution, is_asset, is_active, is_synced, connection_id, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-		RETURNING id
-	`, userID, req.Name, req.Type, req.Currency, req.Institution, req.IsAsset, true, req.IsSynced, req.ConnectionID, account.CreatedAt, account.UpdatedAt).Scan(&account.ID)
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO accounts (id, user_id, name, type, currency, institution, is_asset, is_active, is_synced, connection_id, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+	`, account.ID, userID, req.Name, req.Type, req.Currency, req.Institution, req.IsAsset, true, req.IsSynced, req.ConnectionID, account.CreatedAt, account.UpdatedAt)
 
 	if err != nil {
 		return nil, err
@@ -200,13 +200,13 @@ func (s *Service) Summary(ctx context.Context) (*AccountSummary, error) {
 		ByType:     make(map[string]int),
 	}
 
-	// Get total counts
+	// Get total counts (SQLite compatible - using SUM with CASE instead of COUNT FILTER)
 	err := s.db.QueryRowContext(ctx, `
 		SELECT
 			COUNT(*) as total,
-			COUNT(*) FILTER (WHERE is_active = true) as active,
-			COUNT(*) FILTER (WHERE is_asset = true) as assets,
-			COUNT(*) FILTER (WHERE is_asset = false) as liabilities
+			SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) as active,
+			SUM(CASE WHEN is_asset = 1 THEN 1 ELSE 0 END) as assets,
+			SUM(CASE WHEN is_asset = 0 THEN 1 ELSE 0 END) as liabilities
 		FROM accounts
 		WHERE user_id = $1
 	`, userID).Scan(&summary.TotalAccounts, &summary.ActiveAccounts, &summary.AssetAccounts, &summary.LiabilityAccounts)
@@ -361,13 +361,26 @@ func (s *Service) ListWithBalance(ctx context.Context) (*ListAccountsWithBalance
 
 	// If there are accounts, fetch their latest balances
 	if len(accountIDs) > 0 {
+		// Build placeholders for IN clause (SQLite compatible)
+		placeholders := make([]string, len(accountIDs))
+		args := make([]interface{}, len(accountIDs))
+		for i, id := range accountIDs {
+			placeholders[i] = fmt.Sprintf("$%d", i+1)
+			args[i] = id
+		}
+
 		// Query the balance database for the latest balance of each account
-		balanceRows, err := s.balanceDB.QueryContext(ctx, `
-			SELECT DISTINCT ON (account_id) account_id, amount, date
-			FROM balances
-			WHERE account_id = ANY($1)
-			ORDER BY account_id, date DESC
-		`, pq.Array(accountIDs))
+		// SQLite compatible: using subquery instead of DISTINCT ON
+		query := fmt.Sprintf(`
+			SELECT b1.account_id, b1.amount, b1.date
+			FROM balances b1
+			WHERE b1.date = (
+				SELECT MAX(b2.date) FROM balances b2 WHERE b2.account_id = b1.account_id
+			)
+			AND b1.account_id IN (%s)
+		`, strings.Join(placeholders, ", "))
+
+		balanceRows, err := s.balanceDB.QueryContext(ctx, query, args...)
 		if err != nil {
 			// If there's an error fetching balances, just return accounts without balances
 			return &ListAccountsWithBalanceResponse{Accounts: accounts}, nil

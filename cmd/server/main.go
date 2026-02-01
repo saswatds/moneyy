@@ -47,10 +47,16 @@ func main() {
 	}
 	defer dbManager.Close()
 
+	// Run migrations
+	logger.Info("Running database migrations")
+	if err := dbManager.Migrate(); err != nil {
+		log.Fatalf("Failed to run migrations: %v", err)
+	}
+	logger.Info("Database migrations completed")
+
 	// Get the single database connection
 	db := dbManager.DB()
 
-	// Note: Migrations are handled by the separate migrate container
 	// Initialize services with dependency injection
 	logger.Info("Initializing services")
 

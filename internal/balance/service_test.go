@@ -4,98 +4,76 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/golang-migrate/migrate/v4"
-	"github.com/golang-migrate/migrate/v4/database/postgres"
+	"github.com/golang-migrate/migrate/v4/database/sqlite3"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
-	_ "github.com/lib/pq"
-	"github.com/testcontainers/testcontainers-go"
-	testpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
+	_ "modernc.org/sqlite"
 
 	"money/internal/auth"
 )
 
 var (
-	sharedContainer     *TestContainer
-	sharedContainerOnce sync.Once
-	sharedContainerErr  error
+	sharedDB     *sql.DB
+	sharedDBOnce sync.Once
+	sharedDBErr  error
 )
 
-// TestContainer holds the test container and connection info
-type TestContainer struct {
-	Container  *testpostgres.PostgresContainer
-	ConnString string
-}
-
-// GetSharedContainer returns a shared test container across all tests
-func GetSharedContainer(t *testing.T) *TestContainer {
+// GetSharedDB returns a shared test database across all tests
+func GetSharedDB(t *testing.T) *sql.DB {
 	t.Helper()
 
-	sharedContainerOnce.Do(func() {
-		ctx := context.Background()
-
-		container, err := testpostgres.Run(ctx,
-			"postgres:15-alpine",
-			testpostgres.WithDatabase("testdb"),
-			testpostgres.WithUsername("testuser"),
-			testpostgres.WithPassword("testpass"),
-			testcontainers.WithWaitStrategy(
-				wait.ForLog("database system is ready to accept connections").
-					WithOccurrence(2).
-					WithStartupTimeout(5*time.Minute)),
-		)
-
+	sharedDBOnce.Do(func() {
+		// Create a temporary directory for the test database
+		tempDir, err := os.MkdirTemp("", "moneyy-test-*")
 		if err != nil {
-			sharedContainerErr = fmt.Errorf("failed to start container: %w", err)
+			sharedDBErr = fmt.Errorf("failed to create temp dir: %w", err)
 			return
 		}
 
-		connStr, err := container.ConnectionString(ctx, "sslmode=disable")
+		dbPath := filepath.Join(tempDir, "test.db")
+		dsn := fmt.Sprintf("%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(ON)", dbPath)
+
+		db, err := sql.Open("sqlite", dsn)
 		if err != nil {
-			sharedContainerErr = fmt.Errorf("failed to get connection string: %w", err)
+			sharedDBErr = fmt.Errorf("failed to open database: %w", err)
 			return
 		}
 
-		sharedContainer = &TestContainer{
-			Container:  container,
-			ConnString: connStr,
+		// SQLite works better with limited concurrency
+		db.SetMaxOpenConns(1)
+		db.SetMaxIdleConns(1)
+
+		if err := db.Ping(); err != nil {
+			sharedDBErr = fmt.Errorf("failed to ping database: %w", err)
+			return
 		}
 
-		// Run migrations on shared container
-		if err := runMigrations(connStr); err != nil {
-			sharedContainerErr = fmt.Errorf("failed to run migrations: %w", err)
+		sharedDB = db
+
+		// Run migrations on shared database
+		if err := runMigrations(db); err != nil {
+			sharedDBErr = fmt.Errorf("failed to run migrations: %w", err)
 			return
 		}
 	})
 
-	if sharedContainerErr != nil {
-		t.Fatalf("Failed to setup shared container: %v", sharedContainerErr)
+	if sharedDBErr != nil {
+		t.Fatalf("Failed to setup shared database: %v", sharedDBErr)
 	}
 
-	return sharedContainer
+	return sharedDB
 }
 
 // SetupTestDB sets up a test database connection
 func SetupTestDB(t *testing.T) *sql.DB {
 	t.Helper()
-
-	container := GetSharedContainer(t)
-
-	db, err := sql.Open("postgres", container.ConnString)
-	if err != nil {
-		t.Fatalf("Failed to open database: %v", err)
-	}
-
-	if err := db.Ping(); err != nil {
-		t.Fatalf("Failed to ping database: %v", err)
-	}
-
-	return db
+	return GetSharedDB(t)
 }
 
 // CleanupTestDB cleans up test data after tests
@@ -105,27 +83,23 @@ func CleanupTestDB(t *testing.T, db *sql.DB) {
 	// Clean up test data
 	tables := []string{"balances", "accounts", "users"}
 	for _, table := range tables {
-		query := fmt.Sprintf("DELETE FROM %s WHERE id LIKE 'test-%%'", table)
+		var query string
 		if table == "balances" {
 			query = "DELETE FROM balances WHERE account_id LIKE 'test-%'"
+		} else {
+			query = fmt.Sprintf("DELETE FROM %s WHERE id LIKE 'test-%%'", table)
 		}
 		if _, err := db.Exec(query); err != nil {
 			t.Logf("Warning: failed to clean %s: %v", table, err)
 		}
 	}
 
-	db.Close()
+	// Note: Don't close the shared database
 }
 
 // runMigrations runs database migrations
-func runMigrations(connStr string) error {
-	db, err := sql.Open("postgres", connStr)
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-
-	driver, err := postgres.WithInstance(db, &postgres.Config{})
+func runMigrations(db *sql.DB) error {
+	driver, err := sqlite3.WithInstance(db, &sqlite3.Config{})
 	if err != nil {
 		return err
 	}
@@ -137,7 +111,7 @@ func runMigrations(connStr string) error {
 
 	m, err := migrate.NewWithDatabaseInstance(
 		fmt.Sprintf("file://%s", migrationsPath),
-		"postgres", driver)
+		"sqlite3", driver)
 	if err != nil {
 		return err
 	}
@@ -190,7 +164,7 @@ func CreateTestAccount(t *testing.T, db *sql.DB, userID string) string {
 	_, err := db.Exec(`
 		INSERT INTO accounts (id, user_id, name, type, currency, is_asset, is_active, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-	`, accountID, userID, "Test Account", "savings", "CAD", true, true, time.Now(), time.Now())
+	`, accountID, userID, "Test Account", "savings", "CAD", 1, 1, time.Now(), time.Now())
 
 	if err != nil {
 		t.Fatalf("Failed to create test account: %v", err)

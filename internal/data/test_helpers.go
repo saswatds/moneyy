@@ -3,7 +3,6 @@ package data
 import (
 	"archive/zip"
 	"bytes"
-	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -16,140 +15,73 @@ import (
 	"time"
 
 	"github.com/golang-migrate/migrate/v4"
-	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	"github.com/golang-migrate/migrate/v4/database/sqlite3"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
+	_ "modernc.org/sqlite"
 )
 
-// TestContainer holds the PostgreSQL test container and database connection
-type TestContainer struct {
-	Container *postgres.PostgresContainer
-	DB        *sql.DB
-	ConnStr   string
+// TestDB holds the SQLite test database connection
+type TestDB struct {
+	DB      *sql.DB
+	TempDir string
 }
 
 var (
-	// Package-level container - shared across all tests in the package
-	sharedContainer *TestContainer
-	containerMu     sync.Mutex
-	containerOnce   sync.Once
+	// Package-level database - shared across all tests in the package
+	sharedDB     *TestDB
+	dbMu         sync.Mutex
+	dbOnce       sync.Once
+	sharedDBErr  error
 )
 
-// GetSharedContainer returns the shared test container, creating it if necessary
-func GetSharedContainer(t *testing.T) *TestContainer {
+// GetSharedDB returns the shared test database, creating it if necessary
+func GetSharedDB(t *testing.T) *TestDB {
 	t.Helper()
 
-	containerOnce.Do(func() {
-		ctx := context.Background()
-
-		// Create PostgreSQL container
-		pgContainer, err := postgres.Run(ctx,
-			"postgres:15-alpine",
-			postgres.WithDatabase("testdb"),
-			postgres.WithUsername("testuser"),
-			postgres.WithPassword("testpass"),
-			testcontainers.WithWaitStrategy(
-				wait.ForLog("database system is ready to accept connections").
-					WithOccurrence(2).
-					WithStartupTimeout(60*time.Second)),
-		)
+	dbOnce.Do(func() {
+		// Create a temporary directory for the test database
+		tempDir, err := os.MkdirTemp("", "moneyy-data-test-*")
 		if err != nil {
-			t.Fatalf("Failed to start PostgreSQL container: %v", err)
+			sharedDBErr = fmt.Errorf("failed to create temp dir: %w", err)
+			return
 		}
 
-		// Get connection string
-		connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
+		dbPath := filepath.Join(tempDir, "test.db")
+		dsn := fmt.Sprintf("%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(ON)", dbPath)
+
+		db, err := sql.Open("sqlite", dsn)
 		if err != nil {
-			t.Fatalf("Failed to get connection string: %v", err)
+			sharedDBErr = fmt.Errorf("failed to open database: %w", err)
+			return
 		}
 
-		// Connect to database
-		db, err := sql.Open("pgx", connStr)
-		if err != nil {
-			pgContainer.Terminate(ctx)
-			t.Fatalf("Failed to connect to test database: %v", err)
-		}
+		// SQLite works better with limited concurrency
+		db.SetMaxOpenConns(1)
+		db.SetMaxIdleConns(1)
 
-		// Verify connection
 		if err := db.Ping(); err != nil {
-			db.Close()
-			pgContainer.Terminate(ctx)
-			t.Fatalf("Failed to ping test database: %v", err)
+			sharedDBErr = fmt.Errorf("failed to ping database: %w", err)
+			return
 		}
 
 		// Run migrations
-		if err := runMigrations(connStr); err != nil {
+		if err := runMigrations(db); err != nil {
 			db.Close()
-			pgContainer.Terminate(ctx)
-			t.Fatalf("Failed to run migrations: %v", err)
+			sharedDBErr = fmt.Errorf("failed to run migrations: %w", err)
+			return
 		}
 
-		sharedContainer = &TestContainer{
-			Container: pgContainer,
-			DB:        db,
-			ConnStr:   connStr,
+		sharedDB = &TestDB{
+			DB:      db,
+			TempDir: tempDir,
 		}
 	})
 
-	return sharedContainer
-}
-
-// SetupTestContainer creates a PostgreSQL container and runs migrations
-// Deprecated: Use GetSharedContainer instead for better performance
-func SetupTestContainer(t *testing.T) *TestContainer {
-	t.Helper()
-
-	ctx := context.Background()
-
-	// Create PostgreSQL container
-	pgContainer, err := postgres.Run(ctx,
-		"postgres:15-alpine",
-		postgres.WithDatabase("testdb"),
-		postgres.WithUsername("testuser"),
-		postgres.WithPassword("testpass"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).
-				WithStartupTimeout(60*time.Second)),
-	)
-	if err != nil {
-		t.Fatalf("Failed to start PostgreSQL container: %v", err)
+	if sharedDBErr != nil {
+		t.Fatalf("Failed to setup shared database: %v", sharedDBErr)
 	}
 
-	// Get connection string
-	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
-	if err != nil {
-		t.Fatalf("Failed to get connection string: %v", err)
-	}
-
-	// Connect to database
-	db, err := sql.Open("pgx", connStr)
-	if err != nil {
-		pgContainer.Terminate(ctx)
-		t.Fatalf("Failed to connect to test database: %v", err)
-	}
-
-	// Verify connection
-	if err := db.Ping(); err != nil {
-		db.Close()
-		pgContainer.Terminate(ctx)
-		t.Fatalf("Failed to ping test database: %v", err)
-	}
-
-	// Run migrations
-	if err := runMigrations(connStr); err != nil {
-		db.Close()
-		pgContainer.Terminate(ctx)
-		t.Fatalf("Failed to run migrations: %v", err)
-	}
-
-	return &TestContainer{
-		Container: pgContainer,
-		DB:        db,
-		ConnStr:   connStr,
-	}
+	return sharedDB
 }
 
 // findMigrationsPath finds the migrations directory by searching up from the current directory
@@ -182,23 +114,27 @@ func findMigrationsPath() (string, error) {
 }
 
 // runMigrations runs database migrations on the test database
-func runMigrations(connStr string) error {
+func runMigrations(db *sql.DB) error {
 	// Get migrations directory path by finding project root
-	// Look for go.mod to identify project root
 	migrationsPath, err := findMigrationsPath()
 	if err != nil {
 		return fmt.Errorf("failed to get migrations path: %w", err)
 	}
 
+	driver, err := sqlite3.WithInstance(db, &sqlite3.Config{})
+	if err != nil {
+		return fmt.Errorf("failed to create migrate driver: %w", err)
+	}
+
 	// Create migrate instance
-	m, err := migrate.New(
+	m, err := migrate.NewWithDatabaseInstance(
 		"file://"+migrationsPath,
-		connStr,
+		"sqlite3",
+		driver,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create migrate instance: %w", err)
 	}
-	defer m.Close()
 
 	// Run migrations
 	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
@@ -208,27 +144,11 @@ func runMigrations(connStr string) error {
 	return nil
 }
 
-// CleanupTestContainer stops the container and closes the database connection
-func CleanupTestContainer(t *testing.T, tc *TestContainer) {
-	t.Helper()
-
-	if tc.DB != nil {
-		tc.DB.Close()
-	}
-
-	if tc.Container != nil {
-		ctx := context.Background()
-		if err := tc.Container.Terminate(ctx); err != nil {
-			t.Logf("Warning: Failed to terminate container: %v", err)
-		}
-	}
-}
-
-// SetupTestDB creates a test database connection using the shared container
+// SetupTestDB creates a test database connection using the shared database
 func SetupTestDB(t *testing.T) *sql.DB {
 	t.Helper()
 
-	tc := GetSharedContainer(t)
+	tc := GetSharedDB(t)
 
 	// Clean up test data after this test completes
 	t.Cleanup(func() {
@@ -238,7 +158,7 @@ func SetupTestDB(t *testing.T) *sql.DB {
 	return tc.DB
 }
 
-// CleanupTestDB removes test data (but doesn't close the DB or kill container)
+// CleanupTestDB removes test data (but doesn't close the DB)
 func CleanupTestDB(t *testing.T, db *sql.DB) {
 	t.Helper()
 
@@ -297,8 +217,8 @@ func CreateTestAccount(t *testing.T, db *sql.DB, userID string) string {
 		"Test Account",
 		"checking",
 		"USD",
-		true,
-		true,
+		1, // SQLite uses 1/0 for boolean
+		1,
 		now,
 		now,
 	)
@@ -448,4 +368,12 @@ func CreateValidTestArchive(t *testing.T, userID string) []byte {
 
 	// Create ZIP archive
 	return CreateTestZip(t, manifestData, tables)
+}
+
+// Legacy types for backwards compatibility
+type TestContainer = TestDB
+
+// GetSharedContainer is an alias for GetSharedDB for backwards compatibility
+func GetSharedContainer(t *testing.T) *TestContainer {
+	return GetSharedDB(t)
 }

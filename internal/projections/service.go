@@ -8,6 +8,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/google/uuid"
 	"money/internal/account"
 	"money/internal/auth"
 	"money/internal/transaction"
@@ -594,10 +595,13 @@ func (s *Service) getCurrentAccounts(ctx context.Context) ([]AccountData, error)
 
 	// Get latest balances from balance DB
 	if len(accountIDs) > 0 {
+		// SQLite compatible: using subquery instead of DISTINCT ON
 		balanceRows, err := s.accountDB.QueryContext(ctx, `
-			SELECT DISTINCT ON (account_id) account_id, amount
-			FROM balances
-			ORDER BY account_id, date DESC, created_at DESC
+			SELECT b1.account_id, b1.amount
+			FROM balances b1
+			WHERE b1.date = (
+				SELECT MAX(b2.date) FROM balances b2 WHERE b2.account_id = b1.account_id
+			)
 		`)
 		if err == nil {
 			defer balanceRows.Close()
@@ -789,6 +793,7 @@ func (s *Service) CreateScenario(ctx context.Context, req *CreateScenarioRequest
 	}
 
 	scenario := &ProjectionScenario{
+		ID:        uuid.New().String(),
 		UserID:    userID,
 		Name:      req.Name,
 		IsDefault: req.IsDefault,
@@ -803,11 +808,10 @@ func (s *Service) CreateScenario(ctx context.Context, req *CreateScenarioRequest
 		return nil, fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	err = s.accountDB.QueryRowContext(ctx, `
-		INSERT INTO projection_scenarios (user_id, name, is_default, config, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		RETURNING id
-	`, userID, req.Name, req.IsDefault, configJSON, scenario.CreatedAt, scenario.UpdatedAt).Scan(&scenario.ID)
+	_, err = s.accountDB.ExecContext(ctx, `
+		INSERT INTO projection_scenarios (id, user_id, name, is_default, config, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`, scenario.ID, userID, req.Name, req.IsDefault, configJSON, scenario.CreatedAt, scenario.UpdatedAt)
 
 	if err != nil {
 		return nil, err
@@ -933,30 +937,25 @@ func (s *Service) UpdateScenario(ctx context.Context, id string, req *UpdateScen
 		argCount++
 	}
 
-	query += fmt.Sprintf(` WHERE id = $%d AND user_id = $%d RETURNING id, user_id, name, is_default, config, created_at, updated_at`, argCount, argCount+1)
+	query += fmt.Sprintf(` WHERE id = $%d AND user_id = $%d`, argCount, argCount+1)
 	args = append(args, id, userID)
 
-	var scenario ProjectionScenario
-	var configJSON []byte
-	err := s.accountDB.QueryRowContext(ctx, query, args...).Scan(
-		&scenario.ID, &scenario.UserID, &scenario.Name, &scenario.IsDefault,
-		&configJSON, &scenario.CreatedAt, &scenario.UpdatedAt,
-	)
-
+	result, err := s.accountDB.ExecContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
 
-	// Unmarshal config JSON
-	if len(configJSON) > 0 {
-		var config Config
-		if err := json.Unmarshal(configJSON, &config); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal config: %w", err)
-		}
-		scenario.Config = &config
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return nil, err
 	}
 
-	return &scenario, nil
+	if rowsAffected == 0 {
+		return nil, fmt.Errorf("scenario not found or unauthorized")
+	}
+
+	// Fetch the updated scenario
+	return s.GetScenario(ctx, id)
 }
 
 // DeleteScenario deletes a projection scenario

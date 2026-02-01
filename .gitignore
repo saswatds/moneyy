@@ -45,7 +45,7 @@ logs/
 backups
 
 # Database data
-data/postgres/
+data
 
 # Demo data
 internal/data/demo_temp

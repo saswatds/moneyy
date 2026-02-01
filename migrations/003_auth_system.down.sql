@@ -1,5 +1,5 @@
--- Rollback auth system
+-- Rollback auth system (SQLite)
 
-DROP TABLE IF EXISTS sessions CASCADE;
-DROP TABLE IF EXISTS webauthn_credentials CASCADE;
-DROP TABLE IF EXISTS users CASCADE;
+DROP TABLE IF EXISTS sessions;
+DROP TABLE IF EXISTS webauthn_credentials;
+DROP TABLE IF EXISTS users;

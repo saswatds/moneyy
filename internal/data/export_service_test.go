@@ -6,8 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
-
-	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 // TestExportData_Success tests successful export of data
