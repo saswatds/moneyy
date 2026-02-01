@@ -6,9 +6,9 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import type { TaxSummary, CurrencyTaxData, ExchangeRates } from '@/lib/api-client';
+import type { TaxSummary, CurrencyTaxData } from '@/lib/api-client';
 import { useExchangeRates } from '@/hooks/use-exchange-rates';
-import { formatCurrency as formatCurrencyUtil, convertCurrency, aggregateToCAD } from '@/lib/currency';
+import { formatCurrency as formatCurrencyUtil, convertCurrency } from '@/lib/currency';
 
 interface TaxSummaryCardProps {
   summary: TaxSummary;
