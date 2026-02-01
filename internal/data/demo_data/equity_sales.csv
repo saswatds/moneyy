@@ -1,3 +1,4 @@
 id,account_id,grant_id,exercise_id,sale_date,quantity,sale_price,total_proceeds,cost_basis,capital_gain,holding_period_days,is_qualified,notes,created_at
 demo-sale-1,demo-acc-techcorp-options,demo-grant-iso-1,demo-exercise-1,2025-07-15,500,42.00,21000.00,7500.00,13500.00,181,1,Partial sale of exercised shares,2025-07-15T00:00:00Z
 demo-sale-2,demo-acc-techcorp-options,demo-grant-iso-1,demo-exercise-1,2025-12-01,300,44.00,13200.00,4500.00,8700.00,320,1,Year-end sale for tax planning,2025-12-01T00:00:00Z
+demo-sale-3,demo-acc-techcorp-options,demo-grant-iso-1,demo-exercise-1,2026-01-25,200,45.00,9000.00,3000.00,6000.00,375,1,2026 tax year sale,2026-01-25T00:00:00Z
