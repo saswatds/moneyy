@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -22,16 +21,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { IconKey, IconPlus, IconEdit, IconTrash, IconLoader2, IconCheck } from '@tabler/icons-react';
+import { IconPlus, IconEdit, IconTrash, IconLoader2, IconCheck } from '@tabler/icons-react';
 import { useAPIKeyStatus, useSaveAPIKey, useDeleteAPIKey } from '@/hooks/use-api-keys';
 
 interface APIKeyCardProps {
   provider: string;
   providerName: string;
-  description: string;
 }
 
-function APIKeyCard({ provider, providerName, description }: APIKeyCardProps) {
+function APIKeyCard({ provider, providerName }: APIKeyCardProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState('');
@@ -79,26 +77,12 @@ function APIKeyCard({ provider, providerName, description }: APIKeyCardProps) {
     setDialogOpen(true);
   };
 
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return 'Never';
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
   if (isLoading) {
     return (
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex items-center justify-center py-4">
-            <IconLoader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
-        </CardContent>
-      </Card>
+      <div className="flex items-center gap-2">
+        <IconLoader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        <span className="text-sm text-muted-foreground">Loading...</span>
+      </div>
     );
   }
 
@@ -106,69 +90,31 @@ function APIKeyCard({ provider, providerName, description }: APIKeyCardProps) {
 
   return (
     <>
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-primary/10">
-                <IconKey className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <CardTitle className="text-base">{providerName}</CardTitle>
-                <CardDescription className="text-sm">{description}</CardDescription>
-              </div>
-            </div>
-            <div>
-              {isConfigured ? (
-                <Badge variant="default" className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
-                  <IconCheck className="h-3 w-3 mr-1" />
-                  Connected
-                </Badge>
-              ) : (
-                <Badge variant="secondary">Not Configured</Badge>
-              )}
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {isConfigured ? (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Name</span>
-                <span className="font-medium">{status?.name || 'Default'}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Last Used</span>
-                <span className="font-medium">{formatDate(status?.last_used_at)}</span>
-              </div>
-              <div className="flex gap-2 pt-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={openUpdateDialog}
-                  className="flex-1"
-                >
-                  <IconEdit className="h-4 w-4 mr-2" />
-                  Update Key
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setDeleteDialogOpen(true)}
-                  className="text-destructive hover:text-destructive"
-                >
-                  <IconTrash className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <Button onClick={openAddDialog} className="w-full">
-              <IconPlus className="h-4 w-4 mr-2" />
-              Add API Key
+      <div className="flex items-center gap-3">
+        {isConfigured ? (
+          <>
+            <Badge variant="default" className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+              <IconCheck className="h-3 w-3 mr-1" />
+              {providerName}: Active
+            </Badge>
+            <span className="text-xs text-muted-foreground">{status?.name || 'Default'}</span>
+            <Button variant="ghost" size="sm" onClick={openUpdateDialog} className="h-6 w-6 p-0">
+              <IconEdit className="h-3 w-3" />
             </Button>
-          )}
-        </CardContent>
-      </Card>
+            <Button variant="ghost" size="sm" onClick={() => setDeleteDialogOpen(true)} className="h-6 w-6 p-0 text-destructive">
+              <IconTrash className="h-3 w-3" />
+            </Button>
+          </>
+        ) : (
+          <>
+            <span className="text-sm text-muted-foreground">{providerName}: Not configured</span>
+            <Button onClick={openAddDialog} size="sm" variant="outline">
+              <IconPlus className="h-4 w-4 mr-1" />
+              Add Key
+            </Button>
+          </>
+        )}
+      </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
@@ -252,21 +198,9 @@ function APIKeyCard({ provider, providerName, description }: APIKeyCardProps) {
 
 export function APIKeySection() {
   return (
-    <div className="space-y-4">
-      <div>
-        <h2 className="text-xl font-semibold">API Integrations</h2>
-        <p className="text-sm text-muted-foreground mt-1">
-          Connect external services to enhance your financial tracking
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <APIKeyCard
-          provider="moneyy"
-          providerName="Moneyy"
-          description="Fetch tax brackets and financial data"
-        />
-      </div>
-    </div>
+    <APIKeyCard
+      provider="moneyy"
+      providerName="Moneyy"
+    />
   );
 }

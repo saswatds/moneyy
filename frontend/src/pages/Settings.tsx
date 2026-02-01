@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -13,7 +12,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { IconLink, IconBuilding, IconRefresh, IconTrash, IconPlus, IconBrandStripe, IconBrandPaypal, IconEdit, IconDownload, IconUpload, IconAlertCircle, IconLoader2, IconHistory, IconChartLine } from '@tabler/icons-react';
+import { IconLink, IconBuilding, IconRefresh, IconTrash, IconPlus, IconBrandStripe, IconBrandPaypal, IconEdit, IconDownload, IconUpload, IconAlertCircle, IconLoader2, IconHistory, IconChartLine, IconKey, IconDatabase } from '@tabler/icons-react';
 import {
   Table,
   TableBody,
@@ -389,96 +388,100 @@ export function Settings() {
   };
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-        <p className="text-muted-foreground mt-2">
-          Manage your preferences and application settings
-        </p>
-      </div>
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
 
-      {/* Connected Accounts Section */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-xl font-semibold">Connected Accounts</h2>
-            <p className="text-sm text-muted-foreground mt-1">
-              Manage your active connections and sync settings
-            </p>
-          </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button>
-                <IconPlus className="mr-2 h-4 w-4" />
-                Add Account
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>Select Provider</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {AVAILABLE_PROVIDERS.map((provider) => {
-                const Icon = provider.icon;
-                const isAvailable = provider.status === 'available';
-
-                return (
-                  <DropdownMenuItem
-                    key={provider.id}
-                    disabled={!isAvailable}
-                    onClick={() => {
-                      if (isAvailable) {
-                        setSelectedProvider(provider.id);
-                        if (provider.id === 'wealthsimple') {
-                          setShowConnectDialog(true);
-                        }
-                      }
-                    }}
-                    className="flex items-center gap-3 cursor-pointer"
-                  >
-                    <div className={`p-1.5 rounded ${provider.color}`}>
-                      <Icon className="h-4 w-4" />
-                    </div>
-                    <div className="flex-1">
-                      <div className="font-medium">{provider.name}</div>
-                      {provider.status === 'coming_soon' && (
-                        <div className="text-xs text-muted-foreground">Coming Soon</div>
-                      )}
-                    </div>
-                  </DropdownMenuItem>
-                );
-              })}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-
-        <Separator />
-
-        <Card>
-          <CardContent className="pt-6">
-            {loading ? (
-              <div className="text-center py-8 text-muted-foreground">Loading connections...</div>
-            ) : connections.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <div className="p-4 rounded-full bg-muted mb-4">
-                  <IconBuilding className="h-8 w-8 text-muted-foreground" />
+      {/* Settings Table */}
+      <Card>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-[200px]">Setting</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {/* Connected Accounts Row */}
+            <TableRow>
+              <TableCell className="font-medium">
+                <div className="flex items-center gap-2">
+                  <IconBuilding className="h-4 w-4 text-muted-foreground" />
+                  Connected Accounts
                 </div>
-                <h3 className="text-lg font-semibold mb-2">No Connected Accounts</h3>
-                <p className="text-sm text-muted-foreground mb-6 max-w-sm">
-                  Connect your first financial account to start tracking your finances
-                </p>
+              </TableCell>
+              <TableCell>
+                {loading ? (
+                  <span className="text-muted-foreground">Loading...</span>
+                ) : connections.length === 0 ? (
+                  <span className="text-muted-foreground">No accounts connected</span>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {connections.map((conn) => (
+                      <div key={conn.id} className="flex items-center gap-1.5">
+                        {getStatusBadge(conn.status)}
+                        <span className="text-sm">{conn.name}</span>
+                        {conn.status !== 'disconnected' && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleSync(conn.id)}
+                            disabled={conn.status === 'syncing' || syncingConnectionId === conn.id}
+                            className="h-6 w-6 p-0"
+                          >
+                            {syncingConnectionId === conn.id ? (
+                              <IconLoader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <IconRefresh className="h-3 w-3" />
+                            )}
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleViewHistory(conn)}
+                          className="h-6 w-6 p-0"
+                        >
+                          <IconHistory className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleEdit(conn)}
+                          className="h-6 w-6 p-0"
+                        >
+                          <IconEdit className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedConnection(conn);
+                            setDeleteDialogOpen(true);
+                          }}
+                          className="h-6 w-6 p-0 text-destructive"
+                        >
+                          <IconTrash className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </TableCell>
+              <TableCell className="text-right">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button>
-                      <IconPlus className="mr-2 h-4 w-4" />
-                      Connect an Account
+                    <Button size="sm" variant="outline">
+                      <IconPlus className="mr-1 h-4 w-4" />
+                      Add
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="center" className="w-56">
+                  <DropdownMenuContent align="end" className="w-56">
                     <DropdownMenuLabel>Select Provider</DropdownMenuLabel>
                     <DropdownMenuSeparator />
                     {AVAILABLE_PROVIDERS.map((provider) => {
                       const Icon = provider.icon;
                       const isAvailable = provider.status === 'available';
-
                       return (
                         <DropdownMenuItem
                           key={provider.id}
@@ -507,367 +510,98 @@ export function Settings() {
                     })}
                   </DropdownMenuContent>
                 </DropdownMenu>
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Provider</TableHead>
-                    <TableHead>Connection Name</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Accounts</TableHead>
-                    <TableHead>Last Sync</TableHead>
-                    <TableHead>Frequency</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {connections.map((connection) => {
-                    const providerInfo = getProviderInfo(connection.provider);
-                    const ProviderIcon = providerInfo.icon;
+              </TableCell>
+            </TableRow>
 
-                    return (
-                      <TableRow key={connection.id}>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <div className={`p-1.5 rounded-lg ${providerInfo.color}`}>
-                              <ProviderIcon className="h-4 w-4" />
-                            </div>
-                            <span className="font-medium">{providerInfo.name}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div>
-                            <div className="font-medium">{connection.name}</div>
-                            {connection.last_sync_error && (
-                              <div className={`text-xs mt-0.5 ${connection.status === 'disconnected' ? 'text-orange-600 dark:text-orange-400' : 'text-destructive'}`}>
-                                {connection.last_sync_error}
-                              </div>
-                            )}
-                            {connection.token_expires_at && (
-                              <div className="text-xs mt-0.5 text-muted-foreground">
-                                {formatTokenExpiry(connection.token_expires_at)}
-                              </div>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {getStatusBadge(connection.status)}
-                        </TableCell>
-                        <TableCell>
-                          {connection.account_count} account{connection.account_count !== 1 ? 's' : ''}
-                        </TableCell>
-                        <TableCell>
-                          <div className="text-sm">{formatDate(connection.last_sync_at)}</div>
-                        </TableCell>
-                        <TableCell>
-                          <span className="capitalize">{connection.sync_frequency}</span>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex gap-1 justify-end">
-                            {connection.provider === 'wealthsimple' && connection.status === 'disconnected' ? (
-                              <Button
-                                variant="default"
-                                size="sm"
-                                onClick={() => {
-                                  setSelectedProvider('wealthsimple');
-                                  setShowConnectDialog(true);
-                                }}
-                                className="bg-orange-600 hover:bg-orange-700 text-white"
-                              >
-                                <IconLink className="h-4 w-4 mr-1" />
-                                Login Again
-                              </Button>
-                            ) : null}
-                            {connection.status !== 'disconnected' && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleSync(connection.id)}
-                                disabled={connection.status === 'syncing' || syncingConnectionId === connection.id}
-                                className="h-8 w-8 p-0"
-                                title="Sync now"
-                              >
-                                {syncingConnectionId === connection.id ? (
-                                  <IconLoader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <IconRefresh className="h-4 w-4" />
-                                )}
-                              </Button>
-                            )}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleViewHistory(connection)}
-                              className="h-8 w-8 p-0"
-                              title="View sync history"
-                            >
-                              <IconHistory className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleEdit(connection)}
-                              className="h-8 w-8 p-0"
-                              title="Edit settings"
-                            >
-                              <IconEdit className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                setSelectedConnection(connection);
-                                setDeleteDialogOpen(true);
-                              }}
-                              className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                              title="Disconnect"
-                            >
-                              <IconTrash className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Data Management Section */}
-      <div className="space-y-4">
-        <div>
-          <h2 className="text-xl font-semibold">Data Management</h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            Export your data for backup or import from a previous export
-          </p>
-        </div>
-
-        <Separator />
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Export Card */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <IconDownload className="h-5 w-5" />
-                Export Data
-              </CardTitle>
-              <CardDescription>
-                Download all your financial data as a backup archive
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="text-sm text-muted-foreground">
-                <p className="mb-2">Export includes:</p>
-                <ul className="list-disc list-inside space-y-1">
-                  <li>All accounts and balances</li>
-                  <li>Holdings and transactions</li>
-                  <li>Mortgages, loans, and assets</li>
-                  <li>Recurring expenses and projections</li>
-                </ul>
-              </div>
-              <Button
-                onClick={handleExport}
-                disabled={exporting}
-                className="w-full"
-              >
-                {exporting ? (
-                  <>
-                    <IconLoader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Exporting...
-                  </>
-                ) : (
-                  <>
-                    <IconDownload className="mr-2 h-4 w-4" />
-                    Export Data
-                  </>
-                )}
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* Import Card */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <IconUpload className="h-5 w-5" />
-                Import Data
-              </CardTitle>
-              <CardDescription>
-                Restore data from a previous export archive
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Alert>
-                <IconAlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  Importing will merge with existing data. Review carefully after import.
-                </AlertDescription>
-              </Alert>
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileSelect}
-                accept=".zip"
-                className="hidden"
-              />
-              <Button
-                onClick={() => fileInputRef.current?.click()}
-                variant="outline"
-                className="w-full"
-              >
-                <IconUpload className="mr-2 h-4 w-4" />
-                Select Archive to Import
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-
-      {/* API Integrations Section */}
-      <div className="space-y-4">
-        <Separator />
-        <APIKeySection />
-      </div>
-
-      {/* Demo Mode Section */}
-      <div className="space-y-4">
-        <div>
-          <h2 className="text-xl font-semibold">Demo Mode</h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            {isDemoMode
-              ? 'You are currently exploring sample data'
-              : 'Try the app with sample data without affecting your real accounts'}
-          </p>
-        </div>
-
-        <Separator />
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {isDemoMode ? (
-            <>
-              {/* Reset Demo Data Card */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <IconRefresh className="h-5 w-5" />
-                    Reset Demo Data
-                  </CardTitle>
-                  <CardDescription>
-                    Restore demo data to its original state
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="text-sm text-muted-foreground">
-                    <p>This will:</p>
-                    <ul className="list-disc list-inside space-y-1 mt-2">
-                      <li>Delete all current demo data</li>
-                      <li>Restore original sample accounts</li>
-                      <li>Reset balances and transactions</li>
-                    </ul>
-                  </div>
-                  <Button
-                    onClick={() => resetDemoData()}
-                    disabled={demoLoading}
-                    variant="outline"
-                    className="w-full"
-                  >
-                    {demoLoading ? (
-                      <>
-                        <IconLoader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Resetting...
-                      </>
-                    ) : (
-                      <>
-                        <IconRefresh className="mr-2 h-4 w-4" />
-                        Reset Demo Data
-                      </>
-                    )}
-                  </Button>
-                </CardContent>
-              </Card>
-
-              {/* Exit Demo Mode Card */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <IconAlertCircle className="h-5 w-5" />
-                    Exit Demo Mode
-                  </CardTitle>
-                  <CardDescription>
-                    Switch back to your real accounts
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="text-sm text-muted-foreground">
-                    <p>This will:</p>
-                    <ul className="list-disc list-inside space-y-1 mt-2">
-                      <li>Switch to your real data</li>
-                      <li>Preserve demo data for later</li>
-                      <li>You can re-enter demo mode anytime</li>
-                    </ul>
-                  </div>
-                  <Button
-                    onClick={exitDemoMode}
-                    disabled={demoLoading}
-                    className="w-full"
-                  >
-                    Exit Demo Mode
-                  </Button>
-                </CardContent>
-              </Card>
-            </>
-          ) : (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <IconChartLine className="h-5 w-5" />
-                  Try Demo Mode
-                </CardTitle>
-                <CardDescription>
-                  Explore with sample financial data
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="text-sm text-muted-foreground">
-                  <p className="mb-2">Demo mode includes:</p>
-                  <ul className="list-disc list-inside space-y-1">
-                    <li>Sample Canadian accounts (TD, Wealthsimple, etc.)</li>
-                    <li>Investment portfolios with holdings</li>
-                    <li>Mortgage and loan examples</li>
-                    <li>Physical assets and recurring expenses</li>
-                    <li>Projection scenarios</li>
-                  </ul>
-                  <p className="mt-3 font-medium">
-                    Your real data will be preserved and can be accessed anytime.
-                  </p>
+            {/* Data Export Row */}
+            <TableRow>
+              <TableCell className="font-medium">
+                <div className="flex items-center gap-2">
+                  <IconDownload className="h-4 w-4 text-muted-foreground" />
+                  Export Data
                 </div>
-                <Button
-                  onClick={() => enterDemoMode()}
-                  disabled={demoLoading}
-                  className="w-full"
-                >
-                  {demoLoading ? (
-                    <>
-                      <IconLoader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Loading demo...
-                    </>
-                  ) : (
-                    <>
-                      <IconChartLine className="mr-2 h-4 w-4" />
-                      Enter Demo Mode
-                    </>
-                  )}
+              </TableCell>
+              <TableCell>
+                <span className="text-sm text-muted-foreground">Download all data as backup</span>
+              </TableCell>
+              <TableCell className="text-right">
+                <Button onClick={handleExport} disabled={exporting} size="sm" variant="outline">
+                  {exporting ? <IconLoader2 className="mr-1 h-4 w-4 animate-spin" /> : <IconDownload className="mr-1 h-4 w-4" />}
+                  {exporting ? 'Exporting...' : 'Export'}
                 </Button>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      </div>
+              </TableCell>
+            </TableRow>
+
+            {/* Data Import Row */}
+            <TableRow>
+              <TableCell className="font-medium">
+                <div className="flex items-center gap-2">
+                  <IconUpload className="h-4 w-4 text-muted-foreground" />
+                  Import Data
+                </div>
+              </TableCell>
+              <TableCell>
+                <span className="text-sm text-muted-foreground">Restore from backup (merges with existing)</span>
+              </TableCell>
+              <TableCell className="text-right">
+                <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept=".zip" className="hidden" />
+                <Button onClick={() => fileInputRef.current?.click()} size="sm" variant="outline">
+                  <IconUpload className="mr-1 h-4 w-4" />
+                  Import
+                </Button>
+              </TableCell>
+            </TableRow>
+
+            {/* API Keys Row */}
+            <TableRow>
+              <TableCell className="font-medium">
+                <div className="flex items-center gap-2">
+                  <IconKey className="h-4 w-4 text-muted-foreground" />
+                  API Keys
+                </div>
+              </TableCell>
+              <TableCell>
+                <APIKeySection />
+              </TableCell>
+              <TableCell></TableCell>
+            </TableRow>
+
+            {/* Demo Mode Row */}
+            <TableRow>
+              <TableCell className="font-medium">
+                <div className="flex items-center gap-2">
+                  <IconChartLine className="h-4 w-4 text-muted-foreground" />
+                  Demo Mode
+                </div>
+              </TableCell>
+              <TableCell>
+                {isDemoMode ? (
+                  <Badge variant="secondary">Active</Badge>
+                ) : (
+                  <span className="text-sm text-muted-foreground">Try with sample data</span>
+                )}
+              </TableCell>
+              <TableCell className="text-right">
+                {isDemoMode ? (
+                  <div className="flex gap-2 justify-end">
+                    <Button onClick={() => resetDemoData()} disabled={demoLoading} size="sm" variant="outline">
+                      <IconRefresh className="mr-1 h-4 w-4" />
+                      Reset
+                    </Button>
+                    <Button onClick={exitDemoMode} disabled={demoLoading} size="sm" variant="outline">
+                      Exit Demo
+                    </Button>
+                  </div>
+                ) : (
+                  <Button onClick={() => enterDemoMode()} disabled={demoLoading} size="sm" variant="outline">
+                    {demoLoading ? 'Loading...' : 'Enter Demo'}
+                  </Button>
+                )}
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </Card>
 
       <WealthsimpleConnectDialog
         open={showConnectDialog && selectedProvider === 'wealthsimple'}
