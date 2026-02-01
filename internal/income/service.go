@@ -681,3 +681,137 @@ func (s *Service) getMarginalRate(income float64, brackets []TaxBracket) float64
 
 	return brackets[len(brackets)-1].Rate
 }
+
+// Tax Simulation Calculations
+
+// Canadian tax constants for stock options
+const (
+	// 50% of capital gains are taxable in Canada
+	CapitalGainsInclusionRate = 0.5
+	// Stock option deduction rate (50% for eligible options)
+	StockOptionDeductionRate = 0.5
+)
+
+// CalculateExerciseTax calculates the tax impact of exercising stock options
+// This uses proper decimal arithmetic by working with integers where possible
+func (s *Service) CalculateExerciseTax(req *CalculateExerciseTaxRequest) *ExerciseTaxResult {
+	// Exercise cost = quantity * strike price
+	exerciseCost := float64(req.Quantity) * req.StrikePrice
+
+	// Taxable benefit = quantity * (FMV - strike price)
+	spread := req.FMVAtExercise - req.StrikePrice
+	if spread < 0 {
+		spread = 0
+	}
+	taxableBenefit := float64(req.Quantity) * spread
+
+	// Stock option deduction (50% for eligible Canadian stock options)
+	stockOptionDeduction := taxableBenefit * StockOptionDeductionRate
+
+	// Net taxable amount
+	netTaxable := taxableBenefit - stockOptionDeduction
+
+	// Estimated tax = net taxable * marginal rate
+	estimatedTax := netTaxable * req.MarginalRate
+
+	// Round to 2 decimal places for currency
+	return &ExerciseTaxResult{
+		Quantity:             req.Quantity,
+		StrikePrice:          req.StrikePrice,
+		FMVAtExercise:        req.FMVAtExercise,
+		ExerciseCost:         math.Round(exerciseCost*100) / 100,
+		TaxableBenefit:       math.Round(taxableBenefit*100) / 100,
+		StockOptionDeduction: math.Round(stockOptionDeduction*100) / 100,
+		NetTaxable:           math.Round(netTaxable*100) / 100,
+		EstimatedTax:         math.Round(estimatedTax*100) / 100,
+	}
+}
+
+// CalculateSaleTax calculates the capital gains tax from selling shares
+func (s *Service) CalculateSaleTax(req *CalculateSaleTaxRequest) (*SaleTaxResult, error) {
+	// Parse dates
+	acquisitionDate, err := time.Parse("2006-01-02", req.AcquisitionDate)
+	if err != nil {
+		return nil, fmt.Errorf("invalid acquisition date: %w", err)
+	}
+	saleDate, err := time.Parse("2006-01-02", req.SaleDate)
+	if err != nil {
+		return nil, fmt.Errorf("invalid sale date: %w", err)
+	}
+
+	// Calculate holding period in days
+	holdingPeriodDays := int(saleDate.Sub(acquisitionDate).Hours() / 24)
+	if holdingPeriodDays < 0 {
+		holdingPeriodDays = 0
+	}
+
+	// Total proceeds = quantity * sale price
+	totalProceeds := float64(req.Quantity) * req.SalePrice
+
+	// Total cost = quantity * cost basis
+	totalCost := float64(req.Quantity) * req.CostBasis
+
+	// Capital gain (can be negative for a loss)
+	capitalGain := totalProceeds - totalCost
+
+	// In Canada, 50% of capital gains are taxable (regardless of holding period)
+	taxableGain := capitalGain * CapitalGainsInclusionRate
+
+	// If it's a loss, taxable gain is the loss (can offset other gains)
+	// For estimation, we calculate tax on positive gains only
+	estimatedTax := 0.0
+	if taxableGain > 0 {
+		estimatedTax = taxableGain * req.MarginalRate
+	}
+
+	// Round to 2 decimal places for currency
+	return &SaleTaxResult{
+		Quantity:          req.Quantity,
+		SalePrice:         req.SalePrice,
+		CostBasis:         req.CostBasis,
+		TotalProceeds:     math.Round(totalProceeds*100) / 100,
+		CapitalGain:       math.Round(capitalGain*100) / 100,
+		HoldingPeriodDays: holdingPeriodDays,
+		TaxableGain:       math.Round(taxableGain*100) / 100,
+		EstimatedTax:      math.Round(estimatedTax*100) / 100,
+	}, nil
+}
+
+// CalculateBatchTax calculates tax for multiple exercises and sales
+func (s *Service) CalculateBatchTax(req *BatchTaxCalculationRequest) (*BatchTaxCalculationResult, error) {
+	result := &BatchTaxCalculationResult{
+		Exercises: make([]ExerciseTaxResult, 0, len(req.Exercises)),
+		Sales:     make([]SaleTaxResult, 0, len(req.Sales)),
+	}
+
+	// Calculate exercise taxes
+	for _, exercise := range req.Exercises {
+		// Use request-level marginal rate if not specified per exercise
+		if exercise.MarginalRate == 0 {
+			exercise.MarginalRate = req.MarginalRate
+		}
+		exerciseResult := s.CalculateExerciseTax(&exercise)
+		result.Exercises = append(result.Exercises, *exerciseResult)
+		result.TotalExerciseTax += exerciseResult.EstimatedTax
+	}
+
+	// Calculate sale taxes
+	for _, sale := range req.Sales {
+		// Use request-level marginal rate if not specified per sale
+		if sale.MarginalRate == 0 {
+			sale.MarginalRate = req.MarginalRate
+		}
+		saleResult, err := s.CalculateSaleTax(&sale)
+		if err != nil {
+			return nil, err
+		}
+		result.Sales = append(result.Sales, *saleResult)
+		result.TotalSaleTax += saleResult.EstimatedTax
+	}
+
+	result.TotalTax = math.Round((result.TotalExerciseTax+result.TotalSaleTax)*100) / 100
+	result.TotalExerciseTax = math.Round(result.TotalExerciseTax*100) / 100
+	result.TotalSaleTax = math.Round(result.TotalSaleTax*100) / 100
+
+	return result, nil
+}

@@ -882,6 +882,59 @@ export interface SaveTaxConfigRequest {
   field_sources?: FieldSources;
 }
 
+// Tax Simulator Types
+export interface CalculateExerciseTaxRequest {
+  quantity: number;
+  strike_price: number;
+  fmv_at_exercise: number;
+  marginal_rate: number;
+}
+
+export interface ExerciseTaxResult {
+  quantity: number;
+  strike_price: number;
+  fmv_at_exercise: number;
+  exercise_cost: number;
+  taxable_benefit: number;
+  stock_option_deduction: number;
+  net_taxable: number;
+  estimated_tax: number;
+}
+
+export interface CalculateSaleTaxRequest {
+  quantity: number;
+  sale_price: number;
+  cost_basis: number;
+  acquisition_date: string;
+  sale_date: string;
+  marginal_rate: number;
+}
+
+export interface SaleTaxResult {
+  quantity: number;
+  sale_price: number;
+  cost_basis: number;
+  total_proceeds: number;
+  capital_gain: number;
+  holding_period_days: number;
+  taxable_gain: number;
+  estimated_tax: number;
+}
+
+export interface BatchTaxCalculationRequest {
+  exercises: CalculateExerciseTaxRequest[];
+  sales: CalculateSaleTaxRequest[];
+  marginal_rate: number;
+}
+
+export interface BatchTaxCalculationResult {
+  exercises: ExerciseTaxResult[];
+  sales: SaleTaxResult[];
+  total_exercise_tax: number;
+  total_sale_tax: number;
+  total_tax: number;
+}
+
 // API Keys Types
 export interface APIKeyStatus {
   provider: string;
@@ -1559,6 +1612,29 @@ class ApiClient {
 
   async saveIncomeTaxConfig(data: SaveTaxConfigRequest): Promise<TaxConfiguration> {
     return this.request('/income/tax-config', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  // Tax Simulator endpoints
+
+  async calculateExerciseTax(data: CalculateExerciseTaxRequest): Promise<ExerciseTaxResult> {
+    return this.request('/income/tax-simulator/exercise', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async calculateSaleTax(data: CalculateSaleTaxRequest): Promise<SaleTaxResult> {
+    return this.request('/income/tax-simulator/sale', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async calculateBatchTax(data: BatchTaxCalculationRequest): Promise<BatchTaxCalculationResult> {
+    return this.request('/income/tax-simulator/batch', {
       method: 'POST',
       body: JSON.stringify(data),
     });

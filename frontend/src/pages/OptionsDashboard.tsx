@@ -24,6 +24,7 @@ import {
   IconCalendar,
   IconReceipt,
   IconCoin,
+  IconCalculator,
 } from '@tabler/icons-react';
 import { useAccount } from '@/hooks/use-accounts';
 import { useExchangeRates } from '@/hooks/use-exchange-rates';
@@ -42,12 +43,13 @@ import { FMVForm } from '@/components/options/FMVForm';
 import { ExerciseForm } from '@/components/options/ExerciseForm';
 import { SaleForm } from '@/components/options/SaleForm';
 import { VestingScheduleForm } from '@/components/options/VestingScheduleForm';
-import { VestingTimeline } from '@/components/options/VestingTimeline';
+import { VestingScheduleChart } from '@/components/options/VestingScheduleChart';
 import { OptionsValueChart } from '@/components/options/OptionsValueChart';
 import { TaxSummaryCard } from '@/components/options/TaxSummaryCard';
 import { GrantsTable } from '@/components/options/GrantsTable';
 import { SalesTable } from '@/components/options/SalesTable';
 import { ExercisesTable } from '@/components/options/ExercisesTable';
+import { TaxSimulator } from '@/components/options/tax-simulator';
 
 export function OptionsDashboard() {
   const { accountId } = useParams<{ accountId: string }>();
@@ -55,7 +57,7 @@ export function OptionsDashboard() {
   const { data: account } = useAccount(accountId || '');
   const { data: summary, isLoading: summaryLoading, isError: summaryError } = useOptionsSummary(accountId || '');
   const { data: upcomingEvents } = useUpcomingVestingEvents(accountId || '', 365);
-  const { data: taxSummary } = useTaxSummary(accountId || '', new Date().getFullYear());
+  const { data: taxSummary, isLoading: taxLoading, isError: taxError } = useTaxSummary(accountId || '', new Date().getFullYear());
   const { data: salesData } = useSales(accountId || '');
   const { data: exercisesData } = useAllExercises(accountId || '');
   const { data: exchangeRates } = useExchangeRates();
@@ -420,6 +422,10 @@ export function OptionsDashboard() {
             <IconCoin className="h-4 w-4" />
             Tax Planning
           </TabsTrigger>
+          <TabsTrigger value="simulator" className="flex items-center gap-2">
+            <IconCalculator className="h-4 w-4" />
+            Tax Simulator
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="grants" className="space-y-4">
@@ -452,8 +458,9 @@ export function OptionsDashboard() {
         </TabsContent>
 
         <TabsContent value="vesting" className="space-y-4">
-          <VestingTimeline
+          <VestingScheduleChart
             events={upcomingEvents?.events || []}
+            grants={summary.grants}
           />
         </TabsContent>
 
@@ -515,11 +522,77 @@ export function OptionsDashboard() {
         </TabsContent>
 
         <TabsContent value="tax" className="space-y-4">
-          {taxSummary && (
-            <TaxSummaryCard
-              summary={taxSummary}
-            />
-          )}
+          {(() => {
+            // Check if tax summary has meaningful data
+            const hasTaxData = taxSummary && (
+              taxSummary.total_taxable_benefit > 0 ||
+              taxSummary.total_capital_gains !== 0 ||
+              (taxSummary.by_currency && Object.keys(taxSummary.by_currency).length > 0)
+            );
+
+            if (taxLoading) {
+              return (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Tax Planning</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-center py-8 text-muted-foreground">
+                      Loading tax data...
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            }
+
+            if (taxError) {
+              return (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Tax Planning</CardTitle>
+                    <CardDescription>
+                      Tax implications from exercises and sales
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-center py-8 text-muted-foreground">
+                      <p>Unable to load tax data.</p>
+                      <p className="text-sm mt-2">
+                        Please try refreshing the page.
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            }
+
+            if (hasTaxData) {
+              return <TaxSummaryCard summary={taxSummary!} />;
+            }
+
+            return (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Tax Planning</CardTitle>
+                  <CardDescription>
+                    Tax implications from exercises and sales
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-center py-8 text-muted-foreground">
+                    <p>No tax data available for {new Date().getFullYear()}.</p>
+                    <p className="text-sm mt-2">
+                      Record option exercises or share sales to see tax planning information.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })()}
+        </TabsContent>
+
+        <TabsContent value="simulator" className="space-y-4">
+          <TaxSimulator grants={summary.grants} />
         </TabsContent>
       </Tabs>
 
