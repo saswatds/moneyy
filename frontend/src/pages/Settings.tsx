@@ -112,7 +112,7 @@ const AVAILABLE_PROVIDERS: Provider[] = [
 ];
 
 export function Settings() {
-  const { isDemoMode, enterDemoMode, exitDemoMode, resetDemoData, isLoading: demoLoading } = useDemoMode();
+  const { isDemoMode, enterDemoMode, exitDemoMode, seedDemoData, clearDemoData, isLoading: demoLoading } = useDemoMode();
   const [connections, setConnections] = useState<Connection[]>([]);
   const [loading, setLoading] = useState(true);
   const [showConnectDialog, setShowConnectDialog] = useState(false);
@@ -584,12 +584,14 @@ export function Settings() {
               <TableCell className="text-right">
                 {isDemoMode ? (
                   <div className="flex gap-2 justify-end">
-                    <Button onClick={() => resetDemoData()} disabled={demoLoading} size="sm" variant="outline">
-                      <IconRefresh className="mr-1 h-4 w-4" />
-                      Reset
+                    <Button onClick={() => seedDemoData()} disabled={demoLoading} size="sm" variant="outline">
+                      Seed
+                    </Button>
+                    <Button onClick={() => clearDemoData()} disabled={demoLoading} size="sm" variant="outline">
+                      Clear
                     </Button>
                     <Button onClick={exitDemoMode} disabled={demoLoading} size="sm" variant="outline">
-                      Exit Demo
+                      Exit
                     </Button>
                   </div>
                 ) : (

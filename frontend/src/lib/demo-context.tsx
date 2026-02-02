@@ -1,13 +1,15 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { apiClient } from './api-client';
 
 interface DemoModeContextType {
   isDemoMode: boolean;
   enterDemoMode: () => Promise<void>;
   exitDemoMode: () => void;
-  resetDemoData: () => Promise<void>;
+  seedDemoData: () => Promise<void>;
+  clearDemoData: () => Promise<void>;
   isLoading: boolean;
 }
 
@@ -18,10 +20,17 @@ export function DemoModeProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const queryClient = useQueryClient();
 
-  // Check demo mode status on mount
+  // Check demo mode status on mount and show pending toast
   useEffect(() => {
     const demoMode = localStorage.getItem('demo_mode');
     setIsDemoMode(demoMode === 'true');
+
+    // Show toast from previous page load
+    const pendingToast = sessionStorage.getItem('demo_toast');
+    if (pendingToast) {
+      sessionStorage.removeItem('demo_toast');
+      toast.success(pendingToast);
+    }
   }, []);
 
   const enterDemoMode = async () => {
@@ -35,6 +44,9 @@ export function DemoModeProvider({ children }: { children: ReactNode }) {
       localStorage.setItem('demo_mode', 'true');
       setIsDemoMode(true);
 
+      // Store toast message for after reload
+      sessionStorage.setItem('demo_toast', 'Entered demo mode');
+
       // Invalidate all queries to refresh data
       queryClient.invalidateQueries();
 
@@ -42,6 +54,7 @@ export function DemoModeProvider({ children }: { children: ReactNode }) {
       window.location.reload();
     } catch (error) {
       console.error('Failed to enter demo mode:', error);
+      toast.error('Failed to enter demo mode');
       throw error;
     } finally {
       setIsLoading(false);
@@ -60,20 +73,40 @@ export function DemoModeProvider({ children }: { children: ReactNode }) {
     window.location.reload();
   };
 
-  const resetDemoData = async () => {
+  const seedDemoData = async () => {
     try {
       setIsLoading(true);
 
-      // Reset demo data
-      await apiClient.resetDemoData();
+      // Seed demo data
+      await apiClient.seedDemoData();
 
       // Invalidate all queries to refresh data
-      queryClient.invalidateQueries();
+      await queryClient.invalidateQueries();
 
-      // Reload page to ensure fresh state
-      window.location.reload();
+      toast.success('Demo data seeded');
     } catch (error) {
-      console.error('Failed to reset demo data:', error);
+      console.error('Failed to seed demo data:', error);
+      toast.error('Failed to seed demo data');
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const clearDemoData = async () => {
+    try {
+      setIsLoading(true);
+
+      // Clear demo data
+      await apiClient.clearDemoData();
+
+      // Invalidate all queries to refresh data
+      await queryClient.invalidateQueries();
+
+      toast.success('Demo data cleared');
+    } catch (error) {
+      console.error('Failed to clear demo data:', error);
+      toast.error('Failed to clear demo data');
       throw error;
     } finally {
       setIsLoading(false);
@@ -86,7 +119,8 @@ export function DemoModeProvider({ children }: { children: ReactNode }) {
         isDemoMode,
         enterDemoMode,
         exitDemoMode,
-        resetDemoData,
+        seedDemoData,
+        clearDemoData,
         isLoading,
       }}
     >

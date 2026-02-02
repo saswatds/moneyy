@@ -1415,6 +1415,12 @@ class ApiClient {
     });
   }
 
+  async clearDemoData(): Promise<{ success: boolean; message: string }> {
+    return this.request('/demo/clear', {
+      method: 'POST',
+    });
+  }
+
   async getDemoStatus(): Promise<{ has_data: boolean }> {
     return this.request('/demo/status');
   }

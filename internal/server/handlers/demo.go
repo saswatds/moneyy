@@ -27,6 +27,7 @@ func NewDemoHandler(demoService *data.DemoService) *DemoHandler {
 func (h *DemoHandler) RegisterRoutes(r chi.Router) {
 	r.Route("/demo", func(r chi.Router) {
 		r.Post("/seed", h.HandleSeed)
+		r.Post("/clear", h.HandleClear)
 		r.Post("/reset", h.HandleReset)
 		r.Get("/status", h.HandleStatus)
 	})
@@ -54,6 +55,31 @@ func (h *DemoHandler) HandleSeed(w http.ResponseWriter, r *http.Request) {
 	server.RespondJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,
 		"message": "Demo data seeded successfully",
+	})
+}
+
+// HandleClear handles demo data clear requests (deletes without re-seeding)
+func (h *DemoHandler) HandleClear(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	// Verify user is authenticated
+	userID := auth.GetUserID(ctx)
+	if userID == "" {
+		server.RespondError(w, http.StatusUnauthorized, fmt.Errorf("user not authenticated"))
+		return
+	}
+
+	// Always clear demo data for demo-user
+	const demoUserID = "demo-user"
+	err := h.demoService.ClearDemoData(ctx, demoUserID)
+	if err != nil {
+		server.RespondError(w, http.StatusInternalServerError, fmt.Errorf("failed to clear demo data: %w", err))
+		return
+	}
+
+	server.RespondJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"message": "Demo data cleared successfully",
 	})
 }
 

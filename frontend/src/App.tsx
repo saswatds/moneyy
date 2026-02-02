@@ -3,6 +3,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/query-client';
 import { AuthProvider, useAuth } from './lib/auth-context';
 import { DemoModeProvider } from './lib/demo-context';
+import { Toaster } from './components/ui/sonner';
 import { DashboardLayout } from './components/layout/DashboardLayout';
 import { Accounts } from './pages/Accounts';
 import { AccountNew } from './pages/AccountNew';
@@ -81,6 +82,7 @@ function App() {
                 <Route path="settings" element={<Settings />} />
               </Route>
             </Routes>
+            <Toaster />
           </BrowserRouter>
         </DemoModeProvider>
       </AuthProvider>

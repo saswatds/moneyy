@@ -118,17 +118,12 @@ func (s *DemoService) SeedDemoData(ctx context.Context, userID string) error {
 	return nil
 }
 
-// ResetDemoData deletes all data for the user and re-imports demo data
-func (s *DemoService) ResetDemoData(ctx context.Context, userID string) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("failed to start transaction: %w", err)
-	}
-	defer tx.Rollback()
-
-	// Delete by user_id OR by demo ID pattern (to clean up orphaned data from wrong user)
-	// Demo IDs start with "demo-acc-", "demo-hold-", "demo-grant-", etc.
-	deletes := []struct {
+// demoDeleteQueries returns the list of delete queries for clearing demo data
+func demoDeleteQueries() []struct {
+	name  string
+	query string
+} {
+	return []struct {
 		name  string
 		query string
 	}{
@@ -155,8 +150,39 @@ func (s *DemoService) ResetDemoData(ctx context.Context, userID string) error {
 		{"projection_scenarios", "DELETE FROM projection_scenarios WHERE user_id = $1 OR id LIKE 'demo-scenario-%'"},
 		{"recurring_expenses", "DELETE FROM recurring_expenses WHERE user_id = $1 OR id LIKE 'demo-expense-%'"},
 	}
+}
 
-	for _, d := range deletes {
+// ClearDemoData deletes all demo data for the user without re-seeding
+func (s *DemoService) ClearDemoData(ctx context.Context, userID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	for _, d := range demoDeleteQueries() {
+		_, err := tx.ExecContext(ctx, d.query, userID)
+		if err != nil {
+			return fmt.Errorf("delete %s failed: %w", d.name, err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit deletes: %w", err)
+	}
+
+	return nil
+}
+
+// ResetDemoData deletes all data for the user and re-imports demo data
+func (s *DemoService) ResetDemoData(ctx context.Context, userID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	for _, d := range demoDeleteQueries() {
 		_, err := tx.ExecContext(ctx, d.query, userID)
 		if err != nil {
 			return fmt.Errorf("delete %s failed: %w", d.name, err)
