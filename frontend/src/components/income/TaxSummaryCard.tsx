@@ -6,17 +6,11 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { Currency } from '@/components/ui/currency';
 
 interface TaxSummaryCardProps {
   summary: AnnualIncomeSummary;
 }
-
-const formatNumber = (amount: number) => {
-  return new Intl.NumberFormat('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
-};
 
 const formatPercent = (rate: number) => {
   return (rate * 100).toFixed(2) + '%';
@@ -39,33 +33,33 @@ export function TaxSummaryCard({ summary }: TaxSummaryCardProps) {
             <div className="grid gap-2">
               <div className="flex justify-between">
                 <span className="text-sm">Employment</span>
-                <span className="text-sm font-medium">${formatNumber(summary.employment_income)}</span>
+                <Currency amount={summary.employment_income} className="text-sm font-medium" />
               </div>
               <div className="flex justify-between">
                 <span className="text-sm">Investment</span>
-                <span className="text-sm font-medium">${formatNumber(summary.investment_income)}</span>
+                <Currency amount={summary.investment_income} className="text-sm font-medium" />
               </div>
               <div className="flex justify-between">
                 <span className="text-sm">Rental</span>
-                <span className="text-sm font-medium">${formatNumber(summary.rental_income)}</span>
+                <Currency amount={summary.rental_income} className="text-sm font-medium" />
               </div>
               <div className="flex justify-between">
                 <span className="text-sm">Business</span>
-                <span className="text-sm font-medium">${formatNumber(summary.business_income)}</span>
+                <Currency amount={summary.business_income} className="text-sm font-medium" />
               </div>
               <div className="flex justify-between">
                 <span className="text-sm">Other</span>
-                <span className="text-sm font-medium">${formatNumber(summary.other_income)}</span>
+                <Currency amount={summary.other_income} className="text-sm font-medium" />
               </div>
               {summary.stock_options_benefit > 0 && (
                 <div className="flex justify-between">
                   <span className="text-sm">Stock Options Benefit</span>
-                  <span className="text-sm font-medium">${formatNumber(summary.stock_options_benefit)}</span>
+                  <Currency amount={summary.stock_options_benefit} className="text-sm font-medium" />
                 </div>
               )}
               <div className="border-t pt-2 flex justify-between font-medium">
                 <span>Total Taxable Income</span>
-                <span>${formatNumber(summary.total_taxable_income)}</span>
+                <Currency amount={summary.total_taxable_income} />
               </div>
             </div>
           </div>
@@ -76,23 +70,23 @@ export function TaxSummaryCard({ summary }: TaxSummaryCardProps) {
             <div className="grid gap-2">
               <div className="flex justify-between">
                 <span className="text-sm">Federal Tax</span>
-                <span className="text-sm font-medium text-red-600">-${formatNumber(summary.federal_tax)}</span>
+                <Currency amount={summary.federal_tax} negative className="text-sm font-medium text-negative" />
               </div>
               <div className="flex justify-between">
                 <span className="text-sm">Provincial Tax</span>
-                <span className="text-sm font-medium text-red-600">-${formatNumber(summary.provincial_tax)}</span>
+                <Currency amount={summary.provincial_tax} negative className="text-sm font-medium text-negative" />
               </div>
               <div className="flex justify-between">
                 <span className="text-sm">CPP Contribution</span>
-                <span className="text-sm font-medium text-red-600">-${formatNumber(summary.cpp_contribution)}</span>
+                <Currency amount={summary.cpp_contribution} negative className="text-sm font-medium text-negative" />
               </div>
               <div className="flex justify-between">
                 <span className="text-sm">EI Contribution</span>
-                <span className="text-sm font-medium text-red-600">-${formatNumber(summary.ei_contribution)}</span>
+                <Currency amount={summary.ei_contribution} negative className="text-sm font-medium text-negative" />
               </div>
               <div className="border-t pt-2 flex justify-between font-medium">
                 <span>Total Tax</span>
-                <span className="text-red-600">-${formatNumber(summary.total_tax)}</span>
+                <Currency amount={summary.total_tax} negative className="text-negative" />
               </div>
             </div>
           </div>
@@ -101,7 +95,7 @@ export function TaxSummaryCard({ summary }: TaxSummaryCardProps) {
           <div className="space-y-2 border-t pt-4">
             <div className="flex justify-between text-lg font-bold">
               <span>Net Income</span>
-              <span className="text-green-600">${formatNumber(summary.net_income)}</span>
+              <Currency amount={summary.net_income} className="text-positive" />
             </div>
             <div className="grid grid-cols-2 gap-4 pt-2">
               <div className="text-center p-3 bg-muted rounded-lg">

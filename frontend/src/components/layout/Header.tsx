@@ -16,8 +16,8 @@ export function Header() {
   };
 
   return (
-    <header className={isDemoMode ? "border-b border-amber-500/20 bg-amber-500/10" : "border-b border-border bg-card"}>
-      <div className="flex h-16 items-center gap-4 px-4 sm:px-6 lg:px-8">
+    <header className={isDemoMode ? "border-b border-amber-500/20 bg-amber-500/10 glass" : "border-b border-border bg-card/80 glass"}>
+      <div className="flex h-12 items-center gap-3 px-4">
         <SidebarTrigger className="-ml-1" />
         <div className="flex flex-1 items-center justify-between">
           {isDemoMode ? (

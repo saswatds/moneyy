@@ -10,19 +10,13 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { IconEdit, IconTrash } from '@tabler/icons-react';
+import { Currency } from '@/components/ui/currency';
 
 interface IncomeTableProps {
   records: IncomeRecord[];
   onEdit: (income: IncomeRecord) => void;
   onDelete: (income: IncomeRecord) => void;
 }
-
-const formatNumber = (amount: number) => {
-  return new Intl.NumberFormat('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
-};
 
 const getCategoryBadgeColor = (category: string) => {
   const colors: Record<string, string> = {
@@ -112,16 +106,16 @@ export function IncomeTable({ records, onEdit, onDelete }: IncomeTableProps) {
             </TableCell>
             <TableCell>{getFrequencyLabel(income.frequency)}</TableCell>
             <TableCell className="text-right">
-              <div>{formatNumber(income.amount)}</div>
+              <div><Currency amount={income.amount} /></div>
               <div className="text-xs text-muted-foreground">{income.currency}</div>
             </TableCell>
             <TableCell className="text-right">
-              <div>{formatNumber(calculateAnnualAmount(income.amount, income.frequency))}</div>
+              <div><Currency amount={calculateAnnualAmount(income.amount, income.frequency)} /></div>
               <div className="text-xs text-muted-foreground">{income.currency}</div>
             </TableCell>
             <TableCell className="text-center">
               {income.is_taxable ? (
-                <Badge variant="default" className="bg-green-600">Yes</Badge>
+                <Badge variant="default" className="bg-positive">Yes</Badge>
               ) : (
                 <Badge variant="secondary">No</Badge>
               )}

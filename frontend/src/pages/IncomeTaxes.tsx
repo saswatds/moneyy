@@ -29,24 +29,7 @@ import {
   YearSelector,
   TaxConfigurationCard,
 } from '@/components/income';
-
-const formatNumber = (amount: number) => {
-  return new Intl.NumberFormat('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
-};
-
-const formatNumberWithSmallCents = (amount: number) => {
-  const formatted = formatNumber(amount);
-  const [dollars, cents] = formatted.split('.');
-  return (
-    <>
-      {dollars}
-      <span className="text-xl">.{cents}</span>
-    </>
-  );
-};
+import { Currency } from '@/components/ui/currency';
 
 const INCOME_CATEGORIES: { value: IncomeCategory | 'all'; label: string }[] = [
   { value: 'all', label: 'All Categories' },
@@ -96,7 +79,7 @@ export function IncomeTaxes() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -126,9 +109,11 @@ export function IncomeTaxes() {
             <CardHeader className="pb-3">
               <CardDescription>Gross Income</CardDescription>
               <div className="mt-2">
-                <div className="text-3xl font-bold tabular-nums">
-                  ${formatNumberWithSmallCents(summary.total_gross_income + summary.stock_options_benefit)}
-                </div>
+                <Currency
+                  amount={summary.total_gross_income + summary.stock_options_benefit}
+                  smallCents
+                  className="text-3xl font-bold tabular-nums"
+                />
                 <div className="text-sm text-muted-foreground mt-1">CAD</div>
               </div>
             </CardHeader>
@@ -138,9 +123,11 @@ export function IncomeTaxes() {
             <CardHeader className="pb-3">
               <CardDescription>Total Tax</CardDescription>
               <div className="mt-2">
-                <div className="text-3xl font-bold tabular-nums text-red-600">
-                  ${formatNumberWithSmallCents(summary.total_tax)}
-                </div>
+                <Currency
+                  amount={summary.total_tax}
+                  smallCents
+                  className="text-3xl font-bold tabular-nums text-negative"
+                />
                 <div className="text-sm text-muted-foreground mt-1">
                   {(summary.effective_tax_rate * 100).toFixed(1)}% effective rate
                 </div>
@@ -152,9 +139,11 @@ export function IncomeTaxes() {
             <CardHeader className="pb-3">
               <CardDescription>Net Income</CardDescription>
               <div className="mt-2">
-                <div className="text-3xl font-bold tabular-nums text-green-600">
-                  ${formatNumberWithSmallCents(summary.net_income)}
-                </div>
+                <Currency
+                  amount={summary.net_income}
+                  smallCents
+                  className="text-3xl font-bold tabular-nums text-positive"
+                />
                 <div className="text-sm text-muted-foreground mt-1">After all taxes</div>
               </div>
             </CardHeader>
@@ -176,12 +165,17 @@ export function IncomeTaxes() {
         </TabsList>
 
         {/* Income Tab */}
-        <TabsContent value="income" className="space-y-6 mt-6">
-          {/* Tax Breakdown and Income Chart */}
+        <TabsContent value="income" className="space-y-3 mt-6">
+          {/* Tax Breakdown and Charts */}
           {summary && (
-            <div className="grid gap-6 md:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-2">
               <TaxSummaryCard summary={summary} />
-              <IncomeBreakdownChart summary={summary} />
+              <div className="space-y-4">
+                <IncomeBreakdownChart summary={summary} />
+                {comparison && comparison.years.length > 0 && (
+                  <YearComparisonChart years={comparison.years} />
+                )}
+              </div>
             </div>
           )}
 
@@ -221,10 +215,6 @@ export function IncomeTaxes() {
             </CardContent>
           </Card>
 
-          {/* Multi-Year Comparison */}
-          {comparison && comparison.years.length > 0 && (
-            <YearComparisonChart years={comparison.years} />
-          )}
         </TabsContent>
 
         {/* Taxes Tab */}

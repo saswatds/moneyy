@@ -109,12 +109,12 @@ export function PasskeyLogin() {
   // Show loading while checking status
   if (isCheckingStatus) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center app-background">
         <Card className="w-full max-w-md">
           <CardContent className="pt-6">
             <div className="text-center space-y-4">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto"></div>
-              <p className="text-gray-600">Checking authentication status...</p>
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+              <p className="text-muted-foreground">Checking authentication status...</p>
             </div>
           </CardContent>
         </Card>
@@ -125,7 +125,7 @@ export function PasskeyLogin() {
   // Redirect to registration if needed
   if (needsSetup) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center app-background">
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardTitle>No Passkey Found</CardTitle>
@@ -149,7 +149,7 @@ export function PasskeyLogin() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+    <div className="min-h-screen flex items-center justify-center app-background">
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>Sign In</CardTitle>
@@ -173,7 +173,7 @@ export function PasskeyLogin() {
             {isLoading ? 'Signing In...' : 'Sign In with Passkey'}
           </Button>
 
-          <p className="text-sm text-gray-500 text-center">
+          <p className="text-sm text-muted-foreground text-center">
             Lost your passkey? Contact your administrator to reset your account.
           </p>
         </CardContent>

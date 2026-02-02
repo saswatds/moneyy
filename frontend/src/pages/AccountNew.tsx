@@ -93,7 +93,7 @@ export function AccountNew() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-4">
       <div className="flex items-center gap-4">
         <Button
           variant="ghost"
@@ -119,7 +119,7 @@ export function AccountNew() {
         </CardHeader>
         <CardContent>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
               <FormField
                 control={form.control}
                 name="name"

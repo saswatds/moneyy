@@ -19,6 +19,7 @@ import {
 import { IconArrowLeft, IconPlus, IconRefresh } from '@tabler/icons-react';
 import { DepreciationChart } from '@/components/DepreciationChart';
 import { DepreciationEntryForm } from '@/components/DepreciationEntryForm';
+import { Currency } from '@/components/ui/currency';
 import {
   useAssetDetails,
   useAssetValuation,
@@ -60,13 +61,6 @@ export function AssetDashboard() {
 
   const [depreciationDialogOpen, setDepreciationDialogOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: account?.currency || 'CAD',
-    }).format(amount);
-  };
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -118,7 +112,7 @@ export function AssetDashboard() {
   const typeData = details.type_specific_data || {};
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Button
@@ -173,7 +167,7 @@ export function AssetDashboard() {
           <CardHeader className="pb-3">
             <CardDescription>Current Value</CardDescription>
             <CardTitle className="text-2xl text-green-600 dark:text-green-400">
-              {formatCurrency(valuation.current_value)}
+              <Currency amount={valuation.current_value} />
             </CardTitle>
           </CardHeader>
         </Card>
@@ -182,7 +176,7 @@ export function AssetDashboard() {
           <CardHeader className="pb-3">
             <CardDescription>Purchase Price</CardDescription>
             <CardTitle className="text-2xl">
-              {formatCurrency(details.purchase_price)}
+              <Currency amount={details.purchase_price} />
             </CardTitle>
           </CardHeader>
         </Card>
@@ -191,7 +185,7 @@ export function AssetDashboard() {
           <CardHeader className="pb-3">
             <CardDescription>Accumulated Depreciation</CardDescription>
             <CardTitle className="text-2xl text-red-600 dark:text-red-400">
-              {formatCurrency(valuation.accumulated_depreciation)}
+              <Currency amount={valuation.accumulated_depreciation} />
             </CardTitle>
             <div className="text-xs text-muted-foreground mt-1">
               {depreciationPercentage}% of purchase price
@@ -203,7 +197,7 @@ export function AssetDashboard() {
           <CardHeader className="pb-3">
             <CardDescription>Net Change</CardDescription>
             <CardTitle className={`text-2xl ${valuation.current_value - details.purchase_price >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-              {formatCurrency(valuation.current_value - details.purchase_price)}
+              <Currency amount={valuation.current_value - details.purchase_price} colored />
             </CardTitle>
           </CardHeader>
         </Card>
@@ -238,7 +232,7 @@ export function AssetDashboard() {
           {details.salvage_value !== undefined && details.salvage_value > 0 && (
             <div className="flex justify-between">
               <span className="text-muted-foreground">Salvage Value</span>
-              <span className="font-medium">{formatCurrency(details.salvage_value)}</span>
+              <span className="font-medium"><Currency amount={details.salvage_value} /></span>
             </div>
           )}
           {details.depreciation_rate && (
@@ -353,13 +347,13 @@ export function AssetDashboard() {
                       <td className="px-4 py-4 text-sm">{entry.year}</td>
                       <td className="px-4 py-4 text-sm">{formatDate(entry.date)}</td>
                       <td className="px-4 py-4 text-sm text-right text-red-600 dark:text-red-400">
-                        {formatCurrency(entry.depreciation_amount)}
+                        <Currency amount={entry.depreciation_amount} />
                       </td>
                       <td className="px-4 py-4 text-sm text-right text-red-600 dark:text-red-400">
-                        {formatCurrency(entry.accumulated_depreciation)}
+                        <Currency amount={entry.accumulated_depreciation} />
                       </td>
                       <td className="px-4 py-4 text-sm text-right font-medium">
-                        {formatCurrency(entry.book_value)}
+                        <Currency amount={entry.book_value} />
                       </td>
                     </tr>
                   ))}
@@ -408,10 +402,10 @@ export function AssetDashboard() {
                     <tr key={entry.id} className="border-b border-border last:border-0">
                       <td className="px-4 py-4 text-sm">{formatDate(entry.entry_date)}</td>
                       <td className="px-4 py-4 text-sm text-right font-medium text-green-600 dark:text-green-400">
-                        {formatCurrency(entry.current_value)}
+                        <Currency amount={entry.current_value} />
                       </td>
                       <td className="px-4 py-4 text-sm text-right text-red-600 dark:text-red-400">
-                        {formatCurrency(entry.accumulated_depreciation)}
+                        <Currency amount={entry.accumulated_depreciation} />
                       </td>
                       <td className="px-4 py-4 text-sm text-muted-foreground">
                         {entry.notes || '-'}

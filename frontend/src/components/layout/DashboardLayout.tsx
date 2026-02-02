@@ -6,11 +6,11 @@ import { Header } from './Header';
 export function DashboardLayout() {
   return (
     <SidebarProvider>
-      <div className="flex h-screen w-full">
+      <div className="flex h-screen w-full app-background">
         <AppSidebar />
         <div className="flex flex-1 flex-col overflow-hidden">
           <Header />
-          <main className="flex-1 overflow-y-auto bg-background p-6">
+          <main className="flex-1 overflow-y-auto p-4">
             <Outlet />
           </main>
         </div>

@@ -18,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Currency } from '@/components/ui/currency';
 import type { AssetWithCurrentValue, Holding } from '@/lib/api-client';
 
 export function Assets() {
@@ -32,29 +33,12 @@ export function Assets() {
   const accountIds = accountsData?.accounts.map(a => a.id) || [];
   const { holdings: allHoldings, isLoading: holdingsLoading } = useAllHoldings(accountIds);
 
+  // Keep formatCurrency for use with specific currency symbols in tables
   const formatCurrency = (amount: number, currency: string) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: currency,
     }).format(amount);
-  };
-
-  const formatNumberOnly = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(Math.abs(amount));
-  };
-
-  const formatNumberWithSmallCents = (amount: number) => {
-    const formatted = formatNumberOnly(amount);
-    const [dollars, cents] = formatted.split('.');
-    return (
-      <>
-        {dollars}
-        <span className="text-xl">.{cents}</span>
-      </>
-    );
   };
 
   const formatAssetType = (type: string) => {
@@ -152,7 +136,7 @@ export function Assets() {
   const netGainLoss = totalValue - totalPurchasePrice;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Assets</h1>
@@ -184,7 +168,7 @@ export function Assets() {
             <CardDescription>Total Asset Value</CardDescription>
             <div className="mt-2">
               <div className="text-3xl font-bold tabular-nums text-green-600 dark:text-green-400">
-                {formatNumberWithSmallCents(totalValue)}
+                <Currency amount={totalValue} smallCents />
               </div>
               <div className="text-sm text-muted-foreground mt-1">{selectedCurrency}</div>
             </div>
@@ -196,7 +180,7 @@ export function Assets() {
             <CardDescription>Total Purchase Price</CardDescription>
             <div className="mt-2">
               <div className="text-3xl font-bold tabular-nums">
-                {formatNumberWithSmallCents(totalPurchasePrice)}
+                <Currency amount={totalPurchasePrice} smallCents />
               </div>
               <div className="text-sm text-muted-foreground mt-1">{selectedCurrency}</div>
             </div>
@@ -208,7 +192,7 @@ export function Assets() {
             <CardDescription>Total Depreciation</CardDescription>
             <div className="mt-2">
               <div className="text-3xl font-bold tabular-nums text-red-600 dark:text-red-400">
-                {formatNumberWithSmallCents(totalDepreciation)}
+                <Currency amount={totalDepreciation} smallCents />
               </div>
               <div className="text-sm text-muted-foreground mt-1">{selectedCurrency}</div>
             </div>
@@ -220,9 +204,7 @@ export function Assets() {
             <CardDescription>Net Gain/Loss</CardDescription>
             <div className="mt-2">
               <div className={`text-3xl font-bold tabular-nums ${netGainLoss >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                {netGainLoss < 0 && '('}
-                {formatNumberWithSmallCents(netGainLoss)}
-                {netGainLoss < 0 && ')'}
+                <Currency amount={netGainLoss} smallCents colored />
               </div>
               <div className="text-sm text-muted-foreground mt-1">{selectedCurrency}</div>
             </div>

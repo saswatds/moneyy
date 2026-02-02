@@ -6,221 +6,204 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { Currency } from '@/components/ui/currency';
 
 interface YearComparisonChartProps {
   years: YearSummary[];
 }
 
-const formatNumber = (amount: number) => {
-  if (amount >= 1000000) {
-    return '$' + (amount / 1000000).toFixed(1) + 'M';
-  }
-  if (amount >= 1000) {
-    return '$' + (amount / 1000).toFixed(0) + 'K';
-  }
-  return '$' + amount.toFixed(0);
-};
-
-const formatFullNumber = (amount: number) => {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'CAD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-};
-
 export function YearComparisonChart({ years }: YearComparisonChartProps) {
-  if (years.length === 0) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Multi-Year Comparison</CardTitle>
-          <CardDescription>Compare income across years</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center py-8 text-muted-foreground">
-            No comparison data available
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
+  const currentYear = new Date().getFullYear();
+  const startYear = currentYear - 19;
 
-  const sortedYears = [...years].sort((a, b) => a.year - b.year);
-  const maxValue = Math.max(...sortedYears.map((y) => y.total_gross_income)) * 1.1; // 10% padding
-  const chartHeight = 200;
+  const allYears = Array.from({ length: 20 }, (_, i) => {
+    const year = startYear + i;
+    const data = years.find((y) => y.year === year);
+    return {
+      year,
+      total_gross_income: data?.total_gross_income || 0,
+      net_income: data?.net_income || 0,
+      total_tax: data?.total_tax || 0,
+      hasData: !!data,
+    };
+  });
 
-  // Generate line path
-  const generateLinePath = (data: number[]) => {
-    if (data.length === 0) return '';
-    const points = data.map((value, index) => {
-      const x = (index / (data.length - 1)) * 100;
-      const y = chartHeight - (value / maxValue) * chartHeight;
-      return `${x},${y}`;
-    });
-    return `M${points.join(' L')}`;
-  };
+  const maxGross = Math.max(...allYears.map((y) => y.total_gross_income), 1);
 
-  // Generate stacked area path (from bottom value to top value)
-  const generateStackedAreaPath = (bottomData: number[], topData: number[]) => {
-    if (bottomData.length === 0) return '';
+  const yearsWithData = allYears.filter((y) => y.hasData);
+  const latestWithData = yearsWithData[yearsWithData.length - 1];
+  const previousWithData = yearsWithData.length >= 2 ? yearsWithData[yearsWithData.length - 2] : null;
+  const yoyGrowth = previousWithData && latestWithData
+    ? ((latestWithData.net_income - previousWithData.net_income) / previousWithData.net_income) * 100
+    : null;
 
-    // Top line (left to right)
-    const topPoints = topData.map((value, index) => {
-      const x = (index / (topData.length - 1)) * 100;
-      const y = chartHeight - (value / maxValue) * chartHeight;
-      return `${x},${y}`;
-    });
+  const barHeight = 140;
+  const svgWidth = 400;
+  const svgHeight = barHeight;
 
-    // Bottom line (right to left)
-    const bottomPoints = bottomData.map((value, index) => {
-      const x = (index / (bottomData.length - 1)) * 100;
-      const y = chartHeight - (value / maxValue) * chartHeight;
-      return `${x},${y}`;
-    }).reverse();
+  // Generate line points for gross income
+  const linePoints = allYears
+    .map((year, i) => {
+      if (!year.hasData) return null;
+      const x = (i + 0.5) * (svgWidth / 20);
+      const y = svgHeight - (year.total_gross_income / maxGross) * svgHeight;
+      return { x, y, year };
+    })
+    .filter(Boolean) as { x: number; y: number; year: typeof allYears[0] }[];
 
-    return `M${topPoints.join(' L')} L${bottomPoints.join(' L')} Z`;
-  };
-
-  // Generate area path from zero
-  const generateAreaPath = (data: number[]) => {
-    if (data.length === 0) return '';
-    const points = data.map((value, index) => {
-      const x = (index / (data.length - 1)) * 100;
-      const y = chartHeight - (value / maxValue) * chartHeight;
-      return `${x},${y}`;
-    });
-    return `M0,${chartHeight} L${points.join(' L')} L100,${chartHeight} Z`;
-  };
-
-  const grossData = sortedYears.map((y) => y.total_gross_income);
-  const netData = sortedYears.map((y) => y.net_income);
+  const linePath = linePoints.length > 1
+    ? `M ${linePoints.map(p => `${p.x},${p.y}`).join(' L ')}`
+    : '';
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Multi-Year Comparison</CardTitle>
+        <CardTitle>Income Over Time</CardTitle>
         <CardDescription>
-          Income trends from {sortedYears[0]?.year} to {sortedYears[sortedYears.length - 1]?.year}
+          20 year view ({startYear} - {currentYear})
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="space-y-6">
-          {/* Stacked Area Chart */}
-          <div className="relative h-[220px] ml-12">
-            <svg
-              viewBox={`0 0 100 ${chartHeight}`}
-              preserveAspectRatio="none"
-              className="w-full h-[200px]"
-            >
-              {/* Grid lines */}
-              {[0, 25, 50, 75, 100].map((pct) => (
-                <line
-                  key={pct}
-                  x1="0"
-                  y1={chartHeight - (pct / 100) * chartHeight}
-                  x2="100"
-                  y2={chartHeight - (pct / 100) * chartHeight}
-                  stroke="currentColor"
-                  strokeOpacity="0.1"
-                  strokeWidth="0.2"
-                />
-              ))}
-
-              {/* Tax Area (Red) - from net income to gross income */}
-              <path
-                d={generateStackedAreaPath(netData, grossData)}
-                fill="rgb(239, 68, 68)"
-                fillOpacity="0.4"
-              />
-
-              {/* Net Income Area (Green) - from 0 to net income */}
-              <path
-                d={generateAreaPath(netData)}
-                fill="rgb(34, 197, 94)"
-                fillOpacity="0.4"
-              />
-
-              {/* Gross Income Line (Blue dashed) */}
-              <path
-                d={generateLinePath(grossData)}
-                fill="none"
-                stroke="rgb(59, 130, 246)"
-                strokeWidth="0.5"
-                strokeDasharray="2,1"
-              />
-
-              {/* Data points */}
-              {sortedYears.map((year, index) => {
-                const x = (index / (sortedYears.length - 1)) * 100;
-                return (
-                  <g key={year.year}>
-                    <circle
-                      cx={x}
-                      cy={chartHeight - (year.total_gross_income / maxValue) * chartHeight}
-                      r="1"
-                      fill="rgb(59, 130, 246)"
-                    />
-                  </g>
-                );
-              })}
-            </svg>
-
+        <div className="space-y-3">
+          <div className="flex">
             {/* Y-axis labels */}
-            <div className="absolute -left-12 top-0 h-[200px] flex flex-col justify-between text-xs text-muted-foreground">
-              <span>{formatNumber(maxValue)}</span>
-              <span>{formatNumber(maxValue * 0.5)}</span>
-              <span>$0</span>
+            <div className="w-12 flex flex-col justify-between text-xs text-muted-foreground pr-2" style={{ height: barHeight }}>
+              <Currency amount={maxGross} compact />
+              <Currency amount={maxGross / 2} compact />
+              <Currency amount={0} compact />
             </div>
 
-            {/* X-axis labels */}
-            <div className="flex justify-between text-xs text-muted-foreground mt-2">
-              {sortedYears.map((year) => (
-                <span key={year.year}>{year.year}</span>
-              ))}
+            {/* Chart area */}
+            <div className="flex-1 relative" style={{ height: barHeight }}>
+              {/* Bars */}
+              <div className="absolute inset-0 flex items-end gap-px">
+                {allYears.map((year) => {
+                  const netPct = year.hasData ? (year.net_income / maxGross) * 100 : 0;
+                  const taxPct = year.hasData ? ((year.total_gross_income - year.net_income) / maxGross) * 100 : 0;
+                  const isCurrentYear = year.year === currentYear;
+
+                  return (
+                    <div
+                      key={year.year}
+                      className="flex-1 flex flex-col justify-end group relative"
+                      style={{ height: '100%' }}
+                    >
+                      {year.hasData ? (
+                        <>
+                          <div
+                            className={`w-full bg-red-500/80 dark:bg-red-400/80 ${isCurrentYear ? '' : 'opacity-60'} group-hover:opacity-100 transition-opacity`}
+                            style={{ height: `${taxPct}%` }}
+                          />
+                          <div
+                            className={`w-full bg-green-500/80 dark:bg-green-400/80 ${isCurrentYear ? '' : 'opacity-60'} group-hover:opacity-100 transition-opacity`}
+                            style={{ height: `${netPct}%` }}
+                          />
+                        </>
+                      ) : (
+                        <div className="w-full bg-muted/20 rounded-sm" style={{ height: 2 }} />
+                      )}
+
+                      {/* Tooltip */}
+                      {year.hasData && (
+                        <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-popover border rounded px-2 py-1 text-xs opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-20 shadow-md">
+                          <div className="font-semibold">{year.year}</div>
+                          <div className="text-blue-600 dark:text-blue-400"><Currency amount={year.total_gross_income} compact /> gross</div>
+                          <div className="text-green-600 dark:text-green-400"><Currency amount={year.net_income} compact /> net</div>
+                          <div className="text-red-600 dark:text-red-400"><Currency amount={year.total_tax} compact /> tax</div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Gross line overlay */}
+              <svg
+                className="absolute inset-0 w-full h-full pointer-events-none"
+                viewBox={`0 0 ${svgWidth} ${svgHeight}`}
+                preserveAspectRatio="none"
+              >
+                {linePath && (
+                  <path
+                    d={linePath}
+                    fill="none"
+                    stroke="#3b82f6"
+                    strokeWidth="2"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                )}
+                {linePoints.map((p, i) => (
+                  <circle
+                    key={i}
+                    cx={p.x}
+                    cy={p.y}
+                    r="1"
+                    fill="#3b82f6"
+                  />
+                ))}
+              </svg>
+            </div>
+          </div>
+
+          {/* X-axis labels */}
+          <div className="flex">
+            <div className="w-12" />
+            <div className="flex-1 flex">
+              {allYears.map((year) => {
+                const showLabel = year.year % 5 === 0 || year.year === currentYear;
+                return (
+                  <div key={year.year} className="flex-1 text-center">
+                    {showLabel && (
+                      <span className={`text-xs ${year.year === currentYear ? 'font-semibold' : 'text-muted-foreground'}`}>
+                        '{year.year.toString().slice(-2)}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
 
           {/* Legend */}
-          <div className="flex justify-center gap-6 pt-2 border-t">
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-0 border-t-2 border-dashed border-blue-500" />
-              <span className="text-sm text-muted-foreground">Gross Income</span>
+          <div className="flex items-center justify-between pt-2 border-t">
+            <div className="flex gap-4">
+              <div className="flex items-center gap-1.5">
+                <div className="w-4 h-0.5 bg-blue-500 rounded" />
+                <span className="text-xs text-muted-foreground">Gross</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded-sm bg-green-500/80" />
+                <span className="text-xs text-muted-foreground">Net</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded-sm bg-red-500/80" />
+                <span className="text-xs text-muted-foreground">Tax</span>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-sm bg-green-500/50" />
-              <span className="text-sm text-muted-foreground">Net Income</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-sm bg-red-500/50" />
-              <span className="text-sm text-muted-foreground">Tax</span>
-            </div>
+            {yoyGrowth !== null && (
+              <div className={`text-sm font-medium ${yoyGrowth >= 0 ? 'text-positive' : 'text-negative'}`}>
+                {yoyGrowth >= 0 ? '+' : ''}{yoyGrowth.toFixed(1)}% YoY
+              </div>
+            )}
           </div>
 
-          {/* Data Table */}
-          <div className="grid gap-2 pt-2">
-            <div className="grid grid-cols-4 gap-4 text-xs font-medium text-muted-foreground pb-1 border-b">
-              <div>Year</div>
-              <div>Gross</div>
-              <div>Tax</div>
-              <div>Net</div>
+          {/* Summary */}
+          {latestWithData && (
+            <div className="grid grid-cols-3 gap-3 pt-2 border-t text-center">
+              <div>
+                <Currency amount={latestWithData.total_gross_income} compact className="text-lg font-semibold" />
+                <div className="text-xs text-muted-foreground">Gross ({latestWithData.year})</div>
+              </div>
+              <div>
+                <Currency amount={latestWithData.net_income} compact className="text-lg font-semibold text-positive" />
+                <div className="text-xs text-muted-foreground">Net Income</div>
+              </div>
+              <div>
+                <Currency amount={latestWithData.total_tax} compact className="text-lg font-semibold text-negative" />
+                <div className="text-xs text-muted-foreground">Total Tax</div>
+              </div>
             </div>
-            {[...sortedYears].reverse().map((year) => {
-              const isCurrentYear = year.year === new Date().getFullYear();
-              return (
-                <div
-                  key={year.year}
-                  className={`grid grid-cols-4 gap-4 text-sm py-1 ${isCurrentYear ? 'font-bold' : ''}`}
-                >
-                  <div className="font-medium">{year.year}</div>
-                  <div className="text-blue-600">{formatFullNumber(year.total_gross_income)}</div>
-                  <div className="text-red-600">{formatFullNumber(year.total_tax)}</div>
-                  <div className="text-green-600">{formatFullNumber(year.net_income)}</div>
-                </div>
-              );
-            })}
-          </div>
+          )}
         </div>
       </CardContent>
     </Card>

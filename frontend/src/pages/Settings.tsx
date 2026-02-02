@@ -12,7 +12,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { IconLink, IconBuilding, IconRefresh, IconTrash, IconPlus, IconBrandStripe, IconBrandPaypal, IconEdit, IconDownload, IconUpload, IconAlertCircle, IconLoader2, IconHistory, IconChartLine, IconKey, IconDatabase } from '@tabler/icons-react';
+import { IconLink, IconBuilding, IconRefresh, IconTrash, IconPlus, IconBrandStripe, IconBrandPaypal, IconEdit, IconDownload, IconUpload, IconAlertCircle, IconLoader2, IconHistory, IconChartLine, IconKey, IconSun, IconMoon, IconDeviceDesktop } from '@tabler/icons-react';
 import {
   Table,
   TableBody,
@@ -51,6 +51,7 @@ import { APIKeySection } from '@/components/settings/APIKeySection';
 import { useRef } from 'react';
 import { apiClient } from '@/lib/api-client';
 import { useDemoMode } from '@/lib/demo-context';
+import { useTheme } from '@/lib/theme-context';
 
 interface Connection {
   id: string;
@@ -113,6 +114,7 @@ const AVAILABLE_PROVIDERS: Provider[] = [
 
 export function Settings() {
   const { isDemoMode, enterDemoMode, exitDemoMode, seedDemoData, clearDemoData, isLoading: demoLoading } = useDemoMode();
+  const { theme, setTheme } = useTheme();
   const [connections, setConnections] = useState<Connection[]>([]);
   const [loading, setLoading] = useState(true);
   const [showConnectDialog, setShowConnectDialog] = useState(false);
@@ -293,43 +295,6 @@ export function Settings() {
     );
   };
 
-  const getProviderInfo = (providerId: string) => {
-    return AVAILABLE_PROVIDERS.find(p => p.id === providerId) || AVAILABLE_PROVIDERS[0];
-  };
-
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return 'Never';
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
-  const formatTokenExpiry = (dateString?: string) => {
-    if (!dateString) return null;
-    const expiryDate = new Date(dateString);
-    const now = new Date();
-    const diffMs = expiryDate.getTime() - now.getTime();
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    const diffDays = Math.floor(diffHours / 24);
-
-    if (diffMs < 0) {
-      return 'Expired';
-    } else if (diffHours < 1) {
-      const diffMinutes = Math.floor(diffMs / (1000 * 60));
-      return `Expires in ${diffMinutes} min`;
-    } else if (diffHours < 24) {
-      return `Expires in ${diffHours} hour${diffHours !== 1 ? 's' : ''}`;
-    } else if (diffDays < 7) {
-      return `Expires in ${diffDays} day${diffDays !== 1 ? 's' : ''}`;
-    } else {
-      return `Expires ${expiryDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
-    }
-  };
-
   const handleExport = async () => {
     setExporting(true);
     try {
@@ -388,7 +353,7 @@ export function Settings() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
 
       {/* Settings Table */}
@@ -564,6 +529,53 @@ export function Settings() {
                 <APIKeySection />
               </TableCell>
               <TableCell></TableCell>
+            </TableRow>
+
+            {/* Theme Row */}
+            <TableRow>
+              <TableCell className="font-medium">
+                <div className="flex items-center gap-2">
+                  {theme === 'dark' ? (
+                    <IconMoon className="h-4 w-4 text-muted-foreground" />
+                  ) : theme === 'light' ? (
+                    <IconSun className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <IconDeviceDesktop className="h-4 w-4 text-muted-foreground" />
+                  )}
+                  Appearance
+                </div>
+              </TableCell>
+              <TableCell>
+                <span className="text-sm text-muted-foreground capitalize">{theme} mode</span>
+              </TableCell>
+              <TableCell className="text-right">
+                <div className="flex gap-1 justify-end">
+                  <Button
+                    onClick={() => setTheme('light')}
+                    size="sm"
+                    variant={theme === 'light' ? 'default' : 'outline'}
+                    className="h-8 w-8 p-0"
+                  >
+                    <IconSun className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    onClick={() => setTheme('dark')}
+                    size="sm"
+                    variant={theme === 'dark' ? 'default' : 'outline'}
+                    className="h-8 w-8 p-0"
+                  >
+                    <IconMoon className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    onClick={() => setTheme('system')}
+                    size="sm"
+                    variant={theme === 'system' ? 'default' : 'outline'}
+                    className="h-8 w-8 p-0"
+                  >
+                    <IconDeviceDesktop className="h-4 w-4" />
+                  </Button>
+                </div>
+              </TableCell>
             </TableRow>
 
             {/* Demo Mode Row */}
@@ -753,10 +765,10 @@ export function Settings() {
                           {Object.entries(importResult.summary || {}).map(([table, stats]: [string, any]) => (
                             <TableRow key={table}>
                               <TableCell className="font-medium">{table}</TableCell>
-                              <TableCell className="text-right text-green-600 font-semibold">{stats.created || 0}</TableCell>
+                              <TableCell className="text-right text-green-600 dark:text-green-400 dark:text-green-400 font-semibold">{stats.created || 0}</TableCell>
                               <TableCell className="text-right text-blue-600 font-semibold">{stats.updated || 0}</TableCell>
                               <TableCell className="text-right text-gray-600">{stats.skipped || 0}</TableCell>
-                              <TableCell className="text-right text-red-600 font-semibold">{stats.errors || 0}</TableCell>
+                              <TableCell className="text-right text-red-600 dark:text-red-400 dark:text-red-400 font-semibold">{stats.errors || 0}</TableCell>
                             </TableRow>
                           ))}
                         </TableBody>
@@ -788,7 +800,7 @@ export function Settings() {
               {importResult.errors && importResult.errors.length > 0 && (
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-base text-red-600">Errors ({importResult.errors.length})</CardTitle>
+                    <CardTitle className="text-base text-red-600 dark:text-red-400">Errors ({importResult.errors.length})</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="max-h-64 overflow-y-auto space-y-2">
@@ -874,7 +886,7 @@ export function Settings() {
                 </Card>
                 <Card>
                   <CardContent className="pt-6">
-                    <div className="text-2xl font-bold text-green-600">{syncHistory.summary.completed_jobs}</div>
+                    <div className="text-2xl font-bold text-green-600 dark:text-green-400">{syncHistory.summary.completed_jobs}</div>
                     <div className="text-xs text-muted-foreground">Completed</div>
                   </CardContent>
                 </Card>
@@ -886,7 +898,7 @@ export function Settings() {
                 </Card>
                 <Card>
                   <CardContent className="pt-6">
-                    <div className="text-2xl font-bold text-red-600">{syncHistory.summary.failed_jobs}</div>
+                    <div className="text-2xl font-bold text-red-600 dark:text-red-400">{syncHistory.summary.failed_jobs}</div>
                     <div className="text-xs text-muted-foreground">Failed</div>
                   </CardContent>
                 </Card>
@@ -923,7 +935,7 @@ export function Settings() {
                               </TableCell>
                               <TableCell>
                                 {job.status === 'completed' && (
-                                  <Badge variant="default" className="bg-green-600">Completed</Badge>
+                                  <Badge variant="default" className="bg-green-600 dark:bg-green-500">Completed</Badge>
                                 )}
                                 {job.status === 'running' && (
                                   <Badge variant="secondary">Running</Badge>
@@ -942,9 +954,9 @@ export function Settings() {
                                 {job.completed_at ? new Date(job.completed_at).toLocaleString() : '-'}
                               </TableCell>
                               <TableCell className="text-right">{job.items_processed}</TableCell>
-                              <TableCell className="text-right text-green-600">{job.items_created}</TableCell>
+                              <TableCell className="text-right text-green-600 dark:text-green-400">{job.items_created}</TableCell>
                               <TableCell className="text-right text-blue-600">{job.items_updated}</TableCell>
-                              <TableCell className="text-right text-red-600">{job.items_failed}</TableCell>
+                              <TableCell className="text-right text-red-600 dark:text-red-400">{job.items_failed}</TableCell>
                             </TableRow>
                           ))}
                         </TableBody>

@@ -10,21 +10,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Currency } from '@/components/ui/currency';
 
 interface DeleteRecurringExpenseDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   expense: RecurringExpense | null;
 }
-
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('en-CA', {
-    style: 'currency',
-    currency: 'CAD',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
-};
 
 const getFrequencyLabel = (frequency: string) => {
   switch (frequency) {
@@ -76,7 +68,7 @@ export function DeleteRecurringExpenseDialog({
             <br />
             <br />
             <span className="text-sm">
-              Amount: {formatCurrency(expense.amount)} ({getFrequencyLabel(expense.frequency)})
+              Amount: <Currency amount={expense.amount} /> ({getFrequencyLabel(expense.frequency)})
               <br />
               Category: {expense.category.charAt(0).toUpperCase() + expense.category.slice(1)}
             </span>

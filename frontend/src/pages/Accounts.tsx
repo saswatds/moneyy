@@ -9,6 +9,7 @@ import { IconPlus, IconLink, IconEdit, IconTrash, IconAlertTriangle, IconInfoCir
 import { getAccountTypeBadgeColor, getAccountTypeLabel } from '@/lib/account-types';
 import { useDemoMode } from '@/lib/demo-context';
 import { WelcomeDialog } from '@/components/onboarding/WelcomeDialog';
+import { Currency } from '@/components/ui/currency';
 import {
   Card,
   CardContent,
@@ -79,6 +80,7 @@ export function Accounts() {
     }
   }, [data, isDemoMode, isLoading]);
 
+  // Keep formatCurrencyAccounting for table balance display with specific currencies
   const formatCurrencyAccounting = (amount: number, currency: string) => {
     const formatted = new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -87,24 +89,6 @@ export function Accounts() {
     }).format(Math.abs(amount));
 
     return amount < 0 ? `(${formatted})` : formatted;
-  };
-
-  const formatNumberOnly = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(Math.abs(amount));
-  };
-
-  const formatNumberWithSmallCents = (amount: number) => {
-    const formatted = formatNumberOnly(amount);
-    const [dollars, cents] = formatted.split('.');
-    return (
-      <>
-        {dollars}
-        <span className="text-xl">.{cents}</span>
-      </>
-    );
   };
 
 
@@ -302,7 +286,7 @@ export function Accounts() {
   const debtMessage = getDebtToAssetMessage(debtToAssetRatio);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Accounts</h1>
@@ -338,9 +322,7 @@ export function Accounts() {
             <CardDescription>Net Worth</CardDescription>
             <div className="mt-2">
               <div className={`text-3xl font-bold tabular-nums ${netWorth < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-                {netWorth < 0 && '('}
-                {formatNumberWithSmallCents(netWorth)}
-                {netWorth < 0 && ')'}
+                <Currency amount={netWorth} smallCents colored />
               </div>
               <div className="text-sm text-muted-foreground mt-1">{selectedCurrency}</div>
             </div>
@@ -352,7 +334,7 @@ export function Accounts() {
             <CardDescription>Total Assets</CardDescription>
             <div className="mt-2">
               <div className="text-3xl font-bold tabular-nums">
-                {formatNumberWithSmallCents(totalAssets)}
+                <Currency amount={totalAssets} smallCents />
               </div>
               <div className="text-sm text-muted-foreground mt-1">{selectedCurrency}</div>
             </div>
@@ -364,7 +346,7 @@ export function Accounts() {
             <CardDescription>Total Liabilities</CardDescription>
             <div className="mt-2">
               <div className="text-3xl font-bold tabular-nums text-red-600 dark:text-red-400">
-                {formatNumberWithSmallCents(totalLiabilities)}
+                <Currency amount={totalLiabilities} smallCents />
               </div>
               <div className="text-sm text-muted-foreground mt-1">{selectedCurrency}</div>
             </div>

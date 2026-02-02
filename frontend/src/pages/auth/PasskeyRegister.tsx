@@ -101,7 +101,7 @@ export function PasskeyRegister() {
   // If already registered, show message and redirect
   if (alreadyRegistered) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center app-background">
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardTitle>Passkey Already Exists</CardTitle>
@@ -125,7 +125,7 @@ export function PasskeyRegister() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+    <div className="min-h-screen flex items-center justify-center app-background">
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>Set Up Your Passkey</CardTitle>
@@ -142,7 +142,7 @@ export function PasskeyRegister() {
 
           <div className="space-y-2">
             <h3 className="font-medium">What is a passkey?</h3>
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-muted-foreground">
               A passkey is a secure, password-less way to sign in. It uses your device's
               biometric authentication (fingerprint, face ID) or PIN.
             </p>
@@ -157,11 +157,11 @@ export function PasskeyRegister() {
             {isLoading ? 'Creating Passkey...' : 'Create Passkey'}
           </Button>
 
-          <p className="text-sm text-gray-500 text-center">
+          <p className="text-sm text-muted-foreground text-center">
             Already have a passkey?{' '}
             <button
               onClick={() => navigate('/login')}
-              className="text-blue-600 hover:underline"
+              className="text-primary hover:underline"
             >
               Sign in
             </button>

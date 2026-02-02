@@ -51,6 +51,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import { Currency } from '@/components/ui/currency';
 
 const defaultConfig: ProjectionConfig = {
   time_horizon_years: 5,
@@ -629,7 +630,7 @@ export function Projections() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Financial Projections</h1>
@@ -752,14 +753,14 @@ export function Projections() {
       {/* Two Pane Layout */}
       <div className="grid grid-cols-5 gap-6 h-[calc(100vh-16rem)] -mx-1">
         {/* Left Pane - Charts (3/5 width) */}
-        <div className="col-span-3 space-y-6 overflow-y-auto px-1 pb-1">
+        <div className="col-span-3 space-y-3 overflow-y-auto px-1 pb-1">
           {/* Summary Stats */}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <Card>
               <CardHeader className="pb-3">
                 <CardDescription>Projected Net Worth</CardDescription>
                 <div className="mt-2">
-                  <div className="text-2xl font-bold tabular-nums">{formatCurrency(finalNetWorth)}</div>
+                  <div className="text-2xl font-bold tabular-nums"><Currency amount={finalNetWorth} decimals={0} /></div>
                   <div className="text-sm text-muted-foreground mt-1">In {config.time_horizon_years} years</div>
                 </div>
               </CardHeader>
@@ -769,7 +770,7 @@ export function Projections() {
               <CardHeader className="pb-3">
                 <CardDescription>Net Worth Growth</CardDescription>
                 <div className="mt-2">
-                  <div className="text-2xl font-bold tabular-nums">{formatCurrency(netWorthGrowth)}</div>
+                  <div className="text-2xl font-bold tabular-nums"><Currency amount={netWorthGrowth} decimals={0} /></div>
                   <div className="text-sm text-muted-foreground mt-1">
                     {((netWorthGrowth / Math.max(initialNetWorth, 1)) * 100).toFixed(1)}% increase
                   </div>
@@ -781,7 +782,7 @@ export function Projections() {
               <CardHeader className="pb-3">
                 <CardDescription>Remaining Debt</CardDescription>
                 <div className="mt-2">
-                  <div className="text-2xl font-bold tabular-nums">{formatCurrency(finalDebt)}</div>
+                  <div className="text-2xl font-bold tabular-nums"><Currency amount={finalDebt} decimals={0} /></div>
                   <div className="text-sm text-muted-foreground mt-1">
                     {finalDebt === 0 ? 'Debt-free!' : `In ${config.time_horizon_years} years`}
                   </div>
@@ -793,7 +794,7 @@ export function Projections() {
               <CardHeader className="pb-3">
                 <CardDescription>Inflation Adjusted</CardDescription>
                 <div className="mt-2">
-                  <div className="text-2xl font-bold tabular-nums">{formatCurrency(realNetWorth)}</div>
+                  <div className="text-2xl font-bold tabular-nums"><Currency amount={realNetWorth} decimals={0} /></div>
                   <div className="text-sm text-muted-foreground mt-1">In today's dollars</div>
                 </div>
               </CardHeader>
@@ -1103,7 +1104,7 @@ export function Projections() {
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="space-y-8">
+            <CardContent className="space-y-4">
               {/* Income Section */}
               <div className="space-y-4">
                 <h4 className="text-sm font-medium border-b pb-2">Income</h4>

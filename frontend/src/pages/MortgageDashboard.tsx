@@ -31,6 +31,7 @@ import {
   ReferenceLine,
 } from 'recharts';
 import { apiClient } from '@/lib/api-client';
+import { Currency } from '@/components/ui/currency';
 import type {
   MortgageDetails,
   MortgagePayment,
@@ -195,7 +196,8 @@ export function MortgageDashboard() {
     }).length;
   };
 
-  const formatCurrency = (amount: number) => {
+  // Keep formatCurrencyString for chart tooltips which need string returns
+  const formatCurrencyString = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'CAD',
@@ -290,7 +292,7 @@ export function MortgageDashboard() {
   const totalPaidOverTerm = totalPrincipalOverTerm + totalInterestOverTerm;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Button
@@ -356,15 +358,15 @@ export function MortgageDashboard() {
                   <div className="grid grid-cols-2 gap-2 mt-2">
                     <div>
                       <span className="text-muted-foreground">Payment:</span>{' '}
-                      <span className="font-medium">{formatCurrency(paymentFormData.payment_amount || 0)}</span>
+                      <span className="font-medium"><Currency amount={paymentFormData.payment_amount || 0} /></span>
                     </div>
                     <div>
                       <span className="text-muted-foreground">Principal:</span>{' '}
-                      <span className="font-medium text-green-600">{formatCurrency(paymentFormData.principal_amount || 0)}</span>
+                      <span className="font-medium text-green-600 dark:text-green-400"><Currency amount={paymentFormData.principal_amount || 0} /></span>
                     </div>
                     <div>
                       <span className="text-muted-foreground">Interest:</span>{' '}
-                      <span className="font-medium text-red-600">{formatCurrency(paymentFormData.interest_amount || 0)}</span>
+                      <span className="font-medium text-red-600 dark:text-red-400"><Currency amount={paymentFormData.interest_amount || 0} /></span>
                     </div>
                   </div>
                 </div>
@@ -470,7 +472,7 @@ export function MortgageDashboard() {
           <CardHeader className="pb-3">
             <CardDescription>Current Balance</CardDescription>
             <CardTitle className="text-2xl text-red-600 dark:text-red-400">
-              {formatCurrency(currentBalance)}
+              <Currency amount={Math.abs(currentBalance)} />
             </CardTitle>
           </CardHeader>
         </Card>
@@ -479,7 +481,7 @@ export function MortgageDashboard() {
           <CardHeader className="pb-3">
             <CardDescription>Original Amount</CardDescription>
             <CardTitle className="text-2xl">
-              {formatCurrency(details.original_amount)}
+              <Currency amount={details.original_amount} />
             </CardTitle>
           </CardHeader>
         </Card>
@@ -497,7 +499,7 @@ export function MortgageDashboard() {
           <CardHeader className="pb-3">
             <CardDescription>Monthly Payment</CardDescription>
             <CardTitle className="text-2xl">
-              {formatCurrency(details.payment_amount)}
+              <Currency amount={details.payment_amount} />
             </CardTitle>
           </CardHeader>
         </Card>
@@ -556,23 +558,23 @@ export function MortgageDashboard() {
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Total Paid</span>
-              <span className="font-medium">{formatCurrency(totalPaid)}</span>
+              <span className="font-medium"><Currency amount={totalPaid} /></span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Total Principal</span>
               <span className="font-medium text-green-600 dark:text-green-400">
-                {formatCurrency(totalPrincipal)}
+                <Currency amount={totalPrincipal} />
               </span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Total Interest</span>
               <span className="font-medium text-red-600 dark:text-red-400">
-                {formatCurrency(totalInterest)}
+                <Currency amount={totalInterest} />
               </span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Remaining Balance</span>
-              <span className="font-medium">{formatCurrency(Math.abs(currentBalance))}</span>
+              <span className="font-medium"><Currency amount={Math.abs(currentBalance)} /></span>
             </div>
             <div className="pt-3 border-t border-border">
               <div className="flex justify-between mb-2">
@@ -581,19 +583,19 @@ export function MortgageDashboard() {
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Total Paid</span>
                 <span className="font-medium">
-                  {formatCurrency(totalPaidOverTerm)}
+                  <Currency amount={totalPaidOverTerm} />
                 </span>
               </div>
               <div className="flex justify-between mt-2">
                 <span className="text-muted-foreground">Total Principal</span>
                 <span className="font-medium text-green-600 dark:text-green-400">
-                  {formatCurrency(totalPrincipalOverTerm)}
+                  <Currency amount={totalPrincipalOverTerm} />
                 </span>
               </div>
               <div className="flex justify-between mt-2">
                 <span className="text-muted-foreground">Cost of Borrowing</span>
                 <span className="font-medium text-red-600 dark:text-red-400">
-                  {formatCurrency(totalCostOfBorrowing)}
+                  <Currency amount={totalCostOfBorrowing} />
                 </span>
               </div>
             </div>
@@ -619,7 +621,7 @@ export function MortgageDashboard() {
                   <XAxis dataKey="date" />
                   <YAxis />
                   <Tooltip
-                    formatter={(value: number) => formatCurrency(value)}
+                    formatter={(value: number) => formatCurrencyString(value)}
                     labelStyle={{ color: '#000' }}
                   />
                   <Legend />
@@ -662,7 +664,7 @@ export function MortgageDashboard() {
                   <XAxis dataKey="date" />
                   <YAxis />
                   <Tooltip
-                    formatter={(value: number) => formatCurrency(value)}
+                    formatter={(value: number) => formatCurrencyString(value)}
                     labelStyle={{ color: '#000' }}
                   />
                   <Legend />
@@ -750,19 +752,19 @@ export function MortgageDashboard() {
                           {formatDate(payment.payment_date)}
                         </td>
                         <td className="px-4 py-3 text-sm text-right">
-                          {formatCurrency(payment.payment_amount)}
+                          <Currency amount={payment.payment_amount} />
                         </td>
                         <td className="px-4 py-3 text-sm text-right text-green-600 dark:text-green-400">
-                          {formatCurrency(payment.principal_amount)}
+                          <Currency amount={payment.principal_amount} />
                         </td>
                         <td className="px-4 py-3 text-sm text-right text-red-600 dark:text-red-400">
-                          {formatCurrency(payment.interest_amount)}
+                          <Currency amount={payment.interest_amount} />
                         </td>
                         <td className="px-4 py-3 text-sm text-right">
-                          {payment.extra_payment > 0 ? formatCurrency(payment.extra_payment) : '-'}
+                          {payment.extra_payment > 0 ? <Currency amount={payment.extra_payment} /> : '-'}
                         </td>
                         <td className="px-4 py-3 text-sm text-right font-medium">
-                          {formatCurrency(Math.abs(payment.balance_after))}
+                          <Currency amount={Math.abs(payment.balance_after)} />
                         </td>
                       </tr>
                     ));

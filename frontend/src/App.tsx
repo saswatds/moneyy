@@ -3,6 +3,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/query-client';
 import { AuthProvider, useAuth } from './lib/auth-context';
 import { DemoModeProvider } from './lib/demo-context';
+import { ThemeProvider } from './lib/theme-context';
 import { Toaster } from './components/ui/sonner';
 import { DashboardLayout } from './components/layout/DashboardLayout';
 import { Accounts } from './pages/Accounts';
@@ -46,9 +47,10 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <DemoModeProvider>
-          <BrowserRouter>
+      <ThemeProvider>
+        <AuthProvider>
+          <DemoModeProvider>
+            <BrowserRouter>
             <Routes>
               {/* Public routes */}
               <Route path="/login" element={<PasskeyLogin />} />
@@ -82,10 +84,11 @@ function App() {
                 <Route path="settings" element={<Settings />} />
               </Route>
             </Routes>
-            <Toaster />
-          </BrowserRouter>
-        </DemoModeProvider>
-      </AuthProvider>
+              <Toaster />
+            </BrowserRouter>
+          </DemoModeProvider>
+        </AuthProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }

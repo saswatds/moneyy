@@ -30,24 +30,7 @@ import { Badge } from '@/components/ui/badge';
 import { AddRecurringExpenseDialog } from '@/components/AddRecurringExpenseDialog';
 import { EditRecurringExpenseDialog } from '@/components/EditRecurringExpenseDialog';
 import { DeleteRecurringExpenseDialog } from '@/components/DeleteRecurringExpenseDialog';
-
-const formatNumberOnly = (amount: number) => {
-  return new Intl.NumberFormat('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(Math.abs(amount));
-};
-
-const formatNumberWithSmallCents = (amount: number) => {
-  const formatted = formatNumberOnly(amount);
-  const [dollars, cents] = formatted.split('.');
-  return (
-    <>
-      {dollars}
-      <span className="text-xl">.{cents}</span>
-    </>
-  );
-};
+import { Currency } from '@/components/ui/currency';
 
 const getFrequencyLabel = (frequency: string) => {
   switch (frequency) {
@@ -246,7 +229,7 @@ export function RecurringExpenses() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Recurring Expenses</h1>
@@ -267,11 +250,11 @@ export function RecurringExpenses() {
             <CardDescription>Monthly Total</CardDescription>
             <div className="mt-2">
               <div className="text-3xl font-bold tabular-nums">
-                {formatNumberWithSmallCents(monthlyTotal)}
+                <Currency amount={monthlyTotal} smallCents />
               </div>
               <div className="text-xs text-muted-foreground mt-1">
                 {inferredMonthlyTotal > 0 && (
-                  <span>{formatNumberOnly(recurringMonthlyTotal)} + {formatNumberOnly(inferredMonthlyTotal)} (loans)</span>
+                  <span><Currency amount={recurringMonthlyTotal} /> + <Currency amount={inferredMonthlyTotal} /> (loans)</span>
                 )}
                 {inferredMonthlyTotal === 0 && <span>CAD</span>}
               </div>
@@ -284,7 +267,7 @@ export function RecurringExpenses() {
             <CardDescription>Annual Total</CardDescription>
             <div className="mt-2">
               <div className="text-3xl font-bold tabular-nums">
-                {formatNumberWithSmallCents(annualTotal)}
+                <Currency amount={annualTotal} smallCents />
               </div>
               <div className="text-sm text-muted-foreground mt-1">CAD</div>
             </div>
@@ -336,7 +319,7 @@ export function RecurringExpenses() {
                     <TableCell>
                       <div className="font-medium">{expense.account_name}</div>
                       <div className="text-xs text-muted-foreground mt-0.5">
-                        Original: {formatNumberOnly(expense.original_amount)} {expense.currency}
+                        Original: <Currency amount={expense.original_amount} /> {expense.currency}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -348,14 +331,14 @@ export function RecurringExpenses() {
                       {getFrequencyLabel(expense.frequency)}
                     </TableCell>
                     <TableCell className="text-right">
-                      <div>{formatNumberOnly(expense.amount)}</div>
+                      <div><Currency amount={expense.amount} /></div>
                       <div className="text-xs text-muted-foreground">{expense.currency}</div>
                     </TableCell>
                     <TableCell className="text-right">
                       <div>{(expense.interest_rate * 100).toFixed(2)}%</div>
                     </TableCell>
                     <TableCell className="text-right">
-                      <div>{formatNumberOnly(calculateInferredYearlyAmount(expense))}</div>
+                      <div><Currency amount={calculateInferredYearlyAmount(expense)} /></div>
                       <div className="text-xs text-muted-foreground">{expense.currency}</div>
                     </TableCell>
                     <TableCell className="text-right">
@@ -476,11 +459,11 @@ export function RecurringExpenses() {
                       {getFrequencyLabel(expense.frequency)}
                     </TableCell>
                     <TableCell className="text-right">
-                      <div>{formatNumberOnly(expense.amount)}</div>
+                      <div><Currency amount={expense.amount} /></div>
                       <div className="text-xs text-muted-foreground">{expense.currency}</div>
                     </TableCell>
                     <TableCell className="text-right">
-                      <div>{formatNumberOnly(calculateYearlyAmount(expense))}</div>
+                      <div><Currency amount={calculateYearlyAmount(expense)} /></div>
                       <div className="text-xs text-muted-foreground">{expense.currency}</div>
                     </TableCell>
                     <TableCell className="text-right">
