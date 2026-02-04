@@ -88,12 +88,18 @@ func (s *Service) initiateWealthsimpleConnectionReal(ctx context.Context, userID
 	if loginResult.OTPRequired {
 		// Store OTP authenticated claim for next step
 		if loginResult.LoginResponse.OTPAuthenticatedClaim != "" {
-			encryptedClaim, _ := encService.Encrypt(loginResult.LoginResponse.OTPAuthenticatedClaim)
-			_, _ = s.db.ExecContext(ctx, `
+			encryptedClaim, err := encService.Encrypt(loginResult.LoginResponse.OTPAuthenticatedClaim)
+			if err != nil {
+				return nil, fmt.Errorf("failed to encrypt OTP claim: %w", err)
+			}
+			_, err = s.db.ExecContext(ctx, `
 				UPDATE sync_credentials
 				SET encrypted_otp_claim = $1
 				WHERE id = $2
 			`, encryptedClaim, credentialID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to store OTP claim: %w", err)
+			}
 		}
 
 		return &InitiateConnectionResponse{
@@ -395,7 +401,7 @@ func (s *Service) storeTokens(ctx context.Context, encService *encryption.Servic
 				encrypted_refresh_token = $2,
 				token_expires_at = $3,
 				identity_canonical_id = $4,
-				profiles = $5::jsonb,
+				profiles = $5,
 				status = $6,
 				last_sync_error = NULL,
 				updated_at = CURRENT_TIMESTAMP
