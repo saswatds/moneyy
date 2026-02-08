@@ -24,7 +24,6 @@ import {
   IconCalendar,
   IconReceipt,
   IconCoin,
-  IconCalculator,
 } from '@tabler/icons-react';
 import { useAccount } from '@/hooks/use-accounts';
 import { useExchangeRates } from '@/hooks/use-exchange-rates';
@@ -49,7 +48,6 @@ import { TaxSummaryCard } from '@/components/options/TaxSummaryCard';
 import { GrantsTable } from '@/components/options/GrantsTable';
 import { SalesTable } from '@/components/options/SalesTable';
 import { ExercisesTable } from '@/components/options/ExercisesTable';
-import { TaxSimulator } from '@/components/options/tax-simulator';
 
 export function OptionsDashboard() {
   const { accountId } = useParams<{ accountId: string }>();
@@ -422,10 +420,6 @@ export function OptionsDashboard() {
             <IconCoin className="h-4 w-4" />
             Tax Planning
           </TabsTrigger>
-          <TabsTrigger value="simulator" className="flex items-center gap-2">
-            <IconCalculator className="h-4 w-4" />
-            Tax Simulator
-          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="grants" className="space-y-4">
@@ -589,10 +583,6 @@ export function OptionsDashboard() {
               </Card>
             );
           })()}
-        </TabsContent>
-
-        <TabsContent value="simulator" className="space-y-4">
-          <TaxSimulator grants={summary.grants} />
         </TabsContent>
       </Tabs>
 

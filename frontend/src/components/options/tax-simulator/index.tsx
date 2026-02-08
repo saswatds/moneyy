@@ -1,6 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { IconCalculator, IconCalendar } from '@tabler/icons-react';
+import { IconCalculator } from '@tabler/icons-react';
 import type { EquityGrantWithSummary } from '@/lib/api-client';
 import type { GrantForSimulation } from './types';
 import { useTaxSimulator } from '@/hooks/use-tax-simulator';
@@ -19,7 +18,6 @@ interface TaxSimulatorProps {
 
 export function TaxSimulator({ grants }: TaxSimulatorProps) {
   const [showComparison, setShowComparison] = useState(false);
-  const [activeTab, setActiveTab] = useState('simulator');
   const [hasInitializedRate, setHasInitializedRate] = useState(false);
 
   const {
@@ -30,7 +28,6 @@ export function TaxSimulator({ grants }: TaxSimulatorProps) {
     createScenario,
     cloneScenario,
     deleteScenario,
-    renameScenario,
     setActiveScenario,
     addExercise,
     deleteExercise,
@@ -119,7 +116,6 @@ export function TaxSimulator({ grants }: TaxSimulatorProps) {
           onCreateScenario={createScenario}
           onCloneScenario={cloneScenario}
           onDeleteScenario={deleteScenario}
-          onRenameScenario={renameScenario}
           onSetActiveScenario={setActiveScenario}
           onSetMarginalRate={setMarginalRate}
           onCompare={() => setShowComparison(false)}
@@ -142,7 +138,6 @@ export function TaxSimulator({ grants }: TaxSimulatorProps) {
         onCreateScenario={createScenario}
         onCloneScenario={cloneScenario}
         onDeleteScenario={deleteScenario}
-        onRenameScenario={renameScenario}
         onSetActiveScenario={setActiveScenario}
         onSetMarginalRate={setMarginalRate}
         onCompare={() => setShowComparison(true)}
@@ -161,52 +156,38 @@ export function TaxSimulator({ grants }: TaxSimulatorProps) {
 
       {/* Active scenario content */}
       {activeScenario && (
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList>
-            <TabsTrigger value="simulator" className="flex items-center gap-2">
-              <IconCalculator className="h-4 w-4" />
-              Simulator
-            </TabsTrigger>
-            <TabsTrigger value="yearly" className="flex items-center gap-2">
-              <IconCalendar className="h-4 w-4" />
-              Year Planning
-            </TabsTrigger>
-          </TabsList>
+        <div className="space-y-4">
+          {/* Tax Summary and Simulated Transactions side by side */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <ScenarioSummaryCard summary={activeScenario.summary} />
+            <SimulatedTransactionsList
+              exercises={activeScenario.exercises}
+              sales={activeScenario.sales}
+              onDeleteExercise={handleDeleteExercise}
+              onDeleteSale={handleDeleteSale}
+            />
+          </div>
 
-          <TabsContent value="simulator" className="space-y-4 mt-4">
-            {/* Tax Summary and Simulated Transactions side by side */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <ScenarioSummaryCard summary={activeScenario.summary} />
-              <SimulatedTransactionsList
-                exercises={activeScenario.exercises}
-                sales={activeScenario.sales}
-                onDeleteExercise={handleDeleteExercise}
-                onDeleteSale={handleDeleteSale}
-              />
-            </div>
+          {/* Exercise and Sale forms side by side */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <ExerciseSimulator
+              grants={grantsForSimulation}
+              simulatedExercisedByGrant={simulatedExercisedByGrant}
+              onAddExercise={handleAddExercise}
+              marginalRate={marginalTaxRate}
+            />
+            <SaleSimulator
+              grants={grantsForSimulation}
+              simulatedExercises={activeScenario.exercises}
+              simulatedSales={activeScenario.sales}
+              onAddSale={handleAddSale}
+              marginalRate={marginalTaxRate}
+            />
+          </div>
 
-            {/* Exercise and Sale forms side by side */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <ExerciseSimulator
-                grants={grantsForSimulation}
-                simulatedExercisedByGrant={simulatedExercisedByGrant}
-                onAddExercise={handleAddExercise}
-                marginalRate={marginalTaxRate}
-              />
-              <SaleSimulator
-                grants={grantsForSimulation}
-                simulatedExercises={activeScenario.exercises}
-                simulatedSales={activeScenario.sales}
-                onAddSale={handleAddSale}
-                marginalRate={marginalTaxRate}
-              />
-            </div>
-          </TabsContent>
-
-          <TabsContent value="yearly" className="mt-4">
-            <YearlyPlanningView scenario={activeScenario} />
-          </TabsContent>
-        </Tabs>
+          {/* Year Planning */}
+          <YearlyPlanningView scenario={activeScenario} />
+        </div>
       )}
     </div>
   );

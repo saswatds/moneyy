@@ -19,18 +19,9 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
   IconPlus,
   IconCopy,
   IconTrash,
-  IconDotsVertical,
-  IconEdit,
   IconChartBar,
   IconSettings,
 } from '@tabler/icons-react';
@@ -45,7 +36,6 @@ interface TaxSimulatorHeaderProps {
   onCreateScenario: (name: string) => void;
   onCloneScenario: (scenarioId: string, newName: string) => void;
   onDeleteScenario: (scenarioId: string) => void;
-  onRenameScenario: (scenarioId: string, newName: string) => void;
   onSetActiveScenario: (scenarioId: string) => void;
   onSetMarginalRate: (rate: number) => void;
   onCompare: () => void;
@@ -59,16 +49,13 @@ export function TaxSimulatorHeader({
   onCreateScenario,
   onCloneScenario,
   onDeleteScenario,
-  onRenameScenario,
   onSetActiveScenario,
   onSetMarginalRate,
   onCompare,
 }: TaxSimulatorHeaderProps) {
   const [cloneDialogOpen, setCloneDialogOpen] = useState(false);
-  const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [cloneName, setCloneName] = useState('');
-  const [renameName, setRenameName] = useState('');
   const [tempMarginalRate, setTempMarginalRate] = useState(marginalRate * 100);
 
   const activeScenario = scenarios.find(s => s.id === activeScenarioId);
@@ -85,21 +72,9 @@ export function TaxSimulatorHeader({
     setCloneDialogOpen(false);
   };
 
-  const handleRenameScenario = () => {
-    if (!activeScenarioId || !renameName.trim()) return;
-    onRenameScenario(activeScenarioId, renameName.trim());
-    setRenameName('');
-    setRenameDialogOpen(false);
-  };
-
   const handleSaveSettings = () => {
     onSetMarginalRate(tempMarginalRate / 100);
     setSettingsDialogOpen(false);
-  };
-
-  const openRenameDialog = () => {
-    setRenameName(activeScenario?.name || '');
-    setRenameDialogOpen(true);
   };
 
   const openSettingsDialog = () => {
@@ -108,44 +83,43 @@ export function TaxSimulatorHeader({
   };
 
   return (
-    <div className="flex items-center justify-between gap-4 pb-4 border-b">
+    <div className="flex items-center justify-end shrink-0 mb-4">
       <div className="flex items-center gap-3">
-        <Label htmlFor="scenario" className="text-sm font-medium whitespace-nowrap">
-          Scenario:
-        </Label>
-        {scenarios.length === 0 ? (
-          <span className="text-muted-foreground text-sm">No scenarios</span>
-        ) : (
-          <Select
-            value={activeScenarioId || ''}
-            onValueChange={onSetActiveScenario}
-          >
-            <SelectTrigger id="scenario" className="w-[200px]">
-              <SelectValue placeholder="Select scenario" />
-            </SelectTrigger>
-            <SelectContent>
-              {scenarios.map(scenario => (
-                <SelectItem key={scenario.id} value={scenario.id}>
-                  {scenario.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
+        <Select
+          value={activeScenarioId || 'new'}
+          onValueChange={(value) => {
+            if (value === 'new') {
+              handleCreateScenario();
+            } else {
+              onSetActiveScenario(value);
+            }
+          }}
+        >
+          <SelectTrigger className="w-[200px]">
+            <SelectValue placeholder="Select scenario" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="new">
+              <div className="flex items-center gap-2">
+                <IconPlus className="h-4 w-4" />
+                New Scenario
+              </div>
+            </SelectItem>
+            {scenarios.map(scenario => (
+              <SelectItem key={scenario.id} value={scenario.id}>
+                {scenario.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
-        <Button variant="outline" size="sm" onClick={handleCreateScenario}>
-          <IconPlus className="h-4 w-4 mr-1" />
-          New
-        </Button>
-
-        {/* Scenario Actions */}
         {activeScenario && (
           <>
             {/* Clone Dialog */}
             <Dialog open={cloneDialogOpen} onOpenChange={setCloneDialogOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline" size="sm">
-                  <IconCopy className="h-4 w-4 mr-1" />
+                  <IconCopy className="h-4 w-4 mr-2" />
                   Clone
                 </Button>
               </DialogTrigger>
@@ -176,65 +150,22 @@ export function TaxSimulatorHeader({
               </DialogContent>
             </Dialog>
 
-            {/* More Actions Dropdown */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm">
-                  <IconDotsVertical className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={openRenameDialog}>
-                  <IconEdit className="h-4 w-4 mr-2" />
-                  Rename
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  className="text-red-600"
-                  onClick={() => {
-                    if (window.confirm(`Delete "${activeScenario.name}"? This cannot be undone.`)) {
-                      onDeleteScenario(activeScenarioId!);
-                    }
-                  }}
-                >
-                  <IconTrash className="h-4 w-4 mr-2" />
-                  Delete
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            {/* Rename Dialog */}
-            <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Rename Scenario</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4 py-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="renameName">Scenario Name</Label>
-                    <Input
-                      id="renameName"
-                      value={renameName}
-                      onChange={e => setRenameName(e.target.value)}
-                      placeholder="Enter new name"
-                    />
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setRenameDialogOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button onClick={handleRenameScenario} disabled={!renameName.trim()}>
-                    Rename
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-destructive hover:text-destructive"
+              onClick={() => {
+                if (window.confirm(`Delete "${activeScenario.name}"? This cannot be undone.`)) {
+                  onDeleteScenario(activeScenarioId!);
+                }
+              }}
+            >
+              <IconTrash className="h-4 w-4 mr-2" />
+              Delete
+            </Button>
           </>
         )}
-      </div>
 
-      <div className="flex items-center gap-2">
         {/* Settings Dialog */}
         <Dialog open={settingsDialogOpen} onOpenChange={setSettingsDialogOpen}>
           <DialogTrigger asChild>

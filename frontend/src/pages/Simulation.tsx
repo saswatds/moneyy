@@ -1,14 +1,16 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueries } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
-import type { ProjectionConfig, ProjectionResponse } from '@/lib/api-client';
+import type { ProjectionConfig, ProjectionResponse, EquityGrantWithSummary } from '@/lib/api-client';
 import { useExchangeRates } from '@/hooks/use-exchange-rates';
 import { useAnnualIncomeSummary, useIncomeTaxConfig } from '@/hooks/use-income';
 import { EventsList } from '@/components/projections/EventsList';
 import { SensitivityAnalysisDialog } from '@/components/projections/SensitivityAnalysisDialog';
 import { CurrencyInput } from '@/components/projections/CurrencyInput';
 import { PercentageInput } from '@/components/projections/PercentageInput';
+import { TaxSimulator } from '@/components/options/tax-simulator';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Card,
   CardContent,
@@ -31,6 +33,8 @@ import {
   IconInfoCircle,
   IconLink,
   IconRefresh,
+  IconTrendingUp,
+  IconCoin,
 } from '@tabler/icons-react';
 import {
   Select,
@@ -115,6 +119,7 @@ export function Simulation() {
     value: number;
     updateFn?: (path: string, value: number) => ProjectionConfig;
   } | null>(null);
+  const [activeTab, setActiveTab] = useState('financial');
 
   // Fetch income and tax configuration from Income & Taxes system
   const { data: incomeSummary } = useAnnualIncomeSummary(currentYear);
@@ -148,11 +153,38 @@ export function Simulation() {
     queryFn: () => apiClient.getRecurringExpenses(),
   });
 
-  // Load accounts to get account names for debts
+  // Load accounts to get account names for debts and find stock_options accounts
   const { data: accountsData } = useQuery({
     queryKey: ['accounts'],
     queryFn: () => apiClient.getAccounts(),
   });
+
+  // Filter for stock_options accounts
+  const stockOptionsAccounts = useMemo(() => {
+    return accountsData?.accounts.filter(acc => acc.type === 'stock_options') || [];
+  }, [accountsData]);
+
+  // Fetch options summary for each stock_options account
+  const optionsSummaryQueries = useQueries({
+    queries: stockOptionsAccounts.map(acc => ({
+      queryKey: ['options-summary', acc.id],
+      queryFn: () => apiClient.getOptionsSummary(acc.id),
+      enabled: stockOptionsAccounts.length > 0,
+    })),
+  });
+
+  // Combine all grants from all options accounts
+  const allOptionsGrants = useMemo<EquityGrantWithSummary[]>(() => {
+    const grants: EquityGrantWithSummary[] = [];
+    for (const query of optionsSummaryQueries) {
+      if (query.data?.grants) {
+        grants.push(...query.data.grants);
+      }
+    }
+    return grants;
+  }, [optionsSummaryQueries]);
+
+  const hasOptionsAccounts = stockOptionsAccounts.length > 0;
 
   // Load exchange rates for currency conversion
   const { data: exchangeRates } = useExchangeRates();
@@ -633,11 +665,27 @@ export function Simulation() {
     <div className="flex flex-col max-h-[calc(100vh-5rem)]">
       <div className="flex items-center justify-between shrink-0">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Financial Simulation</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Simulation</h1>
           <p className="text-muted-foreground mt-2">
-            Configure parameters and simulate your financial future
+            Model your financial future and plan stock option exercises
           </p>
         </div>
+      </div>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0 mt-4">
+        <TabsList className="shrink-0">
+          <TabsTrigger value="financial" className="flex items-center gap-2">
+            <IconTrendingUp className="h-4 w-4" />
+            Financial Projection
+          </TabsTrigger>
+          <TabsTrigger value="options-tax" className="flex items-center gap-2" disabled={!hasOptionsAccounts}>
+            <IconCoin className="h-4 w-4" />
+            Options Tax
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="financial" className="flex-1 flex flex-col min-h-0 mt-4 data-[state=inactive]:hidden">
+      <div className="flex items-center justify-end shrink-0 mb-4">
         <div className="flex items-center gap-3">
           <Select value={currentScenarioId || 'new'} onValueChange={(value) => {
             if (value === 'new') {
@@ -1363,6 +1411,26 @@ export function Simulation() {
           </div>
         </div>
       </div>
+        </TabsContent>
+
+        <TabsContent value="options-tax" className="flex-1 overflow-y-auto mt-4 data-[state=inactive]:hidden">
+          {hasOptionsAccounts ? (
+            <TaxSimulator grants={allOptionsGrants} />
+          ) : (
+            <Card>
+              <CardContent className="py-12">
+                <div className="text-center text-muted-foreground">
+                  <IconCoin className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <h3 className="text-lg font-medium mb-2">No Stock Options Accounts</h3>
+                  <p className="text-sm">
+                    Add a stock options account to use the options tax simulator.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+      </Tabs>
 
       {/* Sensitivity Analysis Dialog */}
       {sensitivityParameter && (
