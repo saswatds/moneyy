@@ -95,7 +95,7 @@ const defaultConfig: ProjectionConfig = {
   events: [],
 };
 
-export function Projections() {
+export function Simulation() {
   const navigate = useNavigate();
   const currentYear = new Date().getFullYear();
   const [config, setConfig] = useState<ProjectionConfig>(defaultConfig);
@@ -630,12 +630,12 @@ export function Projections() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="flex flex-col max-h-[calc(100vh-5rem)]">
+      <div className="flex items-center justify-between shrink-0">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Financial Projections</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Financial Simulation</h1>
           <p className="text-muted-foreground mt-2">
-            Configure parameters and visualize your financial future
+            Configure parameters and simulate your financial future
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -740,7 +740,7 @@ export function Projections() {
       </Dialog>
 
       {error && (
-        <Card className="border-destructive">
+        <Card className="border-destructive shrink-0 mt-4">
           <CardContent className="pt-6">
             <div className="flex items-center gap-2 text-destructive">
               <IconAlertCircle className="h-5 w-5" />
@@ -751,7 +751,7 @@ export function Projections() {
       )}
 
       {/* Two Pane Layout */}
-      <div className="grid grid-cols-5 gap-6 h-[calc(100vh-16rem)] -mx-1">
+      <div className="grid grid-cols-5 gap-6 flex-1 min-h-0 mt-4 -mx-1">
         {/* Left Pane - Charts (3/5 width) */}
         <div className="col-span-3 space-y-3 overflow-y-auto px-1 pb-1">
           {/* Summary Stats */}
@@ -1082,7 +1082,8 @@ export function Projections() {
         </div>
 
         {/* Right Pane - Configuration (2/5 width) */}
-        <div className="col-span-2 overflow-y-auto px-1 pb-1">
+        <div className="col-span-2 flex flex-col overflow-hidden">
+          <div className="flex-1 overflow-y-auto px-1">
           <Card>
             <CardHeader className="pb-4">
               <div className="flex items-center justify-between">
@@ -1331,32 +1332,34 @@ export function Projections() {
                 </div>
               </div>
 
-              {/* Actions */}
-              <div className="pt-4 border-t">
-                <Button
-                  onClick={() => {
-                    handleCalculate();
-                    if (currentScenarioId) {
-                      handleSaveScenario();
-                    }
-                  }}
-                  className="w-full"
-                  disabled={calculateMutation.isPending || saveMutation.isPending}
-                >
-                  <IconCalculator className="h-4 w-4 mr-2" />
-                  {calculateMutation.isPending ? 'Calculating...' : saveMutation.isPending ? 'Saving...' : 'Recalculate'}
-                </Button>
-              </div>
             </CardContent>
           </Card>
 
           {/* Events - separate card since it has its own complex UI */}
-          <div className="mt-6">
+          <div className="mt-6 pb-4">
             <EventsList
               events={config.events}
               onEventsChange={(events) => setConfig({ ...config, events })}
               baseConfig={config}
             />
+          </div>
+          </div>
+
+          {/* Sticky Recalculate Button */}
+          <div className="shrink-0 p-3 border-t bg-background">
+            <Button
+              onClick={() => {
+                handleCalculate();
+                if (currentScenarioId) {
+                  handleSaveScenario();
+                }
+              }}
+              className="w-full"
+              disabled={calculateMutation.isPending || saveMutation.isPending}
+            >
+              <IconCalculator className="h-4 w-4 mr-2" />
+              {calculateMutation.isPending ? 'Calculating...' : saveMutation.isPending ? 'Saving...' : 'Recalculate'}
+            </Button>
           </div>
         </div>
       </div>

@@ -71,7 +71,7 @@ export function WelcomeDialog({ open, onOpenChange }: WelcomeDialogProps) {
                 <ul className="list-disc list-inside space-y-1 ml-2">
                   <li>See how the app works</li>
                   <li>Explore features with real-looking data</li>
-                  <li>Test projections and visualizations</li>
+                  <li>Test simulations and visualizations</li>
                 </ul>
                 <p className="pt-2 font-medium">
                   Includes sample accounts, investments, mortgage, and more

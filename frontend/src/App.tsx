@@ -19,7 +19,7 @@ import { AssetDashboard } from './pages/AssetDashboard';
 import { OptionsSetup } from './pages/OptionsSetup';
 import { OptionsDashboard } from './pages/OptionsDashboard';
 import { IncomeTaxes } from './pages/IncomeTaxes';
-import { Projections } from './pages/Projections';
+import { Simulation } from './pages/Simulation';
 import { RecurringExpenses } from './pages/RecurringExpenses';
 import { Settings } from './pages/Settings';
 import { PasskeyLogin } from './pages/auth/PasskeyLogin';
@@ -79,7 +79,7 @@ function App() {
                 <Route path="accounts/:accountId/options/setup" element={<OptionsSetup />} />
                 <Route path="accounts/:accountId/options" element={<OptionsDashboard />} />
                 <Route path="income" element={<IncomeTaxes />} />
-                <Route path="projections" element={<Projections />} />
+                <Route path="simulation" element={<Simulation />} />
                 <Route path="expenses" element={<RecurringExpenses />} />
                 <Route path="settings" element={<Settings />} />
               </Route>

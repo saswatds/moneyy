@@ -42,8 +42,8 @@ const items = [
     icon: IconReceipt,
   },
   {
-    title: 'Projections',
-    url: '/projections',
+    title: 'Simulation',
+    url: '/simulation',
     icon: IconTrendingUp,
   },
   {
