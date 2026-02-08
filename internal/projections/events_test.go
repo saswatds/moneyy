@@ -723,3 +723,892 @@ func TestCalculateProjection_MultipleEvents(t *testing.T) {
 		t.Error("Expected vacation expense in month 9")
 	}
 }
+
+// =============================================================================
+// Edge Case Tests
+// =============================================================================
+
+func TestCalculateProjection_EventWithZeroAmount(t *testing.T) {
+	db := SetupTestDB(t)
+	defer CleanupTestDB(t, db)
+
+	userID := "test-user-zero-amount-1"
+	account.CreateTestUser(t, db, userID)
+	ctx := CreateAuthContext(userID)
+	service := SetupProjectionService(t, db)
+
+	CreateTestAccountForProjection(t, db, userID, account.AccountTypeSavings, 10000.00)
+
+	config := DefaultTestConfig()
+	config.TimeHorizonYears = 1
+	config.Events = []Event{
+		{
+			ID:          "zero-income-1",
+			Type:        EventOneTimeIncome,
+			Date:        time.Now().AddDate(0, 3, 0),
+			Description: "Zero amount income",
+			Parameters: EventParameters{
+				Amount: 0.0,
+			},
+		},
+	}
+
+	req := &ProjectionRequest{Config: config}
+
+	result, err := service.CalculateProjection(ctx, req)
+
+	if err != nil {
+		t.Fatalf("CalculateProjection should handle zero amount: %v", err)
+	}
+
+	// Zero amount should not affect income
+	month3Income := result.CashFlow[2].Income
+	month4Income := result.CashFlow[3].Income
+
+	// Income should be roughly the same (only normal salary growth)
+	tolerance := 100.0
+	if month4Income > month3Income+tolerance || month4Income < month3Income-tolerance {
+		t.Errorf("Zero amount event should not significantly affect income: month3=%.2f, month4=%.2f",
+			month3Income, month4Income)
+	}
+}
+
+func TestCalculateProjection_EventInThePast(t *testing.T) {
+	db := SetupTestDB(t)
+	defer CleanupTestDB(t, db)
+
+	userID := "test-user-past-event-1"
+	account.CreateTestUser(t, db, userID)
+	ctx := CreateAuthContext(userID)
+	service := SetupProjectionService(t, db)
+
+	CreateTestAccountForProjection(t, db, userID, account.AccountTypeSavings, 10000.00)
+
+	config := DefaultTestConfig()
+	config.TimeHorizonYears = 1
+	config.Events = []Event{
+		{
+			ID:          "past-bonus-1",
+			Type:        EventOneTimeIncome,
+			Date:        time.Now().AddDate(0, -3, 0), // 3 months in the past
+			Description: "Past bonus",
+			Parameters: EventParameters{
+				Amount: 5000.00,
+			},
+		},
+	}
+
+	req := &ProjectionRequest{Config: config}
+
+	result, err := service.CalculateProjection(ctx, req)
+
+	if err != nil {
+		t.Fatalf("CalculateProjection should handle past events gracefully: %v", err)
+	}
+
+	// Past events should be ignored - verify projection still works
+	if len(result.CashFlow) < 12 {
+		t.Fatal("Expected 12 months of cash flow")
+	}
+}
+
+func TestCalculateProjection_EventBeyondHorizon(t *testing.T) {
+	db := SetupTestDB(t)
+	defer CleanupTestDB(t, db)
+
+	userID := "test-user-future-event-1"
+	account.CreateTestUser(t, db, userID)
+	ctx := CreateAuthContext(userID)
+	service := SetupProjectionService(t, db)
+
+	CreateTestAccountForProjection(t, db, userID, account.AccountTypeSavings, 10000.00)
+
+	config := DefaultTestConfig()
+	config.TimeHorizonYears = 1
+	config.Events = []Event{
+		{
+			ID:          "far-future-bonus-1",
+			Type:        EventOneTimeIncome,
+			Date:        time.Now().AddDate(5, 0, 0), // 5 years in future (beyond 1 year horizon)
+			Description: "Far future bonus",
+			Parameters: EventParameters{
+				Amount: 100000.00,
+			},
+		},
+	}
+
+	req := &ProjectionRequest{Config: config}
+
+	result, err := service.CalculateProjection(ctx, req)
+
+	if err != nil {
+		t.Fatalf("CalculateProjection should handle future events gracefully: %v", err)
+	}
+
+	// Future event beyond horizon should be ignored
+	if len(result.CashFlow) != 13 { // 0 to 12 months inclusive
+		t.Errorf("Expected 13 cash flow points, got %d", len(result.CashFlow))
+	}
+
+	// No unusual income spikes expected
+	lastMonthIncome := result.CashFlow[12].Income
+	if lastMonthIncome > 20000 { // Way more than normal monthly income
+		t.Errorf("Far future event should not affect projection: lastMonthIncome=%.2f", lastMonthIncome)
+	}
+}
+
+func TestCalculateProjection_ExtraDebtPaymentExceedsBalance(t *testing.T) {
+	db := SetupTestDB(t)
+	defer CleanupTestDB(t, db)
+
+	userID := "test-user-debt-overpay-1"
+	account.CreateTestUser(t, db, userID)
+	ctx := CreateAuthContext(userID)
+	service := SetupProjectionService(t, db)
+
+	CreateTestAccountForProjection(t, db, userID, account.AccountTypeSavings, 100000.00)
+	loanID := CreateTestLoanForProjection(t, db, userID) // -10k loan
+
+	config := DefaultTestConfig()
+	config.TimeHorizonYears = 1
+	config.Events = []Event{
+		{
+			ID:          "overpay-loan-1",
+			Type:        EventExtraDebtPayment,
+			Date:        time.Now().AddDate(0, 1, 0),
+			Description: "Overpay loan",
+			Parameters: EventParameters{
+				Amount:    50000.00, // Way more than $10k loan balance
+				AccountID: loanID,
+			},
+		},
+	}
+
+	req := &ProjectionRequest{Config: config}
+
+	result, err := service.CalculateProjection(ctx, req)
+
+	if err != nil {
+		t.Fatalf("CalculateProjection should handle overpayment gracefully: %v", err)
+	}
+
+	// Debt should be paid off but not go negative
+	// Check debt after the event
+	if len(result.DebtPayoff) < 3 {
+		t.Fatal("Expected at least 3 months of debt data")
+	}
+
+	month2Debt := result.DebtPayoff[2].TotalDebt
+	if month2Debt < 0 {
+		t.Errorf("Debt should not go negative after overpayment: %.2f", month2Debt)
+	}
+}
+
+func TestCalculateProjection_ExtraDebtPaymentInvalidAccount(t *testing.T) {
+	db := SetupTestDB(t)
+	defer CleanupTestDB(t, db)
+
+	userID := "test-user-invalid-debt-1"
+	account.CreateTestUser(t, db, userID)
+	ctx := CreateAuthContext(userID)
+	service := SetupProjectionService(t, db)
+
+	CreateTestAccountForProjection(t, db, userID, account.AccountTypeSavings, 100000.00)
+
+	config := DefaultTestConfig()
+	config.TimeHorizonYears = 1
+	config.Events = []Event{
+		{
+			ID:          "invalid-debt-1",
+			Type:        EventExtraDebtPayment,
+			Date:        time.Now().AddDate(0, 1, 0),
+			Description: "Payment to non-existent account",
+			Parameters: EventParameters{
+				Amount:    5000.00,
+				AccountID: "non-existent-account-id",
+			},
+		},
+	}
+
+	req := &ProjectionRequest{Config: config}
+
+	// Should not crash, but may log an error
+	result, err := service.CalculateProjection(ctx, req)
+
+	if err != nil {
+		t.Fatalf("CalculateProjection should handle invalid account gracefully: %v", err)
+	}
+
+	// Projection should still complete
+	if len(result.CashFlow) < 12 {
+		t.Fatal("Expected 12 months of cash flow despite invalid event")
+	}
+}
+
+func TestCalculateProjection_ExpenseLevelChangeNegativeResult(t *testing.T) {
+	db := SetupTestDB(t)
+	defer CleanupTestDB(t, db)
+
+	userID := "test-user-negative-expense-1"
+	account.CreateTestUser(t, db, userID)
+	ctx := CreateAuthContext(userID)
+	service := SetupProjectionService(t, db)
+
+	CreateTestAccountForProjection(t, db, userID, account.AccountTypeSavings, 50000.00)
+
+	config := DefaultTestConfig()
+	config.TimeHorizonYears = 1
+	config.MonthlyExpenses = 3000.00
+	config.Events = []Event{
+		{
+			ID:          "huge-reduction-1",
+			Type:        EventExpenseLevelChange,
+			Date:        time.Now().AddDate(0, 3, 0),
+			Description: "Reduce expenses by more than 100%",
+			Parameters: EventParameters{
+				ExpenseChange:     -1.50, // -150% reduction
+				ExpenseChangeType: "relative_percent",
+			},
+		},
+	}
+
+	req := &ProjectionRequest{Config: config}
+
+	result, err := service.CalculateProjection(ctx, req)
+
+	if err != nil {
+		t.Fatalf("CalculateProjection should handle negative expense result: %v", err)
+	}
+
+	// Expenses should be clamped to 0, not go negative
+	if len(result.CashFlow) < 5 {
+		t.Fatal("Expected at least 5 months of cash flow")
+	}
+
+	// After the reduction, debt payments should still be included but base expenses should be 0
+	afterChange := result.CashFlow[4].Expenses
+	if afterChange < 0 {
+		t.Errorf("Expenses should not go negative: %.2f", afterChange)
+	}
+}
+
+func TestCalculateProjection_ExpenseLevelChangeRelativeAmount(t *testing.T) {
+	db := SetupTestDB(t)
+	defer CleanupTestDB(t, db)
+
+	userID := "test-user-expense-relative-amount-1"
+	account.CreateTestUser(t, db, userID)
+	ctx := CreateAuthContext(userID)
+	service := SetupProjectionService(t, db)
+
+	CreateTestAccountForProjection(t, db, userID, account.AccountTypeSavings, 50000.00)
+
+	config := DefaultTestConfig()
+	config.TimeHorizonYears = 1
+	config.MonthlyExpenses = 3000.00
+	config.Events = []Event{
+		{
+			ID:          "expense-increase-1",
+			Type:        EventExpenseLevelChange,
+			Date:        time.Now().AddDate(0, 3, 0),
+			Description: "Add $500 to monthly expenses",
+			Parameters: EventParameters{
+				ExpenseChange:     500.00,
+				ExpenseChangeType: "relative_amount",
+			},
+		},
+	}
+
+	req := &ProjectionRequest{Config: config}
+
+	result, err := service.CalculateProjection(ctx, req)
+
+	if err != nil {
+		t.Fatalf("CalculateProjection failed: %v", err)
+	}
+
+	if len(result.CashFlow) < 5 {
+		t.Fatal("Expected at least 5 months of cash flow")
+	}
+
+	beforeChange := result.CashFlow[2].Expenses
+	afterChange := result.CashFlow[4].Expenses
+
+	// Should increase by ~$500 (allowing for expense growth)
+	difference := afterChange - beforeChange
+	if difference < 400 || difference > 600 {
+		t.Errorf("Expected ~$500 expense increase: before=%.2f, after=%.2f, diff=%.2f",
+			beforeChange, afterChange, difference)
+	}
+}
+
+func TestCalculateProjection_SalaryChangeToZero(t *testing.T) {
+	db := SetupTestDB(t)
+	defer CleanupTestDB(t, db)
+
+	userID := "test-user-zero-salary-1"
+	account.CreateTestUser(t, db, userID)
+	ctx := CreateAuthContext(userID)
+	service := SetupProjectionService(t, db)
+
+	CreateTestAccountForProjection(t, db, userID, account.AccountTypeSavings, 100000.00)
+
+	config := DefaultTestConfig()
+	config.TimeHorizonYears = 1
+	config.AnnualSalary = 60000.00
+	config.Events = []Event{
+		{
+			ID:          "job-loss-1",
+			Type:        EventSalaryChange,
+			Date:        time.Now().AddDate(0, 6, 0),
+			Description: "Job loss",
+			Parameters: EventParameters{
+				NewSalary: 0.0,
+			},
+		},
+	}
+
+	req := &ProjectionRequest{Config: config}
+
+	result, err := service.CalculateProjection(ctx, req)
+
+	if err != nil {
+		t.Fatalf("CalculateProjection should handle zero salary: %v", err)
+	}
+
+	if len(result.CashFlow) < 12 {
+		t.Fatal("Expected 12 months of cash flow")
+	}
+
+	// After job loss, income should be approximately zero
+	month8Income := result.CashFlow[7].Income
+	if month8Income > 100 { // Allow small tolerance
+		t.Errorf("Expected near-zero income after job loss: %.2f", month8Income)
+	}
+}
+
+func TestCalculateProjection_SavingsRateChangeEdgeCases(t *testing.T) {
+	db := SetupTestDB(t)
+	defer CleanupTestDB(t, db)
+
+	userID := "test-user-savings-edge-1"
+	account.CreateTestUser(t, db, userID)
+	ctx := CreateAuthContext(userID)
+	service := SetupProjectionService(t, db)
+
+	CreateTestAccountForProjection(t, db, userID, account.AccountTypeSavings, 50000.00)
+	CreateTestAccountForProjection(t, db, userID, account.AccountTypeTFSA, 10000.00)
+
+	testCases := []struct {
+		name           string
+		newSavingsRate float64
+		expectedCapped float64
+	}{
+		{"negative rate", -0.5, 0.0},
+		{"over 100%", 1.5, 1.0},
+		{"exactly 0%", 0.0, 0.0},
+		{"exactly 100%", 1.0, 1.0},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			config := DefaultTestConfig()
+			config.TimeHorizonYears = 1
+			config.Events = []Event{
+				{
+					ID:          "savings-change-1",
+					Type:        EventSavingsRateChange,
+					Date:        time.Now().AddDate(0, 1, 0),
+					Description: tc.name,
+					Parameters: EventParameters{
+						NewSavingsRate: tc.newSavingsRate,
+					},
+				},
+			}
+
+			req := &ProjectionRequest{Config: config}
+
+			result, err := service.CalculateProjection(ctx, req)
+
+			if err != nil {
+				t.Fatalf("CalculateProjection should handle %s: %v", tc.name, err)
+			}
+
+			if len(result.CashFlow) < 12 {
+				t.Fatal("Expected 12 months of cash flow")
+			}
+		})
+	}
+}
+
+func TestCalculateProjection_MultipleEventsOnSameDay(t *testing.T) {
+	db := SetupTestDB(t)
+	defer CleanupTestDB(t, db)
+
+	userID := "test-user-same-day-1"
+	account.CreateTestUser(t, db, userID)
+	ctx := CreateAuthContext(userID)
+	service := SetupProjectionService(t, db)
+
+	CreateTestAccountForProjection(t, db, userID, account.AccountTypeSavings, 50000.00)
+
+	eventDate := time.Now().AddDate(0, 6, 0)
+	config := DefaultTestConfig()
+	config.TimeHorizonYears = 1
+	config.Events = []Event{
+		{
+			ID:          "bonus-1",
+			Type:        EventOneTimeIncome,
+			Date:        eventDate,
+			Description: "Bonus",
+			Parameters: EventParameters{
+				Amount: 5000.00,
+			},
+		},
+		{
+			ID:          "expense-1",
+			Type:        EventOneTimeExpense,
+			Date:        eventDate,
+			Description: "Big purchase",
+			Parameters: EventParameters{
+				Amount: 3000.00,
+			},
+		},
+		{
+			ID:          "salary-1",
+			Type:        EventSalaryChange,
+			Date:        eventDate,
+			Description: "Raise",
+			Parameters: EventParameters{
+				NewSalary: 90000.00,
+			},
+		},
+	}
+
+	req := &ProjectionRequest{Config: config}
+
+	result, err := service.CalculateProjection(ctx, req)
+
+	if err != nil {
+		t.Fatalf("CalculateProjection should handle multiple events on same day: %v", err)
+	}
+
+	if len(result.CashFlow) < 12 {
+		t.Fatal("Expected 12 months of cash flow")
+	}
+
+	// Month 7 should have both the bonus and expense
+	month6Income := result.CashFlow[5].Income
+	month7Income := result.CashFlow[6].Income
+	month6Expenses := result.CashFlow[5].Expenses
+	month7Expenses := result.CashFlow[6].Expenses
+
+	// Should see income increase from bonus
+	if month7Income <= month6Income {
+		t.Errorf("Expected income increase in month 7: month6=%.2f, month7=%.2f",
+			month6Income, month7Income)
+	}
+
+	// Should see expense increase from big purchase
+	if month7Expenses <= month6Expenses {
+		t.Errorf("Expected expense increase in month 7: month6=%.2f, month7=%.2f",
+			month6Expenses, month7Expenses)
+	}
+}
+
+func TestCalculateProjection_RecurringEventEndDateBeforeStartDate(t *testing.T) {
+	db := SetupTestDB(t)
+	defer CleanupTestDB(t, db)
+
+	userID := "test-user-bad-recurring-1"
+	account.CreateTestUser(t, db, userID)
+	ctx := CreateAuthContext(userID)
+	service := SetupProjectionService(t, db)
+
+	CreateTestAccountForProjection(t, db, userID, account.AccountTypeSavings, 50000.00)
+
+	endDate := time.Now().AddDate(0, 1, 0)   // Month 2
+	startDate := time.Now().AddDate(0, 6, 0) // Month 7 - after end date
+
+	config := DefaultTestConfig()
+	config.TimeHorizonYears = 1
+	config.Events = []Event{
+		{
+			ID:                  "bad-recurring-1",
+			Type:                EventOneTimeIncome,
+			Date:                startDate,
+			Description:         "Bad recurring event",
+			IsRecurring:         true,
+			RecurrenceFrequency: "monthly",
+			RecurrenceEndDate:   &endDate,
+			Parameters: EventParameters{
+				Amount: 1000.00,
+			},
+		},
+	}
+
+	req := &ProjectionRequest{Config: config}
+
+	result, err := service.CalculateProjection(ctx, req)
+
+	if err != nil {
+		t.Fatalf("CalculateProjection should handle bad recurring dates: %v", err)
+	}
+
+	// Should complete without crashing
+	if len(result.CashFlow) < 12 {
+		t.Fatal("Expected 12 months of cash flow")
+	}
+}
+
+func TestCalculateProjection_RecurringEventUnknownFrequency(t *testing.T) {
+	db := SetupTestDB(t)
+	defer CleanupTestDB(t, db)
+
+	userID := "test-user-unknown-freq-1"
+	account.CreateTestUser(t, db, userID)
+	ctx := CreateAuthContext(userID)
+	service := SetupProjectionService(t, db)
+
+	CreateTestAccountForProjection(t, db, userID, account.AccountTypeSavings, 50000.00)
+
+	config := DefaultTestConfig()
+	config.TimeHorizonYears = 1
+	config.Events = []Event{
+		{
+			ID:                  "unknown-freq-1",
+			Type:                EventOneTimeIncome,
+			Date:                time.Now().AddDate(0, 1, 0),
+			Description:         "Unknown frequency",
+			IsRecurring:         true,
+			RecurrenceFrequency: "daily", // Not a supported frequency
+			Parameters: EventParameters{
+				Amount: 100.00,
+			},
+		},
+	}
+
+	req := &ProjectionRequest{Config: config}
+
+	result, err := service.CalculateProjection(ctx, req)
+
+	if err != nil {
+		t.Fatalf("CalculateProjection should handle unknown frequency: %v", err)
+	}
+
+	// Should complete - unknown frequency is treated as one-time
+	if len(result.CashFlow) < 12 {
+		t.Fatal("Expected 12 months of cash flow")
+	}
+}
+
+func TestCalculateProjection_EmptyEventsArray(t *testing.T) {
+	db := SetupTestDB(t)
+	defer CleanupTestDB(t, db)
+
+	userID := "test-user-no-events-1"
+	account.CreateTestUser(t, db, userID)
+	ctx := CreateAuthContext(userID)
+	service := SetupProjectionService(t, db)
+
+	CreateTestAccountForProjection(t, db, userID, account.AccountTypeSavings, 50000.00)
+
+	config := DefaultTestConfig()
+	config.TimeHorizonYears = 1
+	config.Events = []Event{} // Explicitly empty
+
+	req := &ProjectionRequest{Config: config}
+
+	result, err := service.CalculateProjection(ctx, req)
+
+	if err != nil {
+		t.Fatalf("CalculateProjection should handle empty events: %v", err)
+	}
+
+	if len(result.CashFlow) < 12 {
+		t.Fatal("Expected 12 months of cash flow")
+	}
+}
+
+func TestCalculateProjection_NilEventsArray(t *testing.T) {
+	db := SetupTestDB(t)
+	defer CleanupTestDB(t, db)
+
+	userID := "test-user-nil-events-1"
+	account.CreateTestUser(t, db, userID)
+	ctx := CreateAuthContext(userID)
+	service := SetupProjectionService(t, db)
+
+	CreateTestAccountForProjection(t, db, userID, account.AccountTypeSavings, 50000.00)
+
+	config := DefaultTestConfig()
+	config.TimeHorizonYears = 1
+	config.Events = nil // Nil events
+
+	req := &ProjectionRequest{Config: config}
+
+	result, err := service.CalculateProjection(ctx, req)
+
+	if err != nil {
+		t.Fatalf("CalculateProjection should handle nil events: %v", err)
+	}
+
+	if len(result.CashFlow) < 12 {
+		t.Fatal("Expected 12 months of cash flow")
+	}
+}
+
+func TestCalculateProjection_VeryLargeAmount(t *testing.T) {
+	db := SetupTestDB(t)
+	defer CleanupTestDB(t, db)
+
+	userID := "test-user-large-amount-1"
+	account.CreateTestUser(t, db, userID)
+	ctx := CreateAuthContext(userID)
+	service := SetupProjectionService(t, db)
+
+	CreateTestAccountForProjection(t, db, userID, account.AccountTypeSavings, 50000.00)
+
+	config := DefaultTestConfig()
+	config.TimeHorizonYears = 1
+	config.Events = []Event{
+		{
+			ID:          "lottery-1",
+			Type:        EventOneTimeIncome,
+			Date:        time.Now().AddDate(0, 6, 0),
+			Description: "Lottery win",
+			Parameters: EventParameters{
+				Amount: 100000000.00, // $100 million
+			},
+		},
+	}
+
+	req := &ProjectionRequest{Config: config}
+
+	result, err := service.CalculateProjection(ctx, req)
+
+	if err != nil {
+		t.Fatalf("CalculateProjection should handle very large amounts: %v", err)
+	}
+
+	if len(result.CashFlow) < 12 {
+		t.Fatal("Expected 12 months of cash flow")
+	}
+
+	// Month 7 should have the large income
+	month7Income := result.CashFlow[6].Income
+	if month7Income < 99000000 {
+		t.Errorf("Expected large income in month 7: %.2f", month7Income)
+	}
+}
+
+func TestCalculateProjection_ChainedStateChanges(t *testing.T) {
+	db := SetupTestDB(t)
+	defer CleanupTestDB(t, db)
+
+	userID := "test-user-chained-1"
+	account.CreateTestUser(t, db, userID)
+	ctx := CreateAuthContext(userID)
+	service := SetupProjectionService(t, db)
+
+	CreateTestAccountForProjection(t, db, userID, account.AccountTypeSavings, 50000.00)
+	CreateTestAccountForProjection(t, db, userID, account.AccountTypeTFSA, 20000.00)
+
+	config := DefaultTestConfig()
+	config.TimeHorizonYears = 2
+	config.AnnualSalary = 60000.00
+	config.MonthlyExpenses = 2000.00
+	config.MonthlySavingsRate = 0.10
+	config.Events = []Event{
+		{
+			ID:          "promotion-1",
+			Type:        EventSalaryChange,
+			Date:        time.Now().AddDate(0, 3, 0),
+			Description: "Promotion",
+			Parameters: EventParameters{
+				NewSalary: 80000.00,
+			},
+		},
+		{
+			ID:          "lifestyle-1",
+			Type:        EventExpenseLevelChange,
+			Date:        time.Now().AddDate(0, 6, 0),
+			Description: "Lifestyle inflation",
+			Parameters: EventParameters{
+				ExpenseChange:     0.20, // 20% increase
+				ExpenseChangeType: "relative_percent",
+			},
+		},
+		{
+			ID:          "savings-boost-1",
+			Type:        EventSavingsRateChange,
+			Date:        time.Now().AddDate(0, 9, 0),
+			Description: "Increase savings",
+			Parameters: EventParameters{
+				NewSavingsRate: 0.25,
+			},
+		},
+		{
+			ID:          "bonus-1",
+			Type:        EventOneTimeIncome,
+			Date:        time.Now().AddDate(1, 0, 0),
+			Description: "Year-end bonus",
+			Parameters: EventParameters{
+				Amount: 10000.00,
+			},
+		},
+	}
+
+	req := &ProjectionRequest{Config: config}
+
+	result, err := service.CalculateProjection(ctx, req)
+
+	if err != nil {
+		t.Fatalf("CalculateProjection failed with chained events: %v", err)
+	}
+
+	if len(result.CashFlow) < 24 {
+		t.Fatal("Expected 24 months of cash flow")
+	}
+
+	// Verify state changes persist across months
+	// Month 4 should have higher income than month 2 (after promotion)
+	month2Income := result.CashFlow[1].Income
+	month4Income := result.CashFlow[3].Income
+	if month4Income <= month2Income*1.2 {
+		t.Errorf("Expected promotion to increase income: month2=%.2f, month4=%.2f",
+			month2Income, month4Income)
+	}
+
+	// Month 7 should have higher expenses than month 5 (after lifestyle inflation)
+	month5Expenses := result.CashFlow[4].Expenses
+	month7Expenses := result.CashFlow[6].Expenses
+	if month7Expenses <= month5Expenses*1.1 {
+		t.Errorf("Expected lifestyle inflation: month5=%.2f, month7=%.2f",
+			month5Expenses, month7Expenses)
+	}
+
+	// Final net worth should be positive and growing
+	finalNetWorth := result.NetWorth[23].Value
+	initialNetWorth := result.NetWorth[0].Value
+	if finalNetWorth <= initialNetWorth {
+		t.Errorf("Expected net worth growth: initial=%.2f, final=%.2f",
+			initialNetWorth, finalNetWorth)
+	}
+}
+
+func TestCalculateProjection_RecurringDebtPayment(t *testing.T) {
+	db := SetupTestDB(t)
+	defer CleanupTestDB(t, db)
+
+	userID := "test-user-recurring-debt-1"
+	account.CreateTestUser(t, db, userID)
+	ctx := CreateAuthContext(userID)
+	service := SetupProjectionService(t, db)
+
+	CreateTestAccountForProjection(t, db, userID, account.AccountTypeSavings, 100000.00)
+	loanID := CreateTestLoanForProjection(t, db, userID) // -10k loan
+
+	config := DefaultTestConfig()
+	config.TimeHorizonYears = 1
+	config.Events = []Event{
+		{
+			ID:                  "recurring-extra-payment-1",
+			Type:                EventExtraDebtPayment,
+			Date:                time.Now().AddDate(0, 1, 0),
+			Description:         "Monthly extra payment",
+			IsRecurring:         true,
+			RecurrenceFrequency: "monthly",
+			Parameters: EventParameters{
+				Amount:    500.00, // Extra $500/month to loan
+				AccountID: loanID,
+			},
+		},
+	}
+
+	req := &ProjectionRequest{Config: config}
+
+	result, err := service.CalculateProjection(ctx, req)
+
+	if err != nil {
+		t.Fatalf("CalculateProjection failed with recurring debt payment: %v", err)
+	}
+
+	if len(result.DebtPayoff) < 12 {
+		t.Fatal("Expected 12 months of debt data")
+	}
+
+	// Debt should decrease faster than normal
+	month1Debt := result.DebtPayoff[0].TotalDebt
+	month6Debt := result.DebtPayoff[5].TotalDebt
+
+	// With extra $500/month payments, debt should decrease significantly
+	debtReduction := month1Debt - month6Debt
+	if debtReduction < 2500 { // At least 5 months of extra $500
+		t.Errorf("Expected faster debt reduction with recurring payments: month1=%.2f, month6=%.2f, reduction=%.2f",
+			month1Debt, month6Debt, debtReduction)
+	}
+}
+
+func TestCalculateProjection_ExpenseChangeWithGrowthRateUpdate(t *testing.T) {
+	db := SetupTestDB(t)
+	defer CleanupTestDB(t, db)
+
+	userID := "test-user-expense-growth-1"
+	account.CreateTestUser(t, db, userID)
+	ctx := CreateAuthContext(userID)
+	service := SetupProjectionService(t, db)
+
+	CreateTestAccountForProjection(t, db, userID, account.AccountTypeSavings, 50000.00)
+
+	config := DefaultTestConfig()
+	config.TimeHorizonYears = 3
+	config.MonthlyExpenses = 3000.00
+	config.AnnualExpenseGrowth = 0.02 // 2% annual growth
+	config.Events = []Event{
+		{
+			ID:          "retirement-1",
+			Type:        EventExpenseLevelChange,
+			Date:        time.Now().AddDate(1, 0, 0), // After 1 year
+			Description: "Retirement - lower expenses, no growth",
+			Parameters: EventParameters{
+				NewExpenses:      2000.00,
+				ExpenseChangeType: "absolute",
+				NewExpenseGrowth: 0.0, // No more expense growth
+			},
+		},
+	}
+
+	req := &ProjectionRequest{Config: config}
+
+	result, err := service.CalculateProjection(ctx, req)
+
+	if err != nil {
+		t.Fatalf("CalculateProjection failed: %v", err)
+	}
+
+	if len(result.CashFlow) < 36 {
+		t.Fatal("Expected 36 months of cash flow")
+	}
+
+	// Before retirement (month 11), expenses should be growing
+	month6Expenses := result.CashFlow[5].Expenses
+	month11Expenses := result.CashFlow[10].Expenses
+
+	// After retirement (month 14), expenses should be stable (no growth)
+	month14Expenses := result.CashFlow[13].Expenses
+	month24Expenses := result.CashFlow[23].Expenses
+
+	// Pre-retirement: expenses should grow
+	if month11Expenses <= month6Expenses {
+		t.Errorf("Expected expense growth before retirement: month6=%.2f, month11=%.2f",
+			month6Expenses, month11Expenses)
+	}
+
+	// Post-retirement: expenses should be relatively stable (allowing for rounding)
+	tolerance := 50.0
+	if month24Expenses > month14Expenses+tolerance {
+		t.Errorf("Expected stable expenses after retirement: month14=%.2f, month24=%.2f",
+			month14Expenses, month24Expenses)
+	}
+}
