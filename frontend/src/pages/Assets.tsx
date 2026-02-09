@@ -19,7 +19,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Currency } from '@/components/ui/currency';
-import type { AssetWithCurrentValue, Holding } from '@/lib/api-client';
+import { HoldingsAnalysisDashboard } from '@/components/holdings/HoldingsAnalysisDashboard';
+import type { AssetWithCurrentValue } from '@/lib/api-client';
 
 export function Assets() {
   const navigate = useNavigate();
@@ -141,7 +142,7 @@ export function Assets() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Assets</h1>
           <p className="text-muted-foreground mt-2">
-            Track and manage your physical assets with depreciation
+            Track physical assets and analyze investment holdings
           </p>
         </div>
         <div className="flex items-center gap-4">
@@ -377,186 +378,18 @@ export function Assets() {
         </CardContent>
       </Card>
 
-      {/* Holdings Table */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Investment Holdings</CardTitle>
-              <CardDescription className="mt-1.5">
-                All your securities and cash positions across all accounts
-              </CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {holdingsLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="text-muted-foreground">Loading holdings...</div>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
-                      Account
-                    </th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
-                      Type
-                    </th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
-                      Symbol
-                    </th>
-                    <th className="px-4 py-3 text-right text-sm font-medium text-muted-foreground">
-                      Quantity
-                    </th>
-                    <th className="px-4 py-3 text-right text-sm font-medium text-muted-foreground">
-                      Cost Basis
-                    </th>
-                    <th className="px-4 py-3 text-right text-sm font-medium text-muted-foreground">
-                      Value
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {allHoldings.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="px-4 py-12 text-center">
-                        <div className="text-muted-foreground">
-                          No holdings found.
-                        </div>
-                      </td>
-                    </tr>
-                  ) : (
-                    allHoldings.map((holding: Holding) => {
-                      const accountCurrency = getAccountCurrency(holding.account_id);
-                      let costBasis = holding.cost_basis;
-                      let amount = holding.amount;
-
-                      if (accountCurrency !== selectedCurrency && holding.type !== 'cash') {
-                        const convertedCost = holding.cost_basis ? convertAmount(holding.cost_basis, accountCurrency, selectedCurrency) : null;
-                        if (convertedCost !== null) costBasis = convertedCost;
-                      }
-
-                      if (accountCurrency !== selectedCurrency && holding.type === 'cash' && holding.amount) {
-                        const convertedAmount = convertAmount(holding.amount, accountCurrency, selectedCurrency);
-                        if (convertedAmount !== null) amount = convertedAmount;
-                      }
-
-                      return (
-                        <tr
-                          key={holding.id}
-                          className="border-b border-border last:border-0 hover:bg-muted/50"
-                        >
-                          <td className="px-4 py-4">
-                            <div className="text-sm font-medium">
-                              {getAccountName(holding.account_id)}
-                            </div>
-                          </td>
-                          <td className="px-4 py-4">
-                            <span className="px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
-                              {holding.type}
-                            </span>
-                          </td>
-                          <td className="px-4 py-4">
-                            <div className="text-sm font-medium">
-                              {holding.type === 'cash' ? holding.currency : holding.symbol}
-                            </div>
-                          </td>
-                          <td className="px-4 py-4 text-right">
-                            <div className="text-sm">
-                              {holding.type === 'cash' && holding.amount ? (
-                                accountCurrency === selectedCurrency ? (
-                                  formatCurrency(holding.amount, holding.currency!)
-                                ) : (
-                                  <div>
-                                    <div>{formatCurrency(amount!, selectedCurrency)}</div>
-                                    <div className="text-xs text-muted-foreground">
-                                      {formatCurrency(holding.amount, holding.currency!)}
-                                    </div>
-                                  </div>
-                                )
-                              ) : holding.quantity ? (
-                                holding.quantity.toLocaleString('en-US', {
-                                  minimumFractionDigits: 2,
-                                  maximumFractionDigits: 8,
-                                })
-                              ) : '-'}
-                            </div>
-                          </td>
-                          <td className="px-4 py-4 text-right">
-                            {holding.cost_basis && holding.type !== 'cash' ? (
-                              accountCurrency === selectedCurrency ? (
-                                <div className="text-sm">{formatCurrency(holding.cost_basis, accountCurrency)}</div>
-                              ) : (
-                                <div>
-                                  <div className="text-sm">{formatCurrency(costBasis!, selectedCurrency)}</div>
-                                  <div className="text-xs text-muted-foreground">
-                                    {formatCurrency(holding.cost_basis, accountCurrency)}
-                                  </div>
-                                </div>
-                              )
-                            ) : (
-                              <div className="text-sm text-muted-foreground">-</div>
-                            )}
-                          </td>
-                          <td className="px-4 py-4 text-right">
-                            {holding.type === 'cash' && holding.amount ? (
-                              accountCurrency === selectedCurrency ? (
-                                <div className="text-sm font-medium text-green-600 dark:text-green-400">
-                                  {formatCurrency(holding.amount, holding.currency!)}
-                                </div>
-                              ) : (
-                                <div>
-                                  <div className="text-sm font-medium text-green-600 dark:text-green-400">
-                                    {formatCurrency(amount!, selectedCurrency)}
-                                  </div>
-                                  <div className="text-xs text-muted-foreground">
-                                    {formatCurrency(holding.amount, holding.currency!)}
-                                  </div>
-                                </div>
-                              )
-                            ) : holding.cost_basis && holding.quantity ? (
-                              (() => {
-                                const totalValue = holding.cost_basis * holding.quantity;
-                                const convertedValue = accountCurrency !== selectedCurrency
-                                  ? convertAmount(totalValue, accountCurrency, selectedCurrency)
-                                  : null;
-
-                                return accountCurrency === selectedCurrency ? (
-                                  <div className="text-sm font-medium text-green-600 dark:text-green-400">
-                                    {formatCurrency(totalValue, accountCurrency)}
-                                  </div>
-                                ) : convertedValue !== null ? (
-                                  <div>
-                                    <div className="text-sm font-medium text-green-600 dark:text-green-400">
-                                      {formatCurrency(convertedValue, selectedCurrency)}
-                                    </div>
-                                    <div className="text-xs text-muted-foreground">
-                                      {formatCurrency(totalValue, accountCurrency)}
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div className="text-sm font-medium text-green-600 dark:text-green-400">
-                                    {formatCurrency(totalValue, accountCurrency)}
-                                  </div>
-                                );
-                              })()
-                            ) : (
-                              <div className="text-sm text-muted-foreground">-</div>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {/* Holdings Analysis Dashboard */}
+      {holdingsLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <div className="text-muted-foreground">Loading holdings...</div>
+        </div>
+      ) : allHoldings.length > 0 ? (
+        <HoldingsAnalysisDashboard
+          holdings={allHoldings}
+          selectedCurrency={selectedCurrency}
+          getAccountName={getAccountName}
+        />
+      ) : null}
     </div>
   );
 }

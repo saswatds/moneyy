@@ -50,41 +50,105 @@ func NewService(apiKeysSvc *apikeys.Service) *Service {
 	}
 }
 
-// FetchTaxBrackets fetches and transforms tax brackets from the Moneyy API
-func (s *Service) FetchTaxBrackets(ctx context.Context, country string, year int, region string) (*TransformedTaxBrackets, error) {
-	// Get the decrypted API key
+// newClient creates a new API client using the stored API key
+func (s *Service) newClient(ctx context.Context) (*Client, error) {
 	apiKey, err := s.apiKeysSvc.GetDecryptedAPIKey(ctx, apikeys.ProviderMoneyy)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get API key: %w", err)
 	}
+	return NewClient(apiKey), nil
+}
 
-	// Create client and fetch brackets
-	client := NewClient(apiKey)
+// --- Securities ---
+
+// GetQuote fetches a real-time quote for a symbol
+func (s *Service) GetQuote(ctx context.Context, symbol string) (*QuoteResponse, error) {
+	client, err := s.newClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return client.GetQuote(symbol)
+}
+
+// GetBatchQuotes fetches quotes for multiple symbols
+func (s *Service) GetBatchQuotes(ctx context.Context, symbols []string) (map[string]*QuoteResponse, error) {
+	client, err := s.newClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return client.GetBatchQuotes(symbols)
+}
+
+// GetProfile fetches a company/security profile
+func (s *Service) GetProfile(ctx context.Context, symbol string) (*ProfileResponse, error) {
+	client, err := s.newClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return client.GetProfile(symbol)
+}
+
+// --- ETFs ---
+
+// GetETFHoldings fetches the underlying holdings of an ETF
+func (s *Service) GetETFHoldings(ctx context.Context, symbol string) (*ETFHoldingsResponse, error) {
+	client, err := s.newClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return client.GetETFHoldings(symbol)
+}
+
+// GetETFSector fetches the sector allocation of an ETF
+func (s *Service) GetETFSector(ctx context.Context, symbol string) (*ETFSectorResponse, error) {
+	client, err := s.newClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return client.GetETFSector(symbol)
+}
+
+// GetETFCountry fetches the geographic allocation of an ETF
+func (s *Service) GetETFCountry(ctx context.Context, symbol string) (*ETFCountryResponse, error) {
+	client, err := s.newClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return client.GetETFCountry(symbol)
+}
+
+// GetETFProfile fetches ETF metadata
+func (s *Service) GetETFProfile(ctx context.Context, symbol string) (*ETFProfileResponse, error) {
+	client, err := s.newClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return client.GetETFProfile(symbol)
+}
+
+// FetchTaxBrackets fetches and transforms tax brackets from the Moneyy API
+func (s *Service) FetchTaxBrackets(ctx context.Context, country string, year int, region string) (*TransformedTaxBrackets, error) {
+	client, err := s.newClient(ctx)
+	if err != nil {
+		return nil, err
+	}
 	apiResponse, err := client.GetTaxBrackets(country, year, region)
 	if err != nil {
 		return nil, err
 	}
-
-	// Transform API response to internal format
 	return s.transformBrackets(apiResponse), nil
 }
 
 // FetchTaxParams fetches and transforms tax parameters from the Moneyy API
 func (s *Service) FetchTaxParams(ctx context.Context, country string, year int, region string) (*TransformedTaxParams, error) {
-	// Get the decrypted API key
-	apiKey, err := s.apiKeysSvc.GetDecryptedAPIKey(ctx, apikeys.ProviderMoneyy)
+	client, err := s.newClient(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get API key: %w", err)
+		return nil, err
 	}
-
-	// Create client and fetch params
-	client := NewClient(apiKey)
 	apiResponse, err := client.GetTaxParams(country, year, region)
 	if err != nil {
 		return nil, err
 	}
-
-	// Transform API response to internal format
 	return s.transformParams(apiResponse), nil
 }
 

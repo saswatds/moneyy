@@ -42,6 +42,64 @@ export interface Holding {
   updated_at: string;
 }
 
+// --- Market Data Types ---
+
+export interface QuoteResponse {
+  symbol: string;
+  price: number;
+  change: number;
+  change_percent: number;
+  high: number;
+  low: number;
+  open: number;
+  previous_close: number;
+  volume: number;
+}
+
+export interface ProfileResponse {
+  symbol: string;
+  name: string;
+  sector: string;
+  industry: string;
+  country: string;
+  market_cap: number;
+  exchange: string;
+  currency: string;
+  logo: string;
+  web_url: string;
+}
+
+export interface ETFHolding {
+  symbol: string;
+  name: string;
+  weight: number;
+  shares?: number;
+}
+
+export interface ETFHoldingsResponse {
+  symbol: string;
+  holdings: ETFHolding[];
+}
+
+export interface ETFSectorResponse {
+  symbol: string;
+  sectors: Record<string, number>;
+}
+
+export interface ETFCountryResponse {
+  symbol: string;
+  countries: Record<string, number>;
+}
+
+export interface ETFProfileResponse {
+  symbol: string;
+  name: string;
+  expense_ratio: number;
+  aum: number;
+  inception_date: string;
+  description: string;
+}
+
 export interface SyncJob {
   id: string;
   synced_account_id: string;
@@ -1673,6 +1731,36 @@ class ApiClient {
 
   async fetchTaxParamsFromAPI(country: string, year: number, region: string): Promise<TransformedTaxParams> {
     return this.request(`/moneyy/tax-params/${country}/${year}/${region}`);
+  }
+
+  // --- Market Data endpoints ---
+
+  async getSecurityQuote(symbol: string): Promise<QuoteResponse> {
+    return this.request(`/moneyy/securities/quote/${symbol}`);
+  }
+
+  async getBatchQuotes(symbols: string[]): Promise<Record<string, QuoteResponse>> {
+    return this.request(`/moneyy/securities/quotes?symbols=${symbols.join(',')}`);
+  }
+
+  async getSecurityProfile(symbol: string): Promise<ProfileResponse> {
+    return this.request(`/moneyy/securities/profile/${symbol}`);
+  }
+
+  async getETFHoldings(symbol: string): Promise<ETFHoldingsResponse> {
+    return this.request(`/moneyy/etfs/${symbol}/holdings`);
+  }
+
+  async getETFSector(symbol: string): Promise<ETFSectorResponse> {
+    return this.request(`/moneyy/etfs/${symbol}/sector`);
+  }
+
+  async getETFCountry(symbol: string): Promise<ETFCountryResponse> {
+    return this.request(`/moneyy/etfs/${symbol}/country`);
+  }
+
+  async getETFProfile(symbol: string): Promise<ETFProfileResponse> {
+    return this.request(`/moneyy/etfs/${symbol}/profile`);
   }
 }
 

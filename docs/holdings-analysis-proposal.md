@@ -18,227 +18,292 @@ The Moneyy application already has:
 - Support for holding types: `cash`, `stock`, `etf`, `mutual_fund`, `bond`, `crypto`, `option`, `other`
 - Symbol tracking with `quantity` and `cost_basis`
 - Multi-currency support (CAD, USD, INR)
+- Moneyy API client (`internal/moneyy/client.go`) with API key management
+- Assets page (`frontend/src/pages/Assets.tsx`) with holdings table
 
 **Gap**: No current price data, no sector/geographic metadata, no ETF look-through analysis.
 
 ---
 
-## API Evaluation
+## Data Source: Moneyy API
 
-### Comparison Matrix
+All market data will be sourced from the Moneyy API (`https://api.moneyy.app`), which already provides the exact endpoints needed. The Go backend will proxy requests to the Moneyy API (same pattern used for tax brackets/params today).
 
-| API | Free Tier | ETF Holdings | Sector Data | Geo Data | Reliability | Best For |
-|-----|-----------|--------------|-------------|----------|-------------|----------|
-| **Finnhub** | 60 req/min | Yes | Yes | Limited | High | Primary choice |
-| **Alpha Vantage** | 25 req/day | Limited | Yes | No | High | Technical indicators |
-| **FMP** | 500MB/mo | Premium only | Premium | Premium | High | If budget allows |
-| **Yahoo Finance** | Unlimited* | No | Partial | No | Low | Fallback only |
-| **Polygon.io** | 5 req/min | No | Limited | No | Very High | Real-time data |
-| **Twelve Data** | 800 req/day | No | Limited | No | High | Price data backup |
+### Available Endpoints
 
-*Yahoo Finance is unofficial and frequently breaks
+| Endpoint | Description | Tier |
+|----------|-------------|------|
+| `GET /api/v1/securities/quote/{symbol}` | Real-time price & trading data | Free |
+| `GET /api/v1/securities/quotes?symbols=A,B,C` | Batch quotes (up to 5 free, 25 Pro) | Free/Pro |
+| `GET /api/v1/securities/profile/{symbol}` | Company profile (sector, industry, country, market cap) | Free |
+| `GET /api/v1/etfs/{symbol}/holdings` | Underlying ETF constituents (10 free, full list Pro) | Free/Pro |
+| `GET /api/v1/etfs/{symbol}/sector` | Sector allocation breakdown | Free |
+| `GET /api/v1/etfs/{symbol}/country` | Geographic allocation | Pro |
+| `GET /api/v1/etfs/{symbol}/profile` | Fund metadata (expense ratio, AUM, inception) | Free |
 
----
-
-### Recommended Primary API: Finnhub
-
-**Why Finnhub?**
-
-1. **Most generous free tier**: 60 API calls/minute (vs Alpha Vantage's 25/day)
-2. **ETF-specific endpoints**:
-   - `/etf/holdings` - Get underlying holdings of an ETF
-   - `/etf/sector` - Sector exposure breakdown
-   - `/etf/country` - Geographic allocation
-   - `/etf/profile` - Fund metadata (expense ratio, AUM, etc.)
-3. **Stock fundamentals**: Company profile with sector/industry classification
-4. **Real-time quotes**: Current price data for valuation
-5. **Good documentation**: Well-maintained with official SDKs
-
-**Finnhub Free Tier Capabilities**:
-- 60 calls/minute rate limit
-- US market coverage
-- 1 year historical data
-- Daily updates
-- No credit card required
-
-**API Endpoints We'll Use**:
-```
-GET /quote?symbol={symbol}           # Current price
-GET /stock/profile2?symbol={symbol}  # Company sector/industry
-GET /etf/holdings?symbol={symbol}    # ETF constituents
-GET /etf/sector?symbol={symbol}      # ETF sector breakdown
-GET /etf/country?symbol={symbol}     # ETF geographic exposure
-```
+**Authentication**: Bearer token (already stored encrypted via `internal/apikeys/` service).
 
 ---
 
-### Recommended Secondary API: Alpha Vantage
+## Architecture
 
-**Use Case**: Fallback for data not available in Finnhub, plus technical indicators for future features.
+### Flow
 
-**Key Endpoints**:
 ```
-GET /query?function=GLOBAL_QUOTE&symbol={symbol}
-GET /query?function=OVERVIEW&symbol={symbol}  # Company fundamentals
-GET /query?function=ETF_PROFILE&symbol={symbol}
+Frontend (React)
+    ↓ fetch
+Go Backend (proxy handlers)
+    ↓ HTTP + Bearer token
+Moneyy API (api.moneyy.app)
 ```
 
-**Limitation**: 25 requests/day on free tier - use sparingly for cache misses only.
+This mirrors the existing pattern for tax data: `frontend → /moneyy/tax-brackets → api.moneyy.app/api/v1/tax-brackets`.
 
----
+### Backend Changes
 
-### Not Recommended
-
-| API | Reason |
-|-----|--------|
-| **Yahoo Finance** | Unofficial, breaks frequently, no SLA |
-| **FMP** | ETF holdings require $149/mo premium plan |
-| **Polygon.io** | Limited ETF data, better for real-time trading |
-
----
-
-## Proposed Architecture
-
-### Data Model Extensions
+**Extend `internal/moneyy/client.go`** with new methods:
 
 ```go
-// New: Security metadata cache
-type SecurityMetadata struct {
-    Symbol          string    `json:"symbol"`
-    Name            string    `json:"name"`
-    Type            string    `json:"type"`  // stock, etf, etc.
-    Sector          string    `json:"sector"`
-    Industry        string    `json:"industry"`
-    Country         string    `json:"country"`
-    MarketCap       string    `json:"market_cap"`  // large, mid, small
-    Currency        string    `json:"currency"`
-    Exchange        string    `json:"exchange"`
-    LastUpdated     time.Time `json:"last_updated"`
+// Securities
+func (c *Client) GetQuote(symbol string) (*QuoteResponse, error)
+func (c *Client) GetBatchQuotes(symbols []string) (*BatchQuotesResponse, error)
+func (c *Client) GetProfile(symbol string) (*ProfileResponse, error)
+
+// ETFs
+func (c *Client) GetETFHoldings(symbol string) (*ETFHoldingsResponse, error)
+func (c *Client) GetETFSector(symbol string) (*ETFSectorResponse, error)
+func (c *Client) GetETFCountry(symbol string) (*ETFCountryResponse, error)
+func (c *Client) GetETFProfile(symbol string) (*ETFProfileResponse, error)
+```
+
+**Extend `internal/moneyy/service.go`** with service methods that fetch the API key and call the client.
+
+**New proxy routes** (in `internal/server/handlers/`):
+
+```
+GET /moneyy/securities/quote/{symbol}
+GET /moneyy/securities/quotes?symbols=AAPL,VTI,XIU
+GET /moneyy/securities/profile/{symbol}
+GET /moneyy/etfs/{symbol}/holdings
+GET /moneyy/etfs/{symbol}/sector
+GET /moneyy/etfs/{symbol}/country
+GET /moneyy/etfs/{symbol}/profile
+```
+
+**New aggregate endpoint** for the analysis dashboard:
+
+```
+GET /moneyy/holdings/analysis?accountIds=id1,id2
+```
+
+This endpoint will:
+1. Fetch all holdings for the given accounts
+2. Batch-fetch quotes for all symbols
+3. Fetch profiles for stocks, ETF sector/country data for ETFs
+4. Aggregate into a single response with sector breakdown, geo breakdown, and valuations
+
+### Response Types
+
+```go
+type QuoteResponse struct {
+    Symbol        string  `json:"symbol"`
+    Price         float64 `json:"price"`
+    Change        float64 `json:"change"`
+    ChangePercent float64 `json:"change_percent"`
+    High          float64 `json:"high"`
+    Low           float64 `json:"low"`
+    Open          float64 `json:"open"`
+    PreviousClose float64 `json:"previous_close"`
+    Volume        int64   `json:"volume"`
 }
 
-// New: ETF holdings breakdown
+type ProfileResponse struct {
+    Symbol     string `json:"symbol"`
+    Name       string `json:"name"`
+    Sector     string `json:"sector"`
+    Industry   string `json:"industry"`
+    Country    string `json:"country"`
+    MarketCap  int64  `json:"market_cap"`
+    Exchange   string `json:"exchange"`
+    Currency   string `json:"currency"`
+    Logo       string `json:"logo"`
+    WebURL     string `json:"web_url"`
+}
+
+type ETFHoldingsResponse struct {
+    Symbol   string       `json:"symbol"`
+    Holdings []ETFHolding `json:"holdings"`
+}
+
 type ETFHolding struct {
-    ETFSymbol       string  `json:"etf_symbol"`
-    HoldingSymbol   string  `json:"holding_symbol"`
-    HoldingName     string  `json:"holding_name"`
-    Weight          float64 `json:"weight"`  // percentage
-    Shares          int64   `json:"shares,omitempty"`
+    Symbol string  `json:"symbol"`
+    Name   string  `json:"name"`
+    Weight float64 `json:"weight"` // percentage
+    Shares int64   `json:"shares,omitempty"`
 }
 
-// New: ETF allocation data
-type ETFAllocation struct {
-    Symbol          string             `json:"symbol"`
-    SectorWeights   map[string]float64 `json:"sector_weights"`
-    CountryWeights  map[string]float64 `json:"country_weights"`
-    AssetWeights    map[string]float64 `json:"asset_weights"`
-    LastUpdated     time.Time          `json:"last_updated"`
+type ETFSectorResponse struct {
+    Symbol  string             `json:"symbol"`
+    Sectors map[string]float64 `json:"sectors"` // sector -> weight %
 }
 
-// New: Current price cache
-type PriceQuote struct {
-    Symbol          string    `json:"symbol"`
-    Price           float64   `json:"price"`
-    Change          float64   `json:"change"`
-    ChangePercent   float64   `json:"change_percent"`
-    Currency        string    `json:"currency"`
-    LastUpdated     time.Time `json:"last_updated"`
+type ETFCountryResponse struct {
+    Symbol    string             `json:"symbol"`
+    Countries map[string]float64 `json:"countries"` // country -> weight %
 }
-```
 
-### New API Endpoints
+type ETFProfileResponse struct {
+    Symbol        string  `json:"symbol"`
+    Name          string  `json:"name"`
+    ExpenseRatio  float64 `json:"expense_ratio"`
+    AUM           float64 `json:"aum"`
+    InceptionDate string  `json:"inception_date"`
+    Description   string  `json:"description"`
+}
 
-```
-GET  /api/holdings/analysis           # Full portfolio analysis
-GET  /api/holdings/sector-breakdown   # Sector allocation chart data
-GET  /api/holdings/geo-breakdown      # Geographic allocation
-GET  /api/holdings/etf/{symbol}/look-through  # ETF underlying holdings
-POST /api/holdings/refresh-prices     # Force price refresh
-GET  /api/security/{symbol}/metadata  # Individual security info
+// Aggregate analysis response
+type HoldingsAnalysisResponse struct {
+    TotalValue      float64                `json:"total_value"`
+    TotalCostBasis  float64                `json:"total_cost_basis"`
+    TotalGainLoss   float64                `json:"total_gain_loss"`
+    Holdings        []EnrichedHolding      `json:"holdings"`
+    SectorBreakdown map[string]float64     `json:"sector_breakdown"`  // sector -> % of portfolio
+    GeoBreakdown    map[string]float64     `json:"geo_breakdown"`     // country -> % of portfolio
+    TypeBreakdown   map[string]float64     `json:"type_breakdown"`    // stock/etf/bond/cash -> % of portfolio
+}
+
+type EnrichedHolding struct {
+    Holding                          // embedded original holding
+    CurrentPrice   float64           `json:"current_price"`
+    MarketValue    float64           `json:"market_value"`
+    GainLoss       float64           `json:"gain_loss"`
+    GainLossPercent float64          `json:"gain_loss_percent"`
+    DayChange      float64           `json:"day_change"`
+    DayChangePercent float64         `json:"day_change_percent"`
+    Sector         string            `json:"sector,omitempty"`
+    Industry       string            `json:"industry,omitempty"`
+    Country        string            `json:"country,omitempty"`
+    Name           string            `json:"name,omitempty"`
+}
 ```
 
 ### Caching Strategy
 
-To stay within API rate limits, implement aggressive caching:
+Cache at the Go backend level using SQLite (same database):
 
-| Data Type | Cache Duration | Storage |
-|-----------|---------------|---------|
-| Stock/ETF prices | 15 minutes | In-memory + SQLite |
-| Company metadata | 7 days | SQLite |
-| ETF holdings | 1 day | SQLite |
-| Sector/Geo allocations | 1 day | SQLite |
+| Data Type | Cache Duration | Rationale |
+|-----------|---------------|-----------|
+| Quotes | 15 minutes | Prices change frequently but API has rate limits |
+| Profiles | 7 days | Company metadata rarely changes |
+| ETF holdings | 24 hours | Rebalances are infrequent |
+| ETF sector/country | 24 hours | Allocation shifts slowly |
 
-**Rate Limit Management**:
-- Queue API requests with backoff
-- Batch refresh during off-peak hours
-- Priority: holdings in user's portfolio first
+New migration for cache table:
+
+```sql
+CREATE TABLE IF NOT EXISTS market_data_cache (
+    cache_key TEXT PRIMARY KEY,
+    data TEXT NOT NULL,       -- JSON blob
+    expires_at DATETIME NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_market_data_cache_expires ON market_data_cache(expires_at);
+```
+
+---
+
+## Frontend Changes
+
+### New API Client Methods
+
+Add to `frontend/src/lib/api-client.ts`:
+
+```typescript
+// Securities
+async getSecurityQuote(symbol: string): Promise<QuoteResponse>
+async getBatchQuotes(symbols: string[]): Promise<Record<string, QuoteResponse>>
+async getSecurityProfile(symbol: string): Promise<ProfileResponse>
+
+// ETFs
+async getETFHoldings(symbol: string): Promise<ETFHoldingsResponse>
+async getETFSector(symbol: string): Promise<ETFSectorResponse>
+async getETFCountry(symbol: string): Promise<ETFCountryResponse>
+async getETFProfile(symbol: string): Promise<ETFProfileResponse>
+
+// Analysis
+async getHoldingsAnalysis(accountIds: string[]): Promise<HoldingsAnalysisResponse>
+```
+
+### New React Query Hooks
+
+`frontend/src/hooks/use-market-data.ts`:
+
+```typescript
+useSecurityQuote(symbol: string)
+useBatchQuotes(symbols: string[])
+useSecurityProfile(symbol: string)
+useETFHoldings(symbol: string)
+useETFSector(symbol: string)
+useETFCountry(symbol: string)
+useETFProfile(symbol: string)
+useHoldingsAnalysis(accountIds: string[])
+```
+
+### New Components
+
+```
+src/components/holdings/
+├── HoldingsAnalysisDashboard.tsx   # Main analysis view (tab on Assets page)
+├── SectorBreakdownChart.tsx        # Pie chart - Recharts PieChart
+├── GeographicExposureChart.tsx     # Bar chart - country allocation
+├── AssetAllocationChart.tsx        # Donut chart - stock/etf/bond/cash split
+├── EnrichedHoldingsTable.tsx       # Table with live prices, gain/loss, day change
+├── PortfolioSummaryCards.tsx       # Total value, gain/loss, day change cards
+└── ETFLookThroughTable.tsx         # Expandable ETF → underlying holdings
+```
+
+All charts will use **Recharts** (already installed) with the existing `<ChartContainer>` wrapper from `src/components/ui/chart.tsx`.
+
+### Updated Assets Page
+
+The existing `Assets.tsx` page will be enhanced with:
+1. **Summary cards** showing total market value (from live prices), total gain/loss, day change
+2. **Analysis tabs**: Sector | Geography | Asset Type | Holdings
+3. **Enhanced holdings table** with current price, market value, gain/loss columns
+4. **ETF drill-down**: Click an ETF row to see its underlying holdings, sector, and country exposure
 
 ---
 
 ## Feature Set
 
-### Phase 1: Core Analysis (MVP)
-1. **Current Market Value**: Fetch real-time prices for all holdings
-2. **Sector Breakdown**: Pie/bar chart of portfolio by sector
-3. **Asset Type Breakdown**: Stocks vs ETFs vs Bonds vs Cash
-4. **Holdings Table Enhancement**: Add current price, gain/loss columns
+### Phase 1: Live Prices & Enhanced Table
+1. Backend: Add quote/profile proxy endpoints + cache
+2. Frontend: Batch-fetch quotes for all holdings
+3. Enhanced holdings table: current price, market value, gain/loss, day change
+4. Portfolio summary cards with live total value
 
-### Phase 2: ETF Deep Dive
-1. **ETF Look-Through**: Expand ETFs to show underlying holdings
-2. **Geographic Exposure**: World map or chart showing country allocation
-3. **Overlap Analysis**: Detect duplicate holdings across ETFs
-4. **Expense Ratio Tracking**: Total portfolio expense ratio
+### Phase 2: Sector & Asset Analysis
+1. Backend: Add ETF sector endpoint + aggregate analysis endpoint
+2. Frontend: Sector breakdown pie chart
+3. Frontend: Asset type donut chart (stocks vs ETFs vs bonds vs cash)
+4. Frontend: Tab navigation on Assets page
 
-### Phase 3: Advanced Analytics
-1. **Market Cap Distribution**: Large/Mid/Small cap breakdown
-2. **Dividend Yield Analysis**: Income-generating holdings
-3. **Concentration Risk**: Warn on over-concentration in single stock/sector
-4. **Historical Performance**: Track portfolio value over time
-
----
-
-## Frontend Components
-
-New React components needed:
-
-```
-src/components/holdings/
-├── HoldingsAnalysisDashboard.tsx    # Main analysis view
-├── SectorBreakdownChart.tsx         # Pie chart with sector data
-├── GeographicExposureChart.tsx      # World map or bar chart
-├── AssetAllocationChart.tsx         # Asset class distribution
-├── ETFLookThroughTable.tsx          # Expandable ETF holdings
-├── HoldingsTable.tsx                # Enhanced table with prices
-├── PortfolioSummaryCard.tsx         # Total value, gain/loss
-└── ConcentrationWarnings.tsx        # Risk alerts
-```
+### Phase 3: ETF Deep Dive & Geography
+1. Backend: Add ETF holdings/country/profile endpoints
+2. Frontend: ETF look-through table (expand to see underlying holdings)
+3. Frontend: Geographic exposure chart
+4. Frontend: ETF profile cards (expense ratio, AUM)
 
 ---
 
-## Implementation Estimate
+## API Key Requirement
 
-| Phase | Scope | Effort |
-|-------|-------|--------|
-| Phase 1 | Core analysis + price fetching | 2-3 days |
-| Phase 2 | ETF deep dive + geographic | 2-3 days |
-| Phase 3 | Advanced analytics | 3-4 days |
+The Moneyy API key is already managed via:
+- Backend: `internal/apikeys/service.go` (encrypted storage)
+- Frontend: `src/components/settings/APIKeySection.tsx`
+- Settings page already has the "Moneyy" provider configured
 
-**Total**: ~8-10 days for full feature set
-
----
-
-## API Key Management
-
-Finnhub requires an API key. Options:
-
-1. **User-provided key** (recommended for self-hosted)
-   - Add to existing API key management in Settings
-   - Store encrypted like Wealthsimple credentials
-
-2. **Proxy through backend**
-   - Backend holds the key
-   - Protects key from client exposure
-
-The existing `APIKeySection.tsx` and `/api-keys` endpoints can be extended.
+No additional API key setup is needed. Users who have configured their Moneyy API key for tax data will automatically have access to market data endpoints.
 
 ---
 
@@ -246,45 +311,21 @@ The existing `APIKeySection.tsx` and `/api-keys` endpoints can be extended.
 
 | Risk | Mitigation |
 |------|------------|
-| Finnhub rate limits | Aggressive caching, request queuing |
-| API downtime | Fallback to Alpha Vantage, graceful degradation |
-| Data accuracy | Cross-validate with multiple sources initially |
-| International securities | May have gaps - document limitations |
-| Cost if scaling | Monitor usage, consider paid tier if needed |
-
----
-
-## Recommendation
-
-**Start with Finnhub** as the primary API:
-- Best free tier for our use case
-- Has all required ETF data endpoints
-- Well-documented and reliable
-
-**Add Alpha Vantage** as a secondary source:
-- Fallback for data gaps
-- Useful for future technical analysis features
-
-**Skip FMP for now** unless:
-- Budget allows $149/mo for ETF holdings
-- Need historical ETF holding changes
+| Free tier limits (5 batch quotes) | Cache aggressively, stagger refreshes |
+| Pro-only features (ETF country, full holdings) | Graceful degradation - show available data, prompt upgrade |
+| API downtime | Cache serves stale data with "last updated" indicator |
+| Rate limiting | Backend queues requests, respects rate limits |
+| Large portfolios (many symbols) | Batch quotes endpoint, paginated refresh |
 
 ---
 
 ## Next Steps
 
-1. Sign up for Finnhub free API key
-2. Create `internal/market` package for API integration
-3. Add database migrations for metadata cache tables
-4. Implement Phase 1 backend endpoints
-5. Build frontend dashboard components
-6. Add to Settings page for API key configuration
-
----
-
-## References
-
-- [Finnhub API Documentation](https://finnhub.io/docs/api)
-- [Finnhub ETF Holdings API](https://finnhub.io/docs/api/etfs-holdings)
-- [Alpha Vantage Documentation](https://www.alphavantage.co/documentation/)
-- [Financial Modeling Prep ETF APIs](https://site.financialmodelingprep.com/developer/docs/stable/holdings)
+1. Add new client methods to `internal/moneyy/client.go`
+2. Add service methods to `internal/moneyy/service.go`
+3. Add cache migration
+4. Add proxy handler routes
+5. Add frontend API client methods and hooks
+6. Build Phase 1 (live prices + enhanced table)
+7. Build Phase 2 (sector/asset charts)
+8. Build Phase 3 (ETF deep dive + geography)
