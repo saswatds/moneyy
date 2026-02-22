@@ -34,6 +34,7 @@ export interface Holding {
   symbol?: string;
   quantity?: number;
   cost_basis?: number;
+  exchange?: string;
   currency?: 'CAD' | 'USD' | 'INR';
   amount?: number;
   purchase_date?: string;

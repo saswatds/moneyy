@@ -3,6 +3,7 @@ package apikeys
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -10,6 +11,9 @@ import (
 	"money/internal/auth"
 	"money/internal/sync/encryption"
 )
+
+// ErrAPIKeyNotConfigured is returned when no API key is stored for a provider
+var ErrAPIKeyNotConfigured = errors.New("API key not configured")
 
 // Service provides API key management functionality
 type Service struct {
@@ -142,7 +146,7 @@ func (s *Service) GetDecryptedAPIKey(ctx context.Context, provider string) (stri
 	`, userID, provider).Scan(&encryptedKey)
 
 	if err == sql.ErrNoRows {
-		return "", fmt.Errorf("API key not configured for provider: %s", provider)
+		return "", fmt.Errorf("%w: %s", ErrAPIKeyNotConfigured, provider)
 	}
 	if err != nil {
 		return "", fmt.Errorf("failed to get API key: %w", err)

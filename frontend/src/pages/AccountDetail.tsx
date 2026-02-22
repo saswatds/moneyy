@@ -426,7 +426,11 @@ export function AccountDetail() {
                                   </>
                                 ) : (
                                   <>
-                                    {holding.symbol} - {holding.quantity?.toLocaleString('en-US', {
+                                    {holding.symbol}
+                                    {holding.exchange && (
+                                      <span className="text-[10px] text-muted-foreground ml-1">{holding.exchange}</span>
+                                    )}
+                                    {' - '}{holding.quantity?.toLocaleString('en-US', {
                                       minimumFractionDigits: 2,
                                       maximumFractionDigits: 8,
                                     })} shares

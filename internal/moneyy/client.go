@@ -59,7 +59,7 @@ func (c *Client) doGet(url string, target any) error {
 
 	if resp.StatusCode != http.StatusOK {
 		if !isJSON {
-			return fmt.Errorf("API returned non-JSON response (status %d)", resp.StatusCode)
+			return &APIError{StatusCode: resp.StatusCode, Msg: fmt.Sprintf("API returned non-JSON response (status %d)", resp.StatusCode)}
 		}
 		var apiErr APIErrorResponse
 		if err := json.Unmarshal(body, &apiErr); err != nil {
@@ -67,15 +67,16 @@ func (c *Client) doGet(url string, target any) error {
 			if len(bodyStr) > 200 {
 				bodyStr = bodyStr[:200] + "..."
 			}
-			return fmt.Errorf("API error (status %d): %s", resp.StatusCode, bodyStr)
+			return &APIError{StatusCode: resp.StatusCode, Msg: fmt.Sprintf("API error (status %d): %s", resp.StatusCode, bodyStr)}
 		}
-		if apiErr.Message != "" {
-			return fmt.Errorf("API error: %s", apiErr.Message)
+		msg := apiErr.Message
+		if msg == "" {
+			msg = apiErr.Error
 		}
-		if apiErr.Error != "" {
-			return fmt.Errorf("API error: %s", apiErr.Error)
+		if msg == "" {
+			msg = fmt.Sprintf("API error (status %d)", resp.StatusCode)
 		}
-		return fmt.Errorf("API error (status %d)", resp.StatusCode)
+		return &APIError{StatusCode: resp.StatusCode, Msg: msg}
 	}
 
 	if !isJSON {
@@ -114,6 +115,16 @@ type APITaxBracketsResponse struct {
 type APIErrorResponse struct {
 	Error   string `json:"error"`
 	Message string `json:"message"`
+}
+
+// APIError wraps an upstream API error with its HTTP status code
+type APIError struct {
+	StatusCode int
+	Msg        string
+}
+
+func (e *APIError) Error() string {
+	return e.Msg
 }
 
 // APITaxParamsResponse represents the response from the tax params endpoint
@@ -264,9 +275,15 @@ func (c *Client) GetQuote(symbol string) (*QuoteResponse, error) {
 // GetBatchQuotes fetches quotes for multiple symbols
 func (c *Client) GetBatchQuotes(symbols []string) (map[string]*QuoteResponse, error) {
 	url := fmt.Sprintf("%s/api/v1/securities/quotes?symbols=%s", c.baseURL, strings.Join(symbols, ","))
-	var result map[string]*QuoteResponse
-	if err := c.doGet(url, &result); err != nil {
+	var wrapper struct {
+		Quotes []QuoteResponse `json:"quotes"`
+	}
+	if err := c.doGet(url, &wrapper); err != nil {
 		return nil, err
+	}
+	result := make(map[string]*QuoteResponse, len(wrapper.Quotes))
+	for i := range wrapper.Quotes {
+		result[wrapper.Quotes[i].Symbol] = &wrapper.Quotes[i]
 	}
 	return result, nil
 }

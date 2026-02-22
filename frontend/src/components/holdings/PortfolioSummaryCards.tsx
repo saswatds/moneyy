@@ -17,6 +17,8 @@ export function PortfolioSummaryCards({ holdings, quotes, selectedCurrency }: Po
   let totalCostBasis = 0;
   let totalDayChange = 0;
 
+  const hasQuotes = Object.keys(quotes).length > 0;
+
   holdings.forEach((h) => {
     if (h.type === 'cash' && h.amount) {
       totalMarketValue += h.amount;
@@ -27,15 +29,17 @@ export function PortfolioSummaryCards({ holdings, quotes, selectedCurrency }: Po
     const symbol = h.symbol;
     if (!symbol || !h.quantity) return;
 
+    const costBasisTotal = (h.cost_basis || 0) * h.quantity;
+    totalCostBasis += costBasisTotal;
+
     const quote = quotes[symbol];
     if (quote) {
       const marketValue = quote.price * h.quantity;
       totalMarketValue += marketValue;
       totalDayChange += quote.change * h.quantity;
-    }
-
-    if (h.cost_basis) {
-      totalCostBasis += h.cost_basis;
+    } else {
+      // Fall back to cost basis when no quote available
+      totalMarketValue += costBasisTotal;
     }
   });
 
@@ -47,7 +51,7 @@ export function PortfolioSummaryCards({ holdings, quotes, selectedCurrency }: Po
     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
       <Card>
         <CardHeader className="pb-3">
-          <CardDescription>Market Value</CardDescription>
+          <CardDescription>{hasQuotes ? 'Market Value' : 'Portfolio Value (Cost Basis)'}</CardDescription>
           <div className="mt-2">
             <div className="text-3xl font-bold tabular-nums text-green-600 dark:text-green-400">
               <Currency amount={totalMarketValue} smallCents />

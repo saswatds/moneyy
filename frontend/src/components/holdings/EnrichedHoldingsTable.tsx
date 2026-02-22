@@ -5,9 +5,11 @@ interface EnrichedHoldingsTableProps {
   quotes: Record<string, QuoteResponse>;
   profiles: Record<string, ProfileResponse>;
   getAccountName: (accountId: string) => string;
+  hasApiKey?: boolean;
+  quotesLoading?: boolean;
 }
 
-export function EnrichedHoldingsTable({ holdings, quotes, profiles, getAccountName }: EnrichedHoldingsTableProps) {
+export function EnrichedHoldingsTable({ holdings, quotes, profiles, getAccountName, hasApiKey, quotesLoading }: EnrichedHoldingsTableProps) {
   const formatCurrency = (amount: number, currency = 'USD') => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -75,14 +77,31 @@ export function EnrichedHoldingsTable({ holdings, quotes, profiles, getAccountNa
               const profile = profiles[symbol];
               const quantity = holding.quantity || 0;
               const costBasis = holding.cost_basis || 0;
+              const costBasisTotal = costBasis * quantity;
               const marketValue = quote ? quote.price * quantity : 0;
-              const gainLoss = quote ? marketValue - costBasis : 0;
-              const gainLossPercent = costBasis > 0 ? (gainLoss / costBasis) * 100 : 0;
+              const gainLoss = quote ? marketValue - costBasisTotal : 0;
+              const gainLossPercent = costBasisTotal > 0 ? (gainLoss / costBasisTotal) * 100 : 0;
               const dayChange = quote ? quote.change * quantity : 0;
+              // Symbol failed to fetch if API key is set, quotes finished loading, but this symbol has no quote
+              const quoteFailed = hasApiKey && !quotesLoading && !quote;
 
               return (
                 <tr key={holding.id} className="border-b border-border last:border-0 hover:bg-muted/50">
-                  <td className="px-4 py-4 text-sm font-medium">{symbol}</td>
+                  <td className="px-4 py-4 text-sm font-medium">
+                    <div className="flex items-center gap-1.5">
+                      {symbol}
+                      {holding.exchange && (
+                        <span className="text-[10px] font-normal text-muted-foreground">{holding.exchange}</span>
+                      )}
+                      {quoteFailed && (
+                        <span title={`Failed to fetch market data for ${symbol}`} className="text-red-500 dark:text-red-400">
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">
+                            <path fillRule="evenodd" d="M8 15A7 7 0 1 0 8 1a7 7 0 0 0 0 14ZM8 4a.75.75 0 0 1 .75.75v3a.75.75 0 0 1-1.5 0v-3A.75.75 0 0 1 8 4Zm0 8a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clipRule="evenodd" />
+                          </svg>
+                        </span>
+                      )}
+                    </div>
+                  </td>
                   <td className="px-4 py-4 text-sm text-muted-foreground">
                     {profile?.name || symbol}
                   </td>
@@ -112,7 +131,11 @@ export function EnrichedHoldingsTable({ holdings, quotes, profiles, getAccountNa
                     ) : '-'}
                   </td>
                   <td className="px-4 py-4 text-right text-sm font-medium">
-                    {quote ? formatCurrency(marketValue) : '-'}
+                    {quote ? formatCurrency(marketValue) : costBasisTotal > 0 ? (
+                      <span className="text-muted-foreground" title="Cost basis (no live price)">
+                        {formatCurrency(costBasisTotal)}
+                      </span>
+                    ) : '-'}
                   </td>
                   <td className="px-4 py-4 text-right text-sm">
                     {quote ? (
@@ -137,6 +160,8 @@ export function EnrichedHoldingsTable({ holdings, quotes, profiles, getAccountNa
 function getMarketValue(holding: Holding, quotes: Record<string, QuoteResponse>): number {
   if (holding.type === 'cash') return holding.amount || 0;
   const quote = holding.symbol ? quotes[holding.symbol] : null;
-  if (!quote || !holding.quantity) return 0;
-  return quote.price * holding.quantity;
+  const quantity = holding.quantity || 0;
+  if (quote) return quote.price * quantity;
+  // Fall back to cost basis value for sorting
+  return (holding.cost_basis || 0) * quantity;
 }

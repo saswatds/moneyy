@@ -40,7 +40,12 @@ export function ETFLookThroughTable({ etfHoldings, quotes }: ETFLookThroughTable
                 ) : (
                   <IconChevronRight className="size-4 text-muted-foreground" />
                 )}
-                <span className="font-medium text-sm">{symbol}</span>
+                <span className="font-medium text-sm">
+                  {symbol}
+                  {holding.exchange && (
+                    <span className="text-[10px] font-normal text-muted-foreground ml-1">{holding.exchange}</span>
+                  )}
+                </span>
                 <span className="text-sm text-muted-foreground">
                   {holding.quantity?.toLocaleString('en-US', { minimumFractionDigits: 2 })} shares
                 </span>
@@ -51,7 +56,7 @@ export function ETFLookThroughTable({ etfHoldings, quotes }: ETFLookThroughTable
                   : '-'}
               </div>
             </button>
-            {isExpanded && <ETFDetail symbol={symbol} />}
+            {isExpanded && <ETFDetail symbol={holding.exchange === 'TSX' ? `TSX:${symbol}` : symbol} />}
           </div>
         );
       })}

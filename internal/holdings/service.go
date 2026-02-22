@@ -52,6 +52,7 @@ type Holding struct {
 	Symbol    *string  `json:"symbol,omitempty"`
 	Quantity  *float64 `json:"quantity,omitempty"`
 	CostBasis *float64 `json:"cost_basis,omitempty"`
+	Exchange  *string  `json:"exchange,omitempty"`
 
 	// For cash
 	Currency *Currency `json:"currency,omitempty"`
@@ -73,6 +74,7 @@ type CreateHoldingRequest struct {
 	Symbol    *string  `json:"symbol,omitempty"`
 	Quantity  *float64 `json:"quantity,omitempty"`
 	CostBasis *float64 `json:"cost_basis,omitempty"`
+	Exchange  *string  `json:"exchange,omitempty"`
 
 	// For cash
 	Currency *string  `json:"currency,omitempty"`
@@ -122,6 +124,7 @@ func (s *Service) Create(ctx context.Context, req *CreateHoldingRequest) (*Creat
 		Symbol:    req.Symbol,
 		Quantity:  req.Quantity,
 		CostBasis: req.CostBasis,
+		Exchange:  req.Exchange,
 		Notes:     notes,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
@@ -160,16 +163,18 @@ func (s *Service) Create(ctx context.Context, req *CreateHoldingRequest) (*Creat
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO holdings (
 			id, account_id, type, symbol, quantity, cost_basis,
-			currency, amount, purchase_date, notes, created_at, updated_at
+			exchange, currency, amount, purchase_date, notes, created_at, updated_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		ON CONFLICT (account_id, symbol) DO UPDATE SET
+			type = excluded.type,
 			quantity = excluded.quantity,
 			cost_basis = excluded.cost_basis,
+			exchange = excluded.exchange,
 			notes = excluded.notes,
 			updated_at = excluded.updated_at
 	`, holding.ID, req.AccountID, req.Type, req.Symbol, req.Quantity, req.CostBasis,
-		holding.Currency, req.Amount, purchaseDate, req.Notes,
+		req.Exchange, holding.Currency, req.Amount, purchaseDate, req.Notes,
 		holding.CreatedAt, holding.UpdatedAt)
 
 	if err != nil {
@@ -189,7 +194,7 @@ func (s *Service) GetAccountHoldings(ctx context.Context, accountID string) (*Li
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT
 			id, account_id, type, symbol, quantity, cost_basis,
-			currency, amount, purchase_date, notes, created_at, updated_at
+			exchange, currency, amount, purchase_date, notes, created_at, updated_at
 		FROM holdings
 		WHERE account_id = $1
 		ORDER BY created_at DESC
@@ -209,6 +214,7 @@ func (s *Service) GetAccountHoldings(ctx context.Context, accountID string) (*Li
 			&holding.Symbol,
 			&holding.Quantity,
 			&holding.CostBasis,
+			&holding.Exchange,
 			&holding.Currency,
 			&holding.Amount,
 			&holding.PurchaseDate,
@@ -233,7 +239,7 @@ func (s *Service) Get(ctx context.Context, id string) (*Holding, error) {
 	err := s.db.QueryRowContext(ctx, `
 		SELECT
 			id, account_id, type, symbol, quantity, cost_basis,
-			currency, amount, purchase_date, notes, created_at, updated_at
+			exchange, currency, amount, purchase_date, notes, created_at, updated_at
 		FROM holdings
 		WHERE id = $1
 	`, id).Scan(
@@ -243,6 +249,7 @@ func (s *Service) Get(ctx context.Context, id string) (*Holding, error) {
 		&holding.Symbol,
 		&holding.Quantity,
 		&holding.CostBasis,
+		&holding.Exchange,
 		&holding.Currency,
 		&holding.Amount,
 		&holding.PurchaseDate,

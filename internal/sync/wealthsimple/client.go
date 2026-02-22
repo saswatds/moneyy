@@ -341,8 +341,6 @@ func (c *Client) QueryGraphQL(ctx context.Context, query string, variables map[s
 		return nil, fmt.Errorf("GraphQL query failed (status %d): %s", resp.StatusCode, string(bodyBytes))
 	}
 
-	log.Printf("DEBUG: graphql response: %s", string(bodyBytes))
-
 	var gqlResp GraphQLResponse
 	if err := json.Unmarshal(bodyBytes, &gqlResp); err != nil {
 		log.Printf("ERROR: failed to decode graphql response: %v", err)

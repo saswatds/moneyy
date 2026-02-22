@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -12,6 +13,21 @@ import (
 
 	"github.com/go-chi/chi/v5"
 )
+
+// respondMoneyyError returns the appropriate status code based on the error type
+func respondMoneyyError(w http.ResponseWriter, err error) {
+	if errors.Is(err, apikeys.ErrAPIKeyNotConfigured) {
+		server.RespondError(w, http.StatusServiceUnavailable, fmt.Errorf("moneyy API key not configured"))
+		return
+	}
+	var apiErr *moneyy.APIError
+	if errors.As(err, &apiErr) {
+		// Forward the upstream status code
+		server.RespondError(w, apiErr.StatusCode, err)
+		return
+	}
+	server.RespondError(w, http.StatusInternalServerError, err)
+}
 
 // APIKeysHandler handles API key-related HTTP requests
 type APIKeysHandler struct {
@@ -132,7 +148,7 @@ func (h *APIKeysHandler) FetchTaxBrackets(w http.ResponseWriter, r *http.Request
 
 	brackets, err := h.moneySvc.FetchTaxBrackets(r.Context(), country, year, region)
 	if err != nil {
-		server.RespondError(w, http.StatusInternalServerError, err)
+		respondMoneyyError(w, err)
 		return
 	}
 
@@ -166,7 +182,7 @@ func (h *APIKeysHandler) FetchTaxParams(w http.ResponseWriter, r *http.Request) 
 
 	params, err := h.moneySvc.FetchTaxParams(r.Context(), country, year, region)
 	if err != nil {
-		server.RespondError(w, http.StatusInternalServerError, err)
+		respondMoneyyError(w, err)
 		return
 	}
 
@@ -185,7 +201,7 @@ func (h *APIKeysHandler) GetSecurityQuote(w http.ResponseWriter, r *http.Request
 
 	quote, err := h.moneySvc.GetQuote(r.Context(), symbol)
 	if err != nil {
-		server.RespondError(w, http.StatusInternalServerError, err)
+		respondMoneyyError(w, err)
 		return
 	}
 
@@ -207,7 +223,7 @@ func (h *APIKeysHandler) GetBatchQuotes(w http.ResponseWriter, r *http.Request) 
 
 	quotes, err := h.moneySvc.GetBatchQuotes(r.Context(), symbols)
 	if err != nil {
-		server.RespondError(w, http.StatusInternalServerError, err)
+		respondMoneyyError(w, err)
 		return
 	}
 
@@ -224,7 +240,7 @@ func (h *APIKeysHandler) GetSecurityProfile(w http.ResponseWriter, r *http.Reque
 
 	profile, err := h.moneySvc.GetProfile(r.Context(), symbol)
 	if err != nil {
-		server.RespondError(w, http.StatusInternalServerError, err)
+		respondMoneyyError(w, err)
 		return
 	}
 
@@ -243,7 +259,7 @@ func (h *APIKeysHandler) GetETFHoldings(w http.ResponseWriter, r *http.Request) 
 
 	holdings, err := h.moneySvc.GetETFHoldings(r.Context(), symbol)
 	if err != nil {
-		server.RespondError(w, http.StatusInternalServerError, err)
+		respondMoneyyError(w, err)
 		return
 	}
 
@@ -260,7 +276,7 @@ func (h *APIKeysHandler) GetETFSector(w http.ResponseWriter, r *http.Request) {
 
 	sector, err := h.moneySvc.GetETFSector(r.Context(), symbol)
 	if err != nil {
-		server.RespondError(w, http.StatusInternalServerError, err)
+		respondMoneyyError(w, err)
 		return
 	}
 
@@ -277,7 +293,7 @@ func (h *APIKeysHandler) GetETFCountry(w http.ResponseWriter, r *http.Request) {
 
 	country, err := h.moneySvc.GetETFCountry(r.Context(), symbol)
 	if err != nil {
-		server.RespondError(w, http.StatusInternalServerError, err)
+		respondMoneyyError(w, err)
 		return
 	}
 
@@ -294,7 +310,7 @@ func (h *APIKeysHandler) GetETFProfile(w http.ResponseWriter, r *http.Request) {
 
 	profile, err := h.moneySvc.GetETFProfile(r.Context(), symbol)
 	if err != nil {
-		server.RespondError(w, http.StatusInternalServerError, err)
+		respondMoneyyError(w, err)
 		return
 	}
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -485,6 +486,7 @@ func (s *Service) syncAccountDetails(ctx context.Context, client *wealthsimple.C
 		}
 
 		securityType, _ := security["securityType"].(string)
+		securityTypeLower := strings.ToLower(securityType)
 
 		stock, ok := security["stock"].(map[string]interface{})
 		if !ok {
@@ -494,6 +496,7 @@ func (s *Service) syncAccountDetails(ctx context.Context, client *wealthsimple.C
 
 		symbol, _ := stock["symbol"].(string)
 		name, _ := stock["name"].(string)
+		primaryExchange, _ := stock["primaryExchange"].(string)
 
 		// Extract average price (cost basis)
 		avgPrice, ok := node["averagePrice"].(map[string]interface{})
@@ -517,22 +520,27 @@ func (s *Service) syncAccountDetails(ctx context.Context, client *wealthsimple.C
 
 		// Map security type to holding type
 		holdingType := holdings.HoldingTypeStock // Default
-		switch securityType {
+		switch securityTypeLower {
 		case "crypto", "cryptocurrency":
 			holdingType = holdings.HoldingTypeCrypto
-		case "etf":
+		case "etf", "exchange_traded_fund":
 			holdingType = holdings.HoldingTypeETF
 		case "mutual_fund":
 			holdingType = holdings.HoldingTypeMutualFund
 		}
 
 		// Create or update holding via holdings service
+		var exchange *string
+		if primaryExchange != "" {
+			exchange = &primaryExchange
+		}
 		holdingResp, err := s.holdingsSvc.Create(ctx, &holdings.CreateHoldingRequest{
 			AccountID: localAccountID,
 			Type:      holdingType,
 			Symbol:    &symbol,
 			Quantity:  &quantity,
 			CostBasis: &costBasis,
+			Exchange:  exchange,
 			Notes:     name,
 		})
 
