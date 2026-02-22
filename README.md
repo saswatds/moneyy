@@ -79,16 +79,16 @@ Your instance will be available at `http://localhost:4000`
 
 ### Environment Variables
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `ENC_MASTER_KEY` | Yes | Encryption key for sensitive data (base64, 32 bytes) |
-| `JWT_SECRET` | Yes | JWT signing secret (min 32 characters) |
-| `WEBAUTHN_RP_ID` | Yes | WebAuthn relying party ID (your domain) |
-| `WEBAUTHN_RP_ORIGIN` | Yes | WebAuthn origin URL |
-| `DB_PATH` | No | SQLite database path (default: `/app/data/moneyy.db`) |
-| `SERVER_PORT` | No | Server port (default: `4000`) |
-| `LOG_LEVEL` | No | Log level: debug, info, warn, error (default: `info`) |
-| `CORS_ORIGINS` | No | Allowed CORS origins (default: `*`) |
+| Variable             | Required | Description                                           |
+| -------------------- | -------- | ----------------------------------------------------- |
+| `ENC_MASTER_KEY`     | Yes      | Encryption key for sensitive data (base64, 32 bytes)  |
+| `JWT_SECRET`         | Yes      | JWT signing secret (min 32 characters)                |
+| `WEBAUTHN_RP_ID`     | Yes      | WebAuthn relying party ID (your domain)               |
+| `WEBAUTHN_RP_ORIGIN` | Yes      | WebAuthn origin URL                                   |
+| `DB_PATH`            | No       | SQLite database path (default: `/app/data/moneyy.db`) |
+| `SERVER_PORT`        | No       | Server port (default: `4000`)                         |
+| `LOG_LEVEL`          | No       | Log level: debug, info, warn, error (default: `info`) |
+| `CORS_ORIGINS`       | No       | Allowed CORS origins (default: `*`)                   |
 
 ### Data Persistence
 
