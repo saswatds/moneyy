@@ -149,9 +149,10 @@ export function HoldingsAnalysisDashboard({
   const hasMarketData = Object.keys(quotes).length > 0;
 
   // Compute sector breakdown for the portfolio
-  const sectorBreakdown = useMemo(() => {
+  const { sectorBreakdown, missingSectorCount } = useMemo(() => {
     const sectors: Record<string, number> = {};
     let totalValue = 0;
+    let missing = 0;
 
     holdings.forEach((h) => {
       if (h.type === 'cash') return;
@@ -161,24 +162,25 @@ export function HoldingsAnalysisDashboard({
       if (!quote) return;
 
       const value = quote.price * h.quantity;
-      totalValue += value;
 
       if (h.type === 'stock') {
         const profile = profiles[symbol];
-        const sector = profile?.sector || 'Unknown';
-        sectors[sector] = (sectors[sector] || 0) + value;
+        if (profile?.sector) {
+          sectors[profile.sector] = (sectors[profile.sector] || 0) + value;
+          totalValue += value;
+        } else {
+          missing++;
+        }
       } else if (h.type === 'etf') {
         const etfSector = etfSectors[symbol];
         if (etfSector?.sectors) {
           for (const [sectorName, weight] of Object.entries(etfSector.sectors)) {
-            sectors[sectorName] = (sectors[sectorName] || 0) + value * (weight / 100);
+            sectors[sectorName] = (sectors[sectorName] || 0) + value * weight;
           }
+          totalValue += value;
         } else {
-          sectors['ETF (Unknown)'] = (sectors['ETF (Unknown)'] || 0) + value;
+          missing++;
         }
-      } else {
-        const typeName = h.type.charAt(0).toUpperCase() + h.type.slice(1);
-        sectors[typeName] = (sectors[typeName] || 0) + value;
       }
     });
 
@@ -189,7 +191,7 @@ export function HoldingsAnalysisDashboard({
         result[sector] = (value / totalValue) * 100;
       }
     }
-    return result;
+    return { sectorBreakdown: result, missingSectorCount: missing };
   }, [holdings, quotes, profiles, etfSectors]);
 
   // Compute asset type breakdown
@@ -222,9 +224,10 @@ export function HoldingsAnalysisDashboard({
   }, [holdings, quotes, hasMarketData]);
 
   // Compute geographic breakdown from ETF country data and stock profiles
-  const geoBreakdown = useMemo(() => {
+  const { geoBreakdown, missingGeoCount } = useMemo(() => {
     const countries: Record<string, number> = {};
     let totalValue = 0;
+    let missing = 0;
 
     holdings.forEach((h) => {
       if (h.type === 'cash') return;
@@ -234,12 +237,15 @@ export function HoldingsAnalysisDashboard({
       if (!quote) return;
 
       const value = quote.price * h.quantity;
-      totalValue += value;
 
       if (h.type === 'stock') {
         const profile = profiles[symbol];
-        const country = profile?.country || 'Unknown';
-        countries[country] = (countries[country] || 0) + value;
+        if (profile?.country) {
+          countries[profile.country] = (countries[profile.country] || 0) + value;
+          totalValue += value;
+        } else {
+          missing++;
+        }
       }
     });
 
@@ -249,7 +255,7 @@ export function HoldingsAnalysisDashboard({
         result[country] = (value / totalValue) * 100;
       }
     }
-    return result;
+    return { geoBreakdown: result, missingGeoCount: missing };
   }, [holdings, quotes, profiles]);
 
   const etfHoldings = holdings.filter((h) => h.type === 'etf');
@@ -343,6 +349,14 @@ export function HoldingsAnalysisDashboard({
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
+                  {missingSectorCount > 0 && (
+                    <div className="mb-4 flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5 shrink-0">
+                        <path fillRule="evenodd" d="M6.701 2.25c.577-1 2.02-1 2.598 0l5.196 9a1.5 1.5 0 0 1-1.299 2.25H2.804a1.5 1.5 0 0 1-1.3-2.25l5.197-9ZM8 4a.75.75 0 0 1 .75.75v3a.75.75 0 0 1-1.5 0v-3A.75.75 0 0 1 8 4Zm0 8a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clipRule="evenodd" />
+                      </svg>
+                      {missingSectorCount} {missingSectorCount === 1 ? 'holding is' : 'holdings are'} missing sector data. Breakdown may not reflect your full portfolio.
+                    </div>
+                  )}
                   <SectorBreakdownChart sectorData={sectorBreakdown} />
                 </CardContent>
               </Card>
@@ -357,6 +371,14 @@ export function HoldingsAnalysisDashboard({
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
+                  {missingGeoCount > 0 && (
+                    <div className="mb-4 flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5 shrink-0">
+                        <path fillRule="evenodd" d="M6.701 2.25c.577-1 2.02-1 2.598 0l5.196 9a1.5 1.5 0 0 1-1.299 2.25H2.804a1.5 1.5 0 0 1-1.3-2.25l5.197-9ZM8 4a.75.75 0 0 1 .75.75v3a.75.75 0 0 1-1.5 0v-3A.75.75 0 0 1 8 4Zm0 8a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clipRule="evenodd" />
+                      </svg>
+                      {missingGeoCount} {missingGeoCount === 1 ? 'holding is' : 'holdings are'} missing country data. Breakdown may not reflect your full portfolio.
+                    </div>
+                  )}
                   <GeographicExposureChart countryData={geoBreakdown} />
                 </CardContent>
               </Card>

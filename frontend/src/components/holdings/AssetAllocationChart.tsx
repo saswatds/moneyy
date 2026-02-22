@@ -1,4 +1,4 @@
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { Treemap, ResponsiveContainer, Tooltip } from 'recharts';
 
 interface AssetAllocationChartProps {
   typeBreakdown: Record<string, number>;
@@ -26,6 +26,28 @@ const TYPE_LABELS: Record<string, string> = {
   other: 'Other',
 };
 
+function TreemapCell(props: any) {
+  const { x, y, width, height, type, name, value } = props;
+  const color = TYPE_COLORS[type] || '#94a3b8';
+  const showLabel = width > 50 && height > 30;
+
+  return (
+    <g>
+      <rect x={x} y={y} width={width} height={height} fill={color} rx={4} stroke="#fff" strokeWidth={2} />
+      {showLabel && (
+        <>
+          <text x={x + width / 2} y={y + height / 2 - 6} textAnchor="middle" fill="#fff" fontSize={12} fontWeight={600}>
+            {name}
+          </text>
+          <text x={x + width / 2} y={y + height / 2 + 10} textAnchor="middle" fill="rgba(255,255,255,0.8)" fontSize={11}>
+            {value.toFixed(1)}%
+          </text>
+        </>
+      )}
+    </g>
+  );
+}
+
 export function AssetAllocationChart({ typeBreakdown }: AssetAllocationChartProps) {
   const data = Object.entries(typeBreakdown)
     .map(([type, value]) => ({
@@ -44,29 +66,49 @@ export function AssetAllocationChart({ typeBreakdown }: AssetAllocationChartProp
   }
 
   return (
-    <div className="h-[350px]">
-      <ResponsiveContainer width="100%" height="100%">
-        <PieChart>
-          <Pie
+    <div className="space-y-4">
+      <div className="h-[280px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <Treemap
             data={data}
-            cx="50%"
-            cy="50%"
-            innerRadius={60}
-            outerRadius={120}
-            paddingAngle={2}
             dataKey="value"
-            label={({ name, value }) => `${name} ${value.toFixed(1)}%`}
+            aspectRatio={4 / 3}
+            content={<TreemapCell />}
           >
-            {data.map((entry) => (
-              <Cell key={entry.type} fill={TYPE_COLORS[entry.type] || '#94a3b8'} />
+            <Tooltip formatter={(value: number) => `${value.toFixed(2)}%`} />
+          </Treemap>
+        </ResponsiveContainer>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-border">
+              <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Type</th>
+              <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">Weight</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground w-[40%]" />
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((item) => (
+              <tr key={item.type} className="border-b border-border last:border-0">
+                <td className="px-3 py-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 rounded-sm shrink-0" style={{ backgroundColor: TYPE_COLORS[item.type] || '#94a3b8' }} />
+                    {item.name}
+                  </div>
+                </td>
+                <td className="px-3 py-2 text-right text-sm tabular-nums">{item.value.toFixed(1)}%</td>
+                <td className="px-3 py-2">
+                  <div className="h-2 rounded-full bg-muted overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width: `${item.value}%`, backgroundColor: TYPE_COLORS[item.type] || '#94a3b8' }} />
+                  </div>
+                </td>
+              </tr>
             ))}
-          </Pie>
-          <Tooltip
-            formatter={(value: number) => `${value.toFixed(2)}%`}
-          />
-          <Legend />
-        </PieChart>
-      </ResponsiveContainer>
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
